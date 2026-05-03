@@ -1,0 +1,149 @@
+# KKOCLAW 生产环境
+# Usage: make up
+#
+# Services:
+#   - nginx:       Reverse proxy (port 9191, configurable via PORT env var)
+#   - frontend:    Next.js production server
+#   - gateway:     FastAPI Gateway API + agent runtime
+#   - provisioner: (optional) Sandbox provisioner for Kubernetes mode
+#
+# Key environment variables (set via environment/.env or scripts/deploy.sh):
+#   KKOCLAW_PROJECT_ROOT           — project root for relative runtime paths
+#   KKOCLAW_HOME                   — runtime data dir, default .kkoclaw under $KKOCLAW_PROJECT_ROOT (or cwd)
+#   KKOCLAW_CONFIG_PATH            — path to config.yaml
+#   KKOCLAW_EXTENSIONS_CONFIG_PATH — path to extensions_config.json
+#   KKOCLAW_SKILLS_PATH            — skills dir, default $KKOCLAW_PROJECT_ROOT/skills
+#   KKOCLAW_DOCKER_SOCKET          — Docker socket path, default /var/run/docker.sock
+#   KKOCLAW_REPO_ROOT              — repo root (used for skills host path in DooD)
+#   BETTER_AUTH_SECRET               — required for frontend auth/session security
+#
+# LangSmith tracing is disabled by default (LANGSMITH_TRACING=false).
+# Set LANGSMITH_TRACING=true and LANGSMITH_API_KEY in .env to enable it.
+#
+# Access: http://localhost:${PORT:-9191}
+
+services:
+  # ── Reverse Proxy ──────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: kkoclaw-nginx
+    ports:
+      - "${PORT:-9191}:9191"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf.template:ro
+    command: >
+      sh -c "cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"
+    depends_on:
+      - frontend
+      - gateway
+    networks:
+      - kkoclaw
+    restart: unless-stopped
+
+  # ── Frontend: Next.js Production ───────────────────────────────────────────
+  frontend:
+    build:
+      context: ../
+      dockerfile: frontend/Dockerfile
+      target: prod
+      args:
+        PNPM_STORE_PATH: ${PNPM_STORE_PATH:-/root/.local/share/pnpm/store}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+    container_name: kkoclaw-frontend
+    environment:
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - KKOCLAW_INTERNAL_GATEWAY_BASE_URL=http://gateway:9193
+    env_file:
+      - ../frontend/.env
+    networks:
+      - kkoclaw
+    restart: unless-stopped
+
+  # ── Gateway API ────────────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ../
+      dockerfile: backend/Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.7.20}
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
+        UV_EXTRAS: ${UV_EXTRAS:-}
+    container_name: kkoclaw-gateway
+    command: sh -c "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 9193 --workers ${GATEWAY_WORKERS:-4}"
+    volumes:
+      - ${KKOCLAW_CONFIG_PATH}:/app/backend/config.yaml:ro
+      - ${KKOCLAW_EXTENSIONS_CONFIG_PATH}:/app/backend/extensions_config.json:ro
+      - ../skills:/app/skills:ro
+      - ${KKOCLAW_HOME}:/app/backend/.kkoclaw
+      # DooD: AioSandboxProvider starts sandbox containers via host Docker daemon
+      - ${KKOCLAW_DOCKER_SOCKET}:/var/run/docker.sock
+      # CLI auth directories for auto-auth (Claude Code + Codex CLI)
+      - type: bind
+        source: ${HOME:?HOME must be set}/.claude
+        target: /root/.claude
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${HOME:?HOME must be set}/.codex
+        target: /root/.codex
+        read_only: true
+        bind:
+          create_host_path: true
+    working_dir: /app
+    environment:
+      - CI=true
+      - KKOCLAW_PROJECT_ROOT=/app
+      - KKOCLAW_HOME=/app/backend/.kkoclaw
+      - KKOCLAW_CONFIG_PATH=/app/backend/config.yaml
+      - KKOCLAW_EXTENSIONS_CONFIG_PATH=/app/backend/extensions_config.json
+      - KKOCLAW_CHANNELS_LANGGRAPH_URL=${KKOCLAW_CHANNELS_LANGGRAPH_URL:-http://gateway:9193/api}
+      - KKOCLAW_CHANNELS_GATEWAY_URL=${KKOCLAW_CHANNELS_GATEWAY_URL:-http://gateway:9193}
+      # DooD path/network translation
+      - KKOCLAW_HOST_BASE_DIR=${KKOCLAW_HOME}
+      - KKOCLAW_HOST_SKILLS_PATH=${KKOCLAW_REPO_ROOT}/skills
+      - KKOCLAW_SANDBOX_HOST=host.docker.internal
+    env_file:
+      - ../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - kkoclaw
+    restart: unless-stopped
+
+  # ── Sandbox Provisioner (optional, Kubernetes mode) ────────────────────────
+  provisioner:
+    build:
+      context: ./provisioner
+      dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+    container_name: kkoclaw-provisioner
+    volumes:
+      - ~/.kube/config:/root/.kube/config:ro
+    environment:
+      - K8S_NAMESPACE=kkoclaw
+      - SANDBOX_IMAGE=all-in-one-sandbox:latest
+      - SKILLS_HOST_PATH=${KKOCLAW_REPO_ROOT}/skills
+      - THREADS_HOST_PATH=${KKOCLAW_HOME}/threads
+      - KUBECONFIG_PATH=/root/.kube/config
+      - NODE_HOST=host.docker.internal
+      - K8S_API_SERVER=https://host.docker.internal:26443
+    env_file:
+      - ../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - kkoclaw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9194/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+networks:
+  kkoclaw:
+    driver: bridge

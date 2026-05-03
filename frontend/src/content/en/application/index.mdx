@@ -1,0 +1,67 @@
+---
+title: KKOCLAW App
+description: KKOCLAW App is the reference implementation of what a production KKOCLAW experience looks like. It assembles the Harness runtime, a web-based conversation workspace, an API gateway, and a reverse proxy into a single deployable system.
+---
+
+import { Callout, Cards } from "nextra/components";
+
+# KKOCLAW App
+
+<Callout type="info" emoji="🚀">
+  KKOCLAW App is a complete Super Agent application built on top of KKOCLAW
+  Harness. It packages the runtime capabilities into a ready-to-deploy product
+  with a web UI, API gateway, and operational tooling.
+</Callout>
+
+KKOCLAW App is the reference implementation of what a production KKOCLAW experience looks like. It assembles the Harness runtime, a web-based conversation workspace, an API gateway, and a reverse proxy into a single deployable system.
+
+## What the App provides
+
+| Capability              | Description                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Web workspace**       | Browser-based conversation UI with support for threads, artifacts, file uploads, and skill selection |
+| **Custom agents**       | Create and manage named agents with different models, skills, and tool sets                          |
+| **Thread management**   | Persistent conversation threads with checkpointing and history                                       |
+| **Streaming responses** | Real-time token streaming with thinking steps and tool call visibility                               |
+| **Artifact viewer**     | In-browser preview and download of files and outputs produced by the agent                           |
+| **Extensions UI**       | Enable/disable MCP servers and skills without editing config files                                   |
+| **Gateway API**         | FastAPI-based REST API that bridges the frontend and the LangGraph runtime                           |
+
+## Architecture
+
+The KKOCLAW App runs as three services behind a single nginx reverse proxy:
+
+```
+                ┌──────────────────┐
+     Browser → │  nginx :9191      │
+                └──────────────────┘
+                  │          │
+         ┌────────┘          └────────┐
+         ▼                            ▼
+┌──────────────────┐       ┌──────────────────────┐
+│  Frontend :9192  │       │  Gateway API :9193    │
+│  (Next.js)       │       │  (FastAPI + Harness)  │
+└──────────────────┘       └──────────────────────┘
+```
+
+- **nginx**: routes requests — `/api/*` to the Gateway, and everything else to the frontend.
+- **Frontend** (Next.js + React): the browser UI. Communicates with the Gateway.
+- **Gateway** (FastAPI + embedded Harness runtime): handles API operations — model listing, agent CRUD, memory, extensions management, file uploads, as well as agent execution and streaming.
+
+## Technology stack
+
+| Layer             | Technology                                                           |
+| ----------------- | -------------------------------------------------------------------- |
+| Frontend          | Next.js 16, React 19, TypeScript, pnpm                               |
+| Gateway           | FastAPI, Python 3.12, uvicorn                                        |
+| Agent runtime     | LangGraph, LangChain, KKOCLAW Harness                               |
+| Reverse proxy     | nginx                                                                |
+| State persistence | LangGraph Server (default) + optional SQLite/PostgreSQL checkpointer |
+
+<Cards num={2}>
+  <Cards.Card title="Quick Start" href="/docs/application/quick-start" />
+  <Cards.Card
+    title="Deployment Guide"
+    href="/docs/application/deployment-guide"
+  />
+</Cards>
