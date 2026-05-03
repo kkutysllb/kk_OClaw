@@ -738,6 +738,7 @@ class KKOCLAWClient:
             "models": [
                 {
                     "name": model.name,
+                    "use": getattr(model, "use", None),
                     "model": getattr(model, "model", None),
                     "display_name": getattr(model, "display_name", None),
                     "description": getattr(model, "description", None),
@@ -809,6 +810,7 @@ class KKOCLAWClient:
             return None
         return {
             "name": model.name,
+            "use": getattr(model, "use", None),
             "model": getattr(model, "model", None),
             "display_name": getattr(model, "display_name", None),
             "description": getattr(model, "description", None),

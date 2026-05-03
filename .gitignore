@@ -102,7 +102,6 @@ yarn-error.log*
 # Local config (sensitive)
 # ═══════════════════════════════════════
 config.yaml
-config.example.yaml
 extensions_config.json
 
 # ═══════════════════════════════════════

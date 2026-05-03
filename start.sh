@@ -39,7 +39,8 @@ fi
 # ── 环境变量默认值 ───────────────────────────────────────────────────────────
 GATEWAY_PORT="${GATEWAY_PORT:-9193}"
 FRONTEND_PORT="${FRONTEND_PORT:-9192}"
-NGINX_PORT="${LANGGRAPH_PORT:-9191}"
+# Nginx 公共端口: 优先 NGINX_PORT, 向后兼容 LANGGRAPH_PORT (旧名), 默认 9191
+NGINX_PORT="${NGINX_PORT:-${LANGGRAPH_PORT:-9191}}"
 
 # ── 路径配置 ─────────────────────────────────────────────────────────────────
 PID_DIR="$REPO_ROOT/.pids"

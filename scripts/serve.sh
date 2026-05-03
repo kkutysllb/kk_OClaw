@@ -75,7 +75,8 @@ _kill_port() {
 GATEWAY_PORT="${GATEWAY_PORT:-9193}"
 FRONTEND_PORT="${FRONTEND_PORT:-9192}"
 # Nginx public port: use LANGGRAPH_PORT if set (legacy), otherwise default to 9191
-NGINX_PORT="${LANGGRAPH_PORT:-9191}"
+# Nginx public port: prefer NGINX_PORT, fallback to LANGGRAPH_PORT (legacy), default 9191
+NGINX_PORT="${NGINX_PORT:-${LANGGRAPH_PORT:-9191}}"
 
 stop_all() {
     echo "Stopping all services..."

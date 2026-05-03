@@ -2231,6 +2231,7 @@ class TestGatewayConformance:
     def test_list_models(self, mock_app_config):
         model = MagicMock()
         model.name = "test-model"
+        model.use = "langchain_openai:ChatOpenAI"
         model.model = "gpt-test"
         model.display_name = "Test Model"
         model.description = "A test model"
@@ -2252,6 +2253,7 @@ class TestGatewayConformance:
     def test_get_model(self, mock_app_config):
         model = MagicMock()
         model.name = "test-model"
+        model.use = "langchain_openai:ChatOpenAI"
         model.model = "gpt-test"
         model.display_name = "Test Model"
         model.description = "A test model"

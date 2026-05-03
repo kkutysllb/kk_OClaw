@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator
 from langgraph.store.base import BaseStore
 
 from kkoclaw.config.app_config import AppConfig, get_app_config
+from kkoclaw.config.database_config import DatabaseConfig
 from kkoclaw.runtime.store.provider import POSTGRES_CONN_REQUIRED, POSTGRES_STORE_INSTALL, SQLITE_STORE_INSTALL, ensure_sqlite_parent_dir, resolve_sqlite_conn_str
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,53 @@ async def _async_store(config) -> AsyncIterator[BaseStore]:
 
 
 # ---------------------------------------------------------------------------
+# Unified database-backed store factory (mirrors checkpointer provider)
+# ---------------------------------------------------------------------------
+
+
+@contextlib.asynccontextmanager
+async def _async_store_from_database(db_config: DatabaseConfig) -> AsyncIterator[BaseStore]:
+    """Async context manager that constructs a Store from unified DatabaseConfig."""
+    if db_config.backend == "memory":
+        from langgraph.store.memory import InMemoryStore
+
+        yield InMemoryStore()
+        return
+
+    if db_config.backend == "sqlite":
+        try:
+            from langgraph.store.sqlite.aio import AsyncSqliteStore
+        except ImportError as exc:
+            raise ImportError(SQLITE_STORE_INSTALL) from exc
+
+        conn_str = db_config.checkpointer_sqlite_path
+        ensure_sqlite_parent_dir(conn_str)
+
+        async with AsyncSqliteStore.from_conn_string(conn_str) as store:
+            await store.setup()
+            logger.info("Store: using AsyncSqliteStore (%s)", conn_str)
+            yield store
+        return
+
+    if db_config.backend == "postgres":
+        try:
+            from langgraph.store.postgres.aio import AsyncPostgresStore
+        except ImportError as exc:
+            raise ImportError(POSTGRES_STORE_INSTALL) from exc
+
+        if not db_config.postgres_url:
+            raise ValueError(POSTGRES_CONN_REQUIRED)
+
+        async with AsyncPostgresStore.from_conn_string(db_config.postgres_url) as store:
+            await store.setup()
+            logger.info("Store: using AsyncPostgresStore")
+            yield store
+        return
+
+    raise ValueError(f"Unknown database backend: {db_config.backend!r}")
+
+
+# ---------------------------------------------------------------------------
 # Public async context manager
 # ---------------------------------------------------------------------------
 
@@ -104,9 +152,16 @@ async def make_store(app_config: AppConfig | None = None) -> AsyncIterator[BaseS
         app_config = get_app_config()
 
     if app_config.checkpointer is None:
+        # Fallback: unified database config (same priority as make_checkpointer)
+        db_config = getattr(app_config, "database", None)
+        if db_config is not None and db_config.backend != "memory":
+            async with _async_store_from_database(db_config) as store:
+                yield store
+            return
+
         from langgraph.store.memory import InMemoryStore
 
-        logger.warning("No 'checkpointer' section in config.yaml — using InMemoryStore for the store. Thread list will be lost on server restart. Configure a sqlite or postgres backend for persistence.")
+        logger.warning("No 'checkpointer' or 'database' section in config.yaml — using InMemoryStore for the store. Thread list will be lost on server restart. Configure a sqlite or postgres backend for persistence.")
         yield InMemoryStore()
         return
 

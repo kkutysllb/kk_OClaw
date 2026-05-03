@@ -117,6 +117,7 @@ export interface Translations {
     chats: string;
     demoChats: string;
     agents: string;
+    models: string;
   };
 
   // Agents
@@ -248,6 +249,43 @@ export interface Translations {
     keyboardShortcutsDescription: string;
     openCommandPalette: string;
     toggleSidebar: string;
+  };
+
+  // Models
+  models: {
+    title: string;
+    description: string;
+    addModel: string;
+    editModel: string;
+    deleteModel: string;
+    deleteConfirm: string;
+    deleteSuccess: string;
+    createSuccess: string;
+    updateSuccess: string;
+    name: string;
+    nameHint: string;
+    displayName: string;
+    provider: string;
+    providerHint: string;
+    modelId: string;
+    modelIdHint: string;
+    apiKey: string;
+    apiKeyHint: string;
+    baseUrl: string;
+    baseUrlHint: string;
+    maxTokens: string;
+    temperature: string;
+    requestTimeout: string;
+    modelDescription: string;
+    modelDescriptionHint: string;
+    supportsThinking: string;
+    supportsVision: string;
+    supportsReasoningEffort: string;
+    thinkingEnabled: string;
+    thinkingDisabled: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    badJson: string;
   };
 
   // Settings

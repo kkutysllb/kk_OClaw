@@ -3,6 +3,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +48,36 @@ logger = logging.getLogger(__name__)
 # Bounds worker exit time so uvicorn's reload supervisor does not keep
 # firing signals into a worker that is stuck waiting for shutdown cleanup.
 _SHUTDOWN_HOOK_TIMEOUT_SECONDS = 5.0
+
+
+def _setup_langgraph_logger() -> None:
+    """Add a dedicated rotating file handler for kkoclaw/LangGraph runtime logs.
+
+    Writes agent execution traces, persistence operations, and other runtime
+    logs to ``logs/langgraph.log``, separate from the gateway REST API log.
+
+    The handler inherits the log level set by ``apply_logging_level()`` so
+    it respects ``log_level`` in config.yaml.
+    """
+    langgraph_logger = logging.getLogger("kkoclaw")
+    # Avoid adding duplicate handlers across uvicorn reloads
+    if any(
+        isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "").endswith("langgraph.log")
+        for h in langgraph_logger.handlers
+    ):
+        return
+
+    handler = RotatingFileHandler(
+        "../logs/langgraph.log",
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=3,
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    langgraph_logger.addHandler(handler)
 
 
 async def _ensure_admin_user(app: FastAPI) -> None:
@@ -167,6 +198,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.config = get_app_config()
         apply_logging_level(app.state.config.log_level)
         logger.info("Configuration loaded successfully")
+
+        # Separate log file for LangGraph runtime (agent execution, persistence, etc.)
+        _setup_langgraph_logger()
     except Exception as e:
         error_msg = f"Failed to load configuration during gateway startup: {e}"
         logger.exception(error_msg)

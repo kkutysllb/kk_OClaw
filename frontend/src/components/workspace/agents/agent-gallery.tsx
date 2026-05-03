@@ -42,8 +42,8 @@ export function AgentGallery() {
           </div>
         ) : agents.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-            <div className="bg-muted flex h-14 w-14 items-center justify-center rounded-full">
-              <BotIcon className="text-muted-foreground h-7 w-7" />
+            <div className="bg-violet-500/10 flex h-14 w-14 items-center justify-center rounded-full">
+              <BotIcon className="text-violet-500 h-7 w-7" />
             </div>
             <div>
               <p className="font-medium">{t.agents.emptyTitle}</p>

@@ -53,11 +53,13 @@ export function AgentCard({ agent }: AgentCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col transition-shadow hover:shadow-md">
+      <Card className="group flex flex-col overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+        {/* Gradient top accent */}
+        <div className="h-1 w-full bg-gradient-to-r from-violet-400 to-purple-400" />
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="bg-violet-500/10 text-violet-500 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
                 <BotIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -65,7 +67,10 @@ export function AgentCard({ agent }: AgentCardProps) {
                   {agent.name}
                 </CardTitle>
                 {agent.model && (
-                  <Badge variant="secondary" className="mt-0.5 text-xs">
+                  <Badge
+                    variant="secondary"
+                    className="bg-violet-500/10 text-violet-600 dark:text-violet-400 mt-0.5 border-0 text-xs font-medium"
+                  >
                     {agent.model}
                   </Badge>
                 )}
@@ -73,7 +78,7 @@ export function AgentCard({ agent }: AgentCardProps) {
             </div>
           </div>
           {agent.description && (
-            <CardDescription className="mt-2 line-clamp-2 text-sm">
+            <CardDescription className="text-muted-foreground/70 mt-2 line-clamp-2 text-sm leading-relaxed">
               {agent.description}
             </CardDescription>
           )}
@@ -81,12 +86,12 @@ export function AgentCard({ agent }: AgentCardProps) {
 
         {(agent.tool_groups?.length ?? agent.skills?.length ?? 0) > 0 && (
           <CardContent className="pt-0 pb-3">
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {agent.tool_groups?.map((group) => (
                 <Badge
                   key={`tg:${group}`}
                   variant="outline"
-                  className="text-xs"
+                  className="border-sky-500/20 bg-sky-500/5 text-sky-600 dark:text-sky-400 text-xs"
                 >
                   {group}
                 </Badge>
@@ -95,7 +100,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                 <Badge
                   key={`sk:${skill}`}
                   variant="secondary"
-                  className="text-xs"
+                  className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-0 text-xs"
                 >
                   {skill}
                 </Badge>
