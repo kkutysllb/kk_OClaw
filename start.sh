@@ -373,7 +373,7 @@ start_all() {
     _info "启动 Gateway..."
     # 清空旧日志（每次重启重写）
     :> "$GATEWAY_LOG"
-    nohup sh -c "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port $GATEWAY_PORT $GATEWAY_EXTRA_FLAGS" \
+    nohup sh -c "cd backend && KKOCLAW_PROJECT_ROOT=\"$REPO_ROOT\" PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port $GATEWAY_PORT $GATEWAY_EXTRA_FLAGS" \
         > "$GATEWAY_LOG" 2>&1 &
     local gpid=$!
     disown $gpid 2>/dev/null || true

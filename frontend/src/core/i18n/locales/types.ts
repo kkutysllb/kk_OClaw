@@ -27,6 +27,7 @@ export interface Translations {
     notAvailableInDemoMode: string;
     loading: string;
     version: string;
+    all: string;
     lastUpdated: string;
     code: string;
     preview: string;
@@ -43,7 +44,6 @@ export interface Translations {
 
   home: {
     docs: string;
-    blog: string;
   };
 
   // Welcome
@@ -118,6 +118,7 @@ export interface Translations {
     demoChats: string;
     agents: string;
     models: string;
+    skills: string;
   };
 
   // Agents

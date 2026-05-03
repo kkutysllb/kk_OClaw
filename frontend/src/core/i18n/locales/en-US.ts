@@ -38,6 +38,7 @@ export const enUS: Translations = {
     notAvailableInDemoMode: "Not available in demo mode",
     loading: "Loading...",
     version: "Version",
+    all: "All",
     lastUpdated: "Last updated",
     code: "Code",
     preview: "Preview",
@@ -55,7 +56,6 @@ export const enUS: Translations = {
   // Home
   home: {
     docs: "Docs",
-    blog: "Blog",
   },
 
   // Welcome
@@ -174,6 +174,7 @@ export const enUS: Translations = {
     demoChats: "Demo chats",
     agents: "Agents",
     models: "Models",
+    skills: "Skills",
   },
 
   // Agents

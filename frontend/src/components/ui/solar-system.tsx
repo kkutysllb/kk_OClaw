@@ -46,6 +46,18 @@ interface FloatingParticle {
   maxLife: number;
 }
 
+interface ShootingStar {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  length: number;
+  opacity: number;
+  life: number;
+  maxLife: number;
+  width: number;
+}
+
 interface Props {
   className?: string;
   starCount?: number;
@@ -54,8 +66,8 @@ interface Props {
 
 export default function SolarSystem({
   className = "",
-  starCount = 200,
-  particleCount = 60,
+  starCount = 300,
+  particleCount = 100,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -75,7 +87,26 @@ export default function SolarSystem({
 
     const stars: Star[] = [];
     const particles: FloatingParticle[] = [];
+    const shootingStars: ShootingStar[] = [];
     let time = 0;
+
+    function spawnShootingStar() {
+      const angle = Math.PI * 0.25 + Math.random() * Math.PI * 0.5; // mostly horizontal-ish
+      const speed = 6 + Math.random() * 8;
+      const startX = Math.random() * width * 0.3;
+      const startY = Math.random() * height * 0.5;
+      shootingStars.push({
+        x: startX,
+        y: startY,
+        dx: Math.cos(angle) * speed,
+        dy: Math.sin(angle) * speed,
+        length: 60 + Math.random() * 100,
+        opacity: 0.5 + Math.random() * 0.5,
+        life: 0,
+        maxLife: 30 + Math.random() * 40,
+        width: 1 + Math.random() * 1.5,
+      });
+    }
 
     function initParticles() {
       particles.length = 0;
@@ -83,12 +114,12 @@ export default function SolarSystem({
         particles.push({
           x: Math.random() * width,
           y: Math.random() * height,
-          radius: Math.random() * 1.5 + 0.5,
-          speedX: (Math.random() - 0.5) * 0.3,
-          speedY: (Math.random() - 0.5) * 0.3,
-          opacity: Math.random() * 0.5 + 0.2,
-          life: Math.random() * 300,
-          maxLife: 300 + Math.random() * 200,
+          radius: Math.random() * 2.5 + 0.8,
+          speedX: (Math.random() - 0.5) * 0.5,
+          speedY: (Math.random() - 0.5) * 0.5,
+          opacity: Math.random() * 0.6 + 0.3,
+          life: Math.random() * 400,
+          maxLife: 400 + Math.random() * 300,
         });
       }
     }
@@ -99,9 +130,9 @@ export default function SolarSystem({
         stars.push({
           x: Math.random() * width,
           y: Math.random() * height,
-          radius: Math.random() * 1.5 + 0.3,
-          opacity: Math.random() * 0.6 + 0.2,
-          twinkleSpeed: Math.random() * 0.02 + 0.005,
+          radius: Math.random() * 2.2 + 0.4,
+          opacity: Math.random() * 0.7 + 0.3,
+          twinkleSpeed: Math.random() * 0.04 + 0.01,
           twinklePhase: Math.random() * Math.PI * 2,
         });
       }
@@ -122,47 +153,57 @@ export default function SolarSystem({
     }
 
     function drawSun() {
-      const sunRadius = 22;
+      const sunRadius = 28;
 
-      // Outer glow layers
-      for (let i = 4; i >= 0; i--) {
-        const r = sunRadius + i * 10 + Math.sin(time * 0.003 + i) * 3;
-        const alpha = 0.08 / (i + 1);
-        const gradient = ctx!.createRadialGradient(centerX, centerY, sunRadius * 0.3, centerX, centerY, r);
-        gradient.addColorStop(0, `rgba(255,200,50,${alpha * 3})`);
-        gradient.addColorStop(0.5, `rgba(255,140,20,${alpha})`);
-        gradient.addColorStop(1, "rgba(255,80,10,0)");
+      // Outer glow layers - wider and more luminous
+      for (let i = 5; i >= 0; i--) {
+        const r = sunRadius + i * 14 + Math.sin(time * 0.003 + i) * 4;
+        const alpha = 0.12 / (i + 1);
+        const gradient = ctx!.createRadialGradient(centerX, centerY, sunRadius * 0.2, centerX, centerY, r);
+        gradient.addColorStop(0, `rgba(255,220,80,${alpha * 4})`);
+        gradient.addColorStop(0.4, `rgba(255,160,30,${alpha * 1.5})`);
+        gradient.addColorStop(0.7, `rgba(255,100,20,${alpha})`);
+        gradient.addColorStop(1, "rgba(255,60,10,0)");
         ctx!.beginPath();
         ctx!.arc(centerX, centerY, r, 0, Math.PI * 2);
         ctx!.fillStyle = gradient;
         ctx!.fill();
       }
 
-      // Sun core
+      // Sun core - brighter
       const coreGrad = ctx!.createRadialGradient(centerX, centerY, 0, centerX, centerY, sunRadius);
-      coreGrad.addColorStop(0, "#fffde0");
-      coreGrad.addColorStop(0.3, "#ffdd57");
-      coreGrad.addColorStop(0.6, "#ff9933");
-      coreGrad.addColorStop(1, "#ff6600");
+      coreGrad.addColorStop(0, "#ffffff");
+      coreGrad.addColorStop(0.2, "#fffde0");
+      coreGrad.addColorStop(0.45, "#ffdd57");
+      coreGrad.addColorStop(0.7, "#ff9933");
+      coreGrad.addColorStop(1, "#ff5500");
       ctx!.beginPath();
       ctx!.arc(centerX, centerY, sunRadius, 0, Math.PI * 2);
       ctx!.fillStyle = coreGrad;
       ctx!.fill();
 
-      // Corona pulse
-      const pulseRadius = sunRadius + 6 + Math.sin(time * 0.005) * 4;
+      // Corona pulse - more pronounced
+      const pulseRadius = sunRadius + 8 + Math.sin(time * 0.005) * 6;
       ctx!.beginPath();
       ctx!.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
-      ctx!.strokeStyle = `rgba(255,180,30,${0.15 + Math.sin(time * 0.004) * 0.05})`;
-      ctx!.lineWidth = 1;
+      ctx!.strokeStyle = `rgba(255,200,50,${0.25 + Math.sin(time * 0.004) * 0.08})`;
+      ctx!.lineWidth = 1.5;
+      ctx!.stroke();
+
+      // Second corona ring
+      const pulse2 = sunRadius + 16 + Math.cos(time * 0.003) * 5;
+      ctx!.beginPath();
+      ctx!.arc(centerX, centerY, pulse2, 0, Math.PI * 2);
+      ctx!.strokeStyle = `rgba(255,150,30,${0.1 + Math.cos(time * 0.006) * 0.05})`;
+      ctx!.lineWidth = 0.8;
       ctx!.stroke();
     }
 
     function drawOrbit(radius: number) {
       ctx!.beginPath();
       ctx!.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx!.strokeStyle = "rgba(100,140,200,0.12)";
-      ctx!.lineWidth = 0.5;
+      ctx!.strokeStyle = "rgba(100,150,220,0.18)";
+      ctx!.lineWidth = 0.7;
       ctx!.stroke();
     }
 
@@ -170,12 +211,13 @@ export default function SolarSystem({
       const x = centerX + Math.cos(angle) * planet.orbitRadius;
       const y = centerY + Math.sin(angle) * planet.orbitRadius;
 
-      // Glow
-      const glowGrad = ctx!.createRadialGradient(x, y, planet.radius * 0.5, x, y, planet.radius * 3);
+      // Glow - more visible
+      const glowGrad = ctx!.createRadialGradient(x, y, planet.radius * 0.4, x, y, planet.radius * 4);
       glowGrad.addColorStop(0, planet.glowColor);
+      glowGrad.addColorStop(0.5, planet.glowColor.replace(/[\d.]+(?=\))/, (m) => String(Number(m) * 0.4)));
       glowGrad.addColorStop(1, "rgba(0,0,0,0)");
       ctx!.beginPath();
-      ctx!.arc(x, y, planet.radius * 3, 0, Math.PI * 2);
+      ctx!.arc(x, y, planet.radius * 4, 0, Math.PI * 2);
       ctx!.fillStyle = glowGrad;
       ctx!.fill();
 
@@ -216,15 +258,15 @@ export default function SolarSystem({
       ctx!.fillStyle = bodyGrad;
       ctx!.fill();
 
-      // Orbital trail dot
-      const trailCount = 3;
+      // Orbital trail dot - more visible
+      const trailCount = 4;
       for (let i = 1; i <= trailCount; i++) {
-        const trailAngle = angle - i * 0.04;
+        const trailAngle = angle - i * 0.05;
         const trailX = centerX + Math.cos(trailAngle) * planet.orbitRadius;
         const trailY = centerY + Math.sin(trailAngle) * planet.orbitRadius;
         ctx!.beginPath();
-        ctx!.arc(trailX, trailY, planet.radius * 0.4, 0, Math.PI * 2);
-        ctx!.fillStyle = `rgba(100,160,220,${0.08 / i})`;
+        ctx!.arc(trailX, trailY, planet.radius * 0.5, 0, Math.PI * 2);
+        ctx!.fillStyle = `rgba(120,180,255,${0.12 / i})`;
         ctx!.fill();
       }
     }
@@ -262,8 +304,8 @@ export default function SolarSystem({
         if (p.life <= 0) {
           p.x = Math.random() * width;
           p.y = Math.random() * height;
-          p.speedX = (Math.random() - 0.5) * 0.3;
-          p.speedY = (Math.random() - 0.5) * 0.3;
+          p.speedX = (Math.random() - 0.5) * 0.5;
+          p.speedY = (Math.random() - 0.5) * 0.5;
           p.life = p.maxLife;
         }
 
@@ -275,9 +317,42 @@ export default function SolarSystem({
       }
     }
 
+    function drawShootingStars() {
+      for (let i = shootingStars.length - 1; i >= 0; i--) {
+        const s = shootingStars[i]!;
+        s.x += s.dx;
+        s.y += s.dy;
+        s.life++;
+
+        if (s.life > s.maxLife || s.x > width + 100 || s.y > height + 100) {
+          shootingStars.splice(i, 1);
+          continue;
+        }
+
+        const progress = s.life / s.maxLife;
+        const alpha = s.opacity * (1 - progress) * Math.sin(progress * Math.PI);
+
+        // Trail gradient
+        const startX = s.x - s.dx * s.length / 10;
+        const startY = s.y - s.dy * s.length / 10;
+        const grad = ctx!.createLinearGradient(startX, startY, s.x, s.y);
+        grad.addColorStop(0, `rgba(255,255,255,0)`);
+        grad.addColorStop(0.3, `rgba(180,220,255,${alpha * 0.5})`);
+        grad.addColorStop(1, `rgba(255,255,255,${alpha})`);
+
+        ctx!.beginPath();
+        ctx!.moveTo(startX, startY);
+        ctx!.lineTo(s.x, s.y);
+        ctx!.strokeStyle = grad;
+        ctx!.lineWidth = s.width;
+        ctx!.lineCap = "round";
+        ctx!.stroke();
+      }
+    }
+
     function drawGridLines() {
-      // Thin subtle grid overlay
-      ctx!.strokeStyle = "rgba(40,60,100,0.04)";
+      // Thin subtle grid overlay - slightly more visible
+      ctx!.strokeStyle = "rgba(50,80,140,0.06)";
       ctx!.lineWidth = 0.5;
       const gridSize = 80;
       for (let x = gridSize; x < width; x += gridSize) {
@@ -309,25 +384,33 @@ export default function SolarSystem({
       drawStars();
       drawParticles();
 
+      // Spawn shooting stars periodically
+      if (time % 40 === 0 && shootingStars.length < 3) {
+        spawnShootingStar();
+      }
+      drawShootingStars();
+
       // Draw all orbits
       for (const planet of PLANETS) {
         drawOrbit(planet.orbitRadius);
       }
 
-      // Draw planets
+      // Draw planets - faster orbit speed
       for (const planet of PLANETS) {
-        const angle = (time * 0.002 * planet.speed) % (Math.PI * 2);
+        const angle = (time * 0.003 * planet.speed) % (Math.PI * 2);
         drawPlanet(planet, angle);
       }
 
       // Draw sun on top
       drawSun();
 
-      // Nebula overlay
+      // Nebula overlay - more dramatic and colorful
       const nebulaGrad = ctx!.createRadialGradient(centerX, centerY, 80, centerX, centerY, Math.max(width, height) * 0.6);
-      nebulaGrad.addColorStop(0, "rgba(20,30,60,0)");
-      nebulaGrad.addColorStop(0.4, "rgba(10,15,35,0.05)");
-      nebulaGrad.addColorStop(1, "rgba(5,5,15,0.15)");
+      nebulaGrad.addColorStop(0, "rgba(30,20,60,0)");
+      nebulaGrad.addColorStop(0.25, "rgba(40,20,80,0.06)");
+      nebulaGrad.addColorStop(0.5, "rgba(20,15,50,0.1)");
+      nebulaGrad.addColorStop(0.75, "rgba(10,10,30,0.15)");
+      nebulaGrad.addColorStop(1, "rgba(5,5,15,0.2)");
       ctx!.fillStyle = nebulaGrad;
       ctx!.fillRect(0, 0, width, height);
 

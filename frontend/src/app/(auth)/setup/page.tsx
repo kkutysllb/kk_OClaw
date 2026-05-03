@@ -67,7 +67,7 @@ export default function SetupPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("两次密码不一致");
       return;
     }
 
@@ -92,7 +92,7 @@ export default function SetupPage() {
 
       router.push("/workspace");
     } catch {
-      setError("Network error. Please try again.");
+      setError("网络错误，请重试。");
     } finally {
       setLoading(false);
     }
@@ -104,11 +104,11 @@ export default function SetupPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("两次密码不一致");
       return;
     }
     if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError("密码长度不能少于8位");
       return;
     }
 
@@ -137,7 +137,7 @@ export default function SetupPage() {
 
       router.push("/workspace");
     } catch {
-      setError("Network error. Please try again.");
+      setError("网络错误，请重试。");
     } finally {
       setLoading(false);
     }
@@ -146,7 +146,7 @@ export default function SetupPage() {
   if (mode === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="text-muted-foreground text-sm">加载中…</p>
       </div>
     );
   }
@@ -190,20 +190,20 @@ export default function SetupPage() {
             <h1 className="bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-4xl font-bold text-transparent">
               KKOCLAW
             </h1>
-            <p className="text-muted-foreground mt-2">Create admin account</p>
+            <p className="text-muted-foreground mt-2">创建管理员账户</p>
             <p className="text-muted-foreground mt-1 text-xs">
-              Set up the administrator account to get started.
+              请设置管理员账户以开始使用。
             </p>
           </div>
           <form onSubmit={handleInitAdmin} className="space-y-2">
             <div className="flex flex-col space-y-1">
               <label htmlFor="email" className="text-sm font-medium">
-                Email
+                邮箱
               </label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="请输入邮箱地址"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -212,12 +212,12 @@ export default function SetupPage() {
             </div>
             <div className="flex flex-col space-y-1">
               <label htmlFor="password" className="text-sm font-medium">
-                Password
+                密码
               </label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Password (min. 8 characters)"
+                placeholder="密码（至少8位）"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
@@ -227,12 +227,12 @@ export default function SetupPage() {
             </div>
             <div className="flex flex-col space-y-1">
               <label htmlFor="confirmPassword" className="text-sm font-medium">
-                Confirm Password
+                确认密码
               </label>
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="Confirm password"
+                placeholder="再次输入密码"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
@@ -248,7 +248,7 @@ export default function SetupPage() {
                 className="relative w-full bg-linear-to-r from-cyan-600 via-purple-600 to-pink-600 hover:from-cyan-700 hover:via-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/25 transition-all duration-300"
                 disabled={loading}
               >
-                {loading ? "Creating account…" : "Create Admin Account"}
+                {loading ? "正在创建账户…" : "创建管理员账户"}
               </Button>
             </div>
           </form>
@@ -298,16 +298,16 @@ export default function SetupPage() {
             KKOCLAW
           </h1>
           <p className="text-muted-foreground mt-2">
-            Complete admin account setup
+            完成管理员账户设置
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
-            Set your real email and a new password.
+            请设置您的真实邮箱和新密码。
           </p>
         </div>
         <form onSubmit={handleChangePassword} className="space-y-4">
           <Input
             type="email"
-            placeholder="Your email"
+            placeholder="您的邮箱"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -315,7 +315,7 @@ export default function SetupPage() {
           />
           <Input
             type="password"
-            placeholder="Current password"
+            placeholder="当前密码"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
@@ -323,7 +323,7 @@ export default function SetupPage() {
           />
           <Input
             type="password"
-            placeholder="New password"
+            placeholder="新密码"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
@@ -332,7 +332,7 @@ export default function SetupPage() {
           />
           <Input
             type="password"
-            placeholder="Confirm new password"
+            placeholder="确认新密码"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
@@ -347,7 +347,7 @@ export default function SetupPage() {
               className="relative w-full bg-linear-to-r from-cyan-600 via-purple-600 to-pink-600 hover:from-cyan-700 hover:via-purple-700 hover:to-pink-700 text-white shadow-lg shadow-purple-500/25 transition-all duration-300"
               disabled={loading}
             >
-              {loading ? "Setting up…" : "Complete Setup"}
+              {loading ? "正在设置…" : "完成设置"}
             </Button>
           </div>
         </form>

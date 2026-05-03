@@ -38,6 +38,7 @@ export const zhCN: Translations = {
     notAvailableInDemoMode: "在演示模式下不可用",
     loading: "加载中...",
     version: "版本",
+    all: "全部",
     lastUpdated: "最后更新",
     code: "代码",
     preview: "预览",
@@ -55,7 +56,6 @@ export const zhCN: Translations = {
   // Home
   home: {
     docs: "文档",
-    blog: "博客",
   },
 
   // Welcome
@@ -168,6 +168,7 @@ export const zhCN: Translations = {
     demoChats: "演示对话",
     agents: "智能体",
     models: "模型管理",
+    skills: "技能",
   },
 
   // Agents

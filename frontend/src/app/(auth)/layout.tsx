@@ -28,13 +28,13 @@ export default async function AuthLayout({
       return (
         <div className="flex h-screen flex-col items-center justify-center gap-4">
           <p className="text-muted-foreground">
-            Service temporarily unavailable.
+            服务暂不可用。
           </p>
           <Link
             href="/login"
             className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm"
           >
-            Retry
+            重试
           </Link>
         </div>
       );

@@ -26,11 +26,11 @@ export function AccountSettingsPage() {
     setMessage("");
 
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+      setError("两次密码不一致");
       return;
     }
     if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError("密码长度不能少于8位");
       return;
     }
 
@@ -55,12 +55,12 @@ export function AccountSettingsPage() {
         return;
       }
 
-      setMessage("Password changed successfully");
+      setMessage("密码修改成功");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch {
-      setError("Network error. Please try again.");
+      setError("网络错误，请重试。");
     } finally {
       setLoading(false);
     }
@@ -68,12 +68,12 @@ export function AccountSettingsPage() {
 
   return (
     <div className="space-y-8">
-      <SettingsSection title="Profile">
+      <SettingsSection title="个人资料">
         <div className="space-y-2">
           <div className="grid grid-cols-[max-content_max-content] items-center gap-4">
-            <span className="text-muted-foreground text-sm">Email</span>
+            <span className="text-muted-foreground text-sm">邮箱</span>
             <span className="text-sm font-medium">{user?.email ?? "—"}</span>
-            <span className="text-muted-foreground text-sm">Role</span>
+            <span className="text-muted-foreground text-sm">角色</span>
             <span className="text-sm font-medium capitalize">
               {user?.system_role ?? "—"}
             </span>
@@ -82,20 +82,20 @@ export function AccountSettingsPage() {
       </SettingsSection>
 
       <SettingsSection
-        title="Change Password"
-        description="Update your account password."
+        title="修改密码"
+        description="更新您的账户密码。"
       >
         <form onSubmit={handleChangePassword} className="max-w-sm space-y-3">
           <Input
             type="password"
-            placeholder="Current password"
+            placeholder="当前密码"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
           />
           <Input
             type="password"
-            placeholder="New password"
+            placeholder="新密码"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
@@ -103,7 +103,7 @@ export function AccountSettingsPage() {
           />
           <Input
             type="password"
-            placeholder="Confirm new password"
+            placeholder="确认新密码"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
@@ -112,7 +112,7 @@ export function AccountSettingsPage() {
           {error && <p className="text-sm text-red-500">{error}</p>}
           {message && <p className="text-sm text-green-500">{message}</p>}
           <Button type="submit" variant="outline" size="sm" disabled={loading}>
-            {loading ? "Updating..." : "Update Password"}
+            {loading ? "更新中…" : "更新密码"}
           </Button>
         </form>
       </SettingsSection>
@@ -125,7 +125,7 @@ export function AccountSettingsPage() {
           className="gap-2"
         >
           <LogOutIcon className="size-4" />
-          Sign Out
+          退出登录
         </Button>
       </SettingsSection>
     </div>
