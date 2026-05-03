@@ -1,230 +1,212 @@
-# KKOCLAW
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/cover.svg">
+    <img alt="KKOCLAW — 开源超级智能体平台" src="docs/images/cover.svg" width="100%" />
+  </picture>
+</p>
 
-English | [中文](./README_zh.md)
+---
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](./backend/pyproject.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](./Makefile)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-KKOCLAW is an open-source **super agent harness** that orchestrates **sub-agents**, **memory**, and **sandboxes** to do almost anything — powered by **extensible skills**.
+KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**memory** 和 **sandbox** 组织在一起，再配合可扩展的 **skills**，让 agent 可以完成几乎任何事情。
 
 ---
 
-## Table of Contents
+## 目录
 
-- [Quick Start](#quick-start)
-  - [Configuration](#configuration)
-  - [Running the Application](#running-the-application)
-    - [Deployment Sizing](#deployment-sizing)
-    - [Option 1: Docker (Recommended)](#option-1-docker-recommended)
-    - [Option 2: Local Development](#option-2-local-development)
-    - [Option 3: start.sh One-Click Script (Recommended for Local Dev)](#option-3-startsh-one-click-script-recommended-for-local-dev)
-  - [Advanced](#advanced)
-    - [Sandbox Mode](#sandbox-mode)
+- [快速开始](#快速开始)
+  - [配置](#配置)
+  - [运行应用](#运行应用)
+    - [部署建议与资源规划](#部署建议与资源规划)
+    - [方式一：Docker（推荐）](#方式一docker推荐)
+    - [方式二：本地开发](#方式二本地开发)
+    - [方式三：start.sh 一键脚本（本地开发推荐）](#方式三startsh-一键脚本本地开发推荐)
+  - [进阶配置](#进阶配置)
+    - [Sandbox 模式](#sandbox-模式)
     - [MCP Server](#mcp-server)
-    - [IM Channels](#im-channels)
-    - [LangSmith Tracing](#langsmith-tracing)
-    - [Langfuse Tracing](#langfuse-tracing)
-- [Core Features](#core-features)
-  - [Skills & Tools](#skills--tools)
+    - [IM 渠道](#im-渠道)
+    - [LangSmith 链路追踪](#langsmith-链路追踪)
+- [核心特性](#核心特性)
+  - [Skills 与 Tools](#skills-与-tools)
   - [Sub-Agents](#sub-agents)
-  - [Sandbox & File System](#sandbox--file-system)
+  - [Sandbox 与文件系统](#sandbox-与文件系统)
   - [Context Engineering](#context-engineering)
-  - [Long-Term Memory](#long-term-memory)
-- [Recommended Models](#recommended-models)
-- [Embedded Python Client](#embedded-python-client)
-- [Documentation](#documentation)
-- [Security Notice](#️-security-notice)
-- [Contributing](#contributing)
-- [License](#license)
+  - [长期记忆](#长期记忆)
+- [推荐模型](#推荐模型)
+- [内嵌 Python Client](#内嵌-python-client)
+- [文档](#文档)
+- [安全使用](#️-安全使用)
+- [参与贡献](#参与贡献)
+- [许可证](#许可证)
 
-## Quick Start
+## 快速开始
 
-### Configuration
+### 配置
 
-1. **Clone the repository**
+1. **克隆仓库**
 
    ```bash
    git clone <repository-url>
    cd kk_OClaw
    ```
 
-2. **Run the setup wizard**
+2. **生成本地配置文件**
 
-   From the project root directory, run:
+   在项目根目录执行：
 
    ```bash
-   make setup
+   make config
    ```
 
-   This launches an interactive wizard that guides you through choosing an LLM provider, optional web search, and execution/safety preferences such as sandbox mode, bash access, and file-write tools. It generates a minimal `config.yaml` and writes your keys to `.env`. Takes about 2 minutes.
+   这个命令会基于示例模板生成本地配置文件。
 
-   Run `make doctor` at any time to verify your setup and get actionable fix hints.
+3. **配置你要使用的模型**
 
-   > **Advanced / manual configuration**: If you prefer to edit `config.yaml` directly, run `make config` instead to copy the full template. See `config.example.yaml` for the complete reference.
-
-   <details>
-   <summary>Manual model configuration examples</summary>
+   编辑 `config.yaml`，至少定义一个模型：
 
    ```yaml
    models:
-     - name: gpt-4o
-       display_name: GPT-4o
-       use: langchain_openai:ChatOpenAI
-       model: gpt-4o
-       api_key: $OPENAI_API_KEY
-
-     - name: openrouter-gemini-2.5-flash
-       display_name: Gemini 2.5 Flash (OpenRouter)
-       use: langchain_openai:ChatOpenAI
-       model: google/gemini-2.5-flash-preview
-       api_key: $OPENROUTER_API_KEY
-       base_url: https://openrouter.ai/api/v1
-
-     - name: qwen3-32b-vllm
-       display_name: Qwen3 32B (vLLM)
-       use: kkoclaw.models.vllm_provider:VllmChatModel
-       model: Qwen/Qwen3-32B
-       api_key: $VLLM_API_KEY
-       base_url: http://localhost:8000/v1
-       supports_thinking: true
-       when_thinking_enabled:
-         extra_body:
-           chat_template_kwargs:
-             enable_thinking: true
+     - name: gpt-4                       # 内部标识
+       display_name: GPT-4               # 展示名称
+       use: langchain_openai:ChatOpenAI  # LangChain 类路径
+       model: gpt-4                      # API 使用的模型标识
+       api_key: $OPENAI_API_KEY          # API key（推荐使用环境变量）
+       max_tokens: 4096                  # 单次请求最大 tokens
+       temperature: 0.7                  # 采样温度
    ```
 
-   API keys can be set in `.env` (recommended) or exported in your shell:
+4. **为已配置的模型设置 API key**
+
+   推荐在项目根目录下的 `.env` 文件中设置：
 
    ```bash
-   OPENAI_API_KEY=your-openai-api-key
    TAVILY_API_KEY=your-tavily-api-key
+   OPENAI_API_KEY=your-openai-api-key
    ```
 
-   </details>
+### 运行应用
 
-### Running the Application
+#### 部署建议与资源规划
 
-#### Deployment Sizing
-
-Use the table below as a practical starting point:
-
-| Deployment target | Starting point | Recommended | Notes |
+| 部署场景 | 起步配置 | 推荐配置 | 说明 |
 |---------|-----------|------------|-------|
-| Local evaluation / `make dev` | 4 vCPU, 8 GB RAM, 20 GB free SSD | 8 vCPU, 16 GB RAM | Good for one developer or one light session with hosted model APIs |
-| Docker development / `make docker-start` | 4 vCPU, 8 GB RAM, 25 GB free SSD | 8 vCPU, 16 GB RAM | Image builds, bind mounts, and sandbox containers need more headroom |
-| Long-running server / `make up` | 8 vCPU, 16 GB RAM, 40 GB free SSD | 16 vCPU, 32 GB RAM | Preferred for shared use, multi-agent runs, report generation |
+| 本地体验 / `make dev` | 4 vCPU、8 GB 内存、20 GB SSD | 8 vCPU、16 GB 内存 | 适合单个开发者或单个轻量会话 |
+| Docker 开发 / `make docker-start` | 4 vCPU、8 GB 内存、25 GB SSD | 8 vCPU、16 GB 内存 | 镜像构建和 sandbox 容器更吃资源 |
+| 长期运行服务 / `make up` | 8 vCPU、16 GB 内存、40 GB SSD | 16 vCPU、32 GB 内存 | 适合共享环境、多 agent 任务 |
 
-- If you also host a local LLM, size that service separately.
-- Linux plus Docker is the recommended deployment target for a persistent server.
+- 上面的配置只覆盖 KKOCLAW 本身；本地大模型需单独预留资源。
+- 持续运行的服务推荐 Linux + Docker。
 
-#### Option 1: Docker (Recommended)
+#### 方式一：Docker（推荐）
 
-**Development** (hot-reload, source mounts):
-
-```bash
-make docker-init    # Pull sandbox image (only once or when image updates)
-make docker-start   # Start services
-```
-
-**Production** (builds images locally, mounts runtime config and data):
+**开发模式**（支持热更新，挂载源码）：
 
 ```bash
-make up     # Build images and start all production services
-make down   # Stop and remove containers
+make docker-init    # 拉取 sandbox 镜像
+make docker-start   # 启动服务
 ```
 
-Access: http://localhost:9191
+**生产模式**（本地构建镜像，挂载运行期配置与数据）：
 
-#### Option 2: Local Development
+```bash
+make up     # 构建镜像并启动全部生产服务
+make down   # 停止并移除容器
+```
 
-Prerequisite: complete the "Configuration" steps above first (`make setup`).
+访问地址：http://localhost:9191
 
-1. **Check prerequisites**:
+#### 方式二：本地开发
+
+前提：先完成上面的"配置"步骤。
+
+1. **检查依赖环境**：
    ```bash
-   make check  # Verifies Node.js 22+, pnpm, uv, nginx
+   make check  # 校验 Node.js 22+、pnpm、uv、nginx
    ```
 
-2. **Install dependencies**:
+2. **安装依赖**：
    ```bash
-   make install  # Install backend + frontend dependencies + pre-commit hooks
+   make install  # 安装 backend + frontend 依赖
    ```
 
-3. **(Optional) Pre-pull sandbox image**:
+3. **（可选）预拉取 sandbox 镜像**：
    ```bash
    make setup-sandbox
    ```
 
-4. **Start services**:
+4. **启动服务**：
    ```bash
    make dev
    ```
 
-5. **Access**: http://localhost:9191
+5. **访问地址**：http://localhost:9191
 
-#### Option 3: start.sh One-Click Script (Recommended for Local Dev)
+#### 方式三：start.sh 一键脚本（本地开发推荐）
 
-`start.sh` is a self-contained service management script that handles all three services (Gateway, Frontend, Nginx) with PID-file-based process isolation — it only manages its own processes, never affecting other KKOCLAW instances or projects.
+`start.sh` 是一个自包含的服务管理脚本，统一管理 Gateway、Frontend、Nginx 三个服务。通过 PID 文件实现进程隔离——只管理自己的进程，不会误伤同机上其他项目。
 
-**Quick Commands**:
+**常用命令**：
 
 ```bash
-./start.sh start              # Start all services (dev mode, hot-reload)
-./start.sh start prod         # Start in production mode (optimized build)
-./start.sh stop               # Stop all services
-./start.sh restart dev        # Restart (dev mode)
-./start.sh status             # Check service status
-./start.sh logs               # View all service logs
-./start.sh logs gateway       # View Gateway logs only
+./start.sh start              # 启动所有服务（开发模式，热重载）
+./start.sh start prod         # 生产模式启动（优化构建）
+./start.sh stop               # 停止所有服务
+./start.sh restart dev        # 重启（开发模式）
+./start.sh status             # 查看服务运行状态
+./start.sh logs               # 查看所有服务日志
+./start.sh logs gateway       # 仅查看 Gateway 日志
 ```
 
-**Service Ports** (configurable via `.env`):
+**服务端口**（可通过 `.env` 自定义）：
 
-| Service  | Default Port | Env Variable     |
-|----------|-------------|------------------|
-| Nginx    | 9191        | `LANGGRAPH_PORT` |
-| Frontend | 9192        | `FRONTEND_PORT`  |
-| Gateway  | 9193        | `GATEWAY_PORT`   |
+| 服务     | 默认端口 | 环境变量          |
+|----------|---------|-------------------|
+| Nginx    | 9191    | `LANGGRAPH_PORT`  |
+| Frontend | 9192    | `FRONTEND_PORT`   |
+| Gateway  | 9193    | `GATEWAY_PORT`    |
 
-**Features**:
-- **Process Isolation**: Uses per-service PID files (`.pids/`) — `stop` only kills its own processes, not other projects' services on the same machine.
-- **Port-Aware Management**: Automatically detects and cleans up stale port bindings.
-- **Health Checks**: Waits for each service port to be ready before starting the next.
-- **Color-Coded Status**: `./start.sh status` shows green/yellow/red status with PIDs and log paths.
-- **Env Configurable**: All ports, paths, and behavior can be customized via `.env`.
+**核心特性**：
+- **进程隔离**：每个服务有独立的 PID 文件（`.pids/`），`stop` 只精确终止自己的进程，不会影响同机其他项目。
+- **端口感知管理**：自动检测并清理残留的端口占用。
+- **健康检查**：启动时等待每个服务端口就绪后才启动下一个。
+- **彩色状态输出**：`./start.sh status` 用绿/黄/红三色显示状态、PID 和日志路径。
+- **环境变量配置**：所有端口和路径都可通过 `.env` 自定义。
 
-**Skip dependency sync** (faster startup when deps are already installed):
+**跳过依赖同步**（已安装依赖时更快启动）：
 
 ```bash
 SKIP_INSTALL=true ./start.sh start
 ```
 
-### Advanced
+### 进阶配置
 
-#### Sandbox Mode
+#### Sandbox 模式
 
-KKOCLAW supports multiple sandbox execution modes:
-- **Local Execution** (runs sandbox code directly on the host machine)
-- **Docker Execution** (runs sandbox code in isolated Docker containers)
-- **Docker Execution with Kubernetes** (runs sandbox code in Kubernetes pods via provisioner service)
+KKOCLAW 支持多种 sandbox 执行方式：
+- **本地执行**（直接在宿主机上运行 sandbox 代码）
+- **Docker 执行**（在隔离的 Docker 容器里运行 sandbox 代码）
+- **Docker + Kubernetes 执行**（通过 provisioner 服务在 Kubernetes Pod 中运行 sandbox 代码）
 
 #### MCP Server
 
-KKOCLAW supports configurable MCP servers and skills to extend its capabilities. For HTTP/SSE MCP servers, OAuth token flows are supported (`client_credentials`, `refresh_token`).
+KKOCLAW 支持可配置的 MCP Server 和 skills，用来扩展能力。对于 HTTP/SSE MCP Server，还支持 OAuth token 流程。
 
-#### IM Channels
+#### IM 渠道
 
-KKOCLAW supports receiving tasks from messaging apps. Channels auto-start when configured — no public IP required for any of them.
+KKOCLAW 支持从即时通讯应用接收任务。只要配置完成，对应渠道会自动启动，而且都不需要公网 IP。
 
-| Channel | Transport | Difficulty |
+| 渠道 | 传输方式 | 上手难度 |
 |---------|-----------|------------|
-| Telegram | Bot API (long-polling) | Easy |
-| Slack | Socket Mode | Moderate |
-| Feishu / Lark | WebSocket | Moderate |
-| WeCom | WebSocket | Moderate |
-| DingTalk | Stream Push (WebSocket) | Moderate |
+| Telegram | Bot API（long-polling） | 简单 |
+| Slack | Socket Mode | 中等 |
+| Feishu / Lark | WebSocket | 中等 |
+| 企业微信 | WebSocket | 中等 |
+| 钉钉 | Stream Push（WebSocket） | 中等 |
 
-**Configuration in `config.yaml`:**
+**`config.yaml` 中的配置示例：**
 
 ```yaml
 channels:
@@ -256,19 +238,19 @@ channels:
     client_secret: $DINGTALK_CLIENT_SECRET
 ```
 
-**Commands**
+**命令**
 
-| Command | Description |
+| 命令 | 说明 |
 |---------|-------------|
-| `/new` | Start a new conversation |
-| `/status` | Show current thread info |
-| `/models` | List available models |
-| `/memory` | View memory |
-| `/help` | Show help |
+| `/new` | 开启新对话 |
+| `/status` | 查看当前 thread 信息 |
+| `/models` | 列出可用模型 |
+| `/memory` | 查看 memory |
+| `/help` | 查看帮助 |
 
-#### LangSmith Tracing
+#### LangSmith 链路追踪
 
-KKOCLAW has built-in [LangSmith](https://smith.langchain.com) integration for observability.
+在 `.env` 文件中添加以下配置：
 
 ```bash
 LANGSMITH_TRACING=true
@@ -277,31 +259,20 @@ LANGSMITH_API_KEY=lsv2_pt_xxxxxxxxxxxxxxxx
 LANGSMITH_PROJECT=xxx
 ```
 
-#### Langfuse Tracing
+## 核心特性
 
-KKOCLAW also supports [Langfuse](https://langfuse.com) observability.
+### Skills 与 Tools
 
-```bash
-LANGFUSE_TRACING=true
-LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxxxx
-LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxxxx
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
-```
+Skills 是 KKOCLAW 能做"几乎任何事"的关键。
 
-## Core Features
+标准的 Agent Skill 是一种结构化能力模块，通常就是一个 Markdown 文件，里面定义了工作流、最佳实践，以及相关的参考资源。KKOCLAW 自带一批内置 skills，覆盖研究、报告生成、演示文稿制作、网页生成、图像和视频生成等场景。真正有意思的地方在于它的扩展性：你可以加自己的 skills，替换内置 skills，或者把多个 skills 组合成复合工作流。
 
-### Skills & Tools
+Skills 采用按需渐进加载，不会一次性把所有内容都塞进上下文。只有任务确实需要时才加载。
 
-Skills are what make KKOCLAW do *almost anything*.
+Tools 也是同样的思路。KKOCLAW 自带一组核心工具：网页搜索、网页抓取、文件操作、bash 执行；同时也支持通过 MCP Server 和 Python 函数扩展自定义工具。
 
-A standard Agent Skill is a structured capability module — a Markdown file that defines a workflow, best practices, and references to supporting resources. KKOCLAW ships with built-in skills for research, report generation, slide creation, web pages, image and video generation, and more. But the real power is extensibility: add your own skills, replace the built-in ones, or combine them into compound workflows.
-
-Skills are loaded progressively — only when the task needs them, not all at once. This keeps the context window lean.
-
-Tools follow the same philosophy. KKOCLAW comes with a core toolset — web search, web fetch, file operations, bash execution — and supports custom tools via MCP servers and Python functions.
-
-```
-# Paths inside the sandbox container
+```text
+# sandbox 容器内的路径
 /mnt/skills/public
 ├── research/SKILL.md
 ├── report-generation/SKILL.md
@@ -310,53 +281,55 @@ Tools follow the same philosophy. KKOCLAW comes with a core toolset — web sear
 └── image-generation/SKILL.md
 
 /mnt/skills/custom
-└── your-custom-skill/SKILL.md      ← yours
+└── your-custom-skill/SKILL.md      ← 你的 skill
 ```
 
 ### Sub-Agents
 
-Complex tasks rarely fit in a single pass. KKOCLAW decomposes them.
+复杂任务通常不可能一次完成，KKOCLAW 会先拆解，再执行。
 
-The lead agent can spawn sub-agents on the fly — each with its own scoped context, tools, and termination conditions. Sub-agents run in parallel when possible, report back structured results, and the lead agent synthesizes everything into a coherent output.
+lead agent 可以按需动态拉起 sub-agents。每个 sub-agent 都有自己独立的上下文、工具和终止条件。只要条件允许，它们就会并行运行，返回结构化结果，最后再由 lead agent 汇总成一份完整输出。
 
-### Sandbox & File System
+这也是 KKOCLAW 能处理从几分钟到几小时任务的原因。比如一个研究任务，可以拆成十几个 sub-agents，分别探索不同方向，最后合并成一份报告，或者一个网站，或者一套带生成视觉内容的演示文稿。
 
-KKOCLAW doesn't just *talk* about doing things. It has its own computer.
+### Sandbox 与文件系统
 
-Each task gets its own execution environment with a full filesystem view — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It can view images and, when configured safely, execute shell commands.
+KKOCLAW 不只是"会说它能做"，它是真的有一台自己的"电脑"。
 
-```
-# Paths inside the sandbox container
+每个任务都运行在隔离的 Docker 容器里，里面有完整的文件系统，包括 skills、workspace、uploads、outputs。agent 可以读写和编辑文件，可以执行 bash 命令和代码，也可以查看图片。整个过程都在 sandbox 内完成，可审计、会隔离。
+
+```text
+# sandbox 容器内的路径
 /mnt/user-data/
-├── uploads/          ← your files
-├── workspace/        ← agents' working directory
-└── outputs/          ← final deliverables
+├── uploads/          ← 你的文件
+├── workspace/        ← agents 的工作目录
+└── outputs/          ← 最终交付物
 ```
 
 ### Context Engineering
 
-**Isolated Sub-Agent Context**: Each sub-agent runs in its own isolated context. This means that the sub-agent will not be able to see the context of the main agent or other sub-agents.
+**隔离的 Sub-Agent Context**：每个 sub-agent 都在自己独立的上下文里运行。它看不到主 agent 的上下文，也看不到其他 sub-agents 的上下文。
 
-**Summarization**: Within a session, KKOCLAW manages context aggressively — summarizing completed sub-tasks, offloading intermediate results to the filesystem, compressing what's no longer immediately relevant.
+**摘要压缩**：在单个 session 内，KKOCLAW 会比较积极地管理上下文，包括总结已完成的子任务、把中间结果转存到文件系统、压缩暂时不重要的信息。
 
-### Long-Term Memory
+### 长期记忆
 
-Most agents forget everything the moment a conversation ends. KKOCLAW remembers.
+大多数 agents 会在对话结束后把一切都忘掉，KKOCLAW 不一样。
 
-Across sessions, KKOCLAW builds a persistent memory of your profile, preferences, and accumulated knowledge. The more you use it, the better it knows you — your writing style, your technical stack, your recurring workflows. Memory is stored locally and stays under your control.
+跨 session 使用时，KKOCLAW 会逐步积累关于你的持久 memory，包括你的个人偏好、知识背景，以及长期沉淀下来的工作习惯。你用得越多，它越了解你的写作风格、技术栈和重复出现的工作流。memory 保存在本地，控制权也始终在你手里。
 
-## Recommended Models
+## 推荐模型
 
-KKOCLAW is model-agnostic — it works with any LLM that implements the OpenAI-compatible API. That said, it performs best with models that support:
+KKOCLAW 对模型没有强绑定，只要实现了 OpenAI 兼容 API 的 LLM，理论上都可以接入。不过在下面这些能力上表现更强的模型，通常会更适合 KKOCLAW：
 
-- **Long context windows** (100k+ tokens) for deep research and multi-step tasks
-- **Reasoning capabilities** for adaptive planning and complex decomposition
-- **Multimodal inputs** for image understanding and video comprehension
-- **Strong tool-use** for reliable function calling and structured outputs
+- **长上下文窗口**（100k+ tokens），适合深度研究和多步骤任务
+- **推理能力**，适合自适应规划和复杂拆解
+- **多模态输入**，适合理解图片和视频
+- **稳定的 tool use 能力**，适合可靠的函数调用和结构化输出
 
-## Embedded Python Client
+## 内嵌 Python Client
 
-KKOCLAW can be used as an embedded Python library without running the full HTTP services:
+KKOCLAW 也可以作为内嵌的 Python 库使用，不必启动完整的 HTTP 服务：
 
 ```python
 from kkoclaw.client import KKOCLAWClient
@@ -364,45 +337,45 @@ from kkoclaw.client import KKOCLAWClient
 client = KKOCLAWClient()
 
 # Chat
-response = client.chat("Analyze this paper for me", thread_id="my-thread")
+response = client.chat("分析这篇论文", thread_id="my-thread")
 
-# Streaming
-for event in client.stream("hello"):
+# Streaming（LangGraph SSE 协议）
+for event in client.stream("你好"):
     if event.type == "messages-tuple" and event.data.get("type") == "ai":
         print(event.data["content"])
 
-# Configuration & management
+# 配置与管理
 models = client.list_models()
 skills = client.list_skills()
 client.update_skill("web-search", enabled=True)
 client.upload_files("thread-1", ["./report.pdf"])
 ```
 
-## Documentation
+## 文档
 
-- [Contributing Guide](CONTRIBUTING.md) - Development environment setup and workflow
-- [Configuration Guide](backend/docs/项目说明.md) - Full project documentation (Chinese)
-- [Backend Architecture](backend/README.md) - Backend architecture and API reference
+- [贡献指南](CONTRIBUTING.md) - 开发环境搭建与协作流程
+- [项目说明](backend/docs/项目说明.md) - 完整项目文档
+- [后端架构](backend/README.md) - 后端架构与 API 参考
 
-## Security Notice
+## 安全使用
 
-### Improper Deployment May Introduce Security Risks
+### 不恰当的部署可能导致安全风险
 
-KKOCLAW has key high-privilege capabilities including **system command execution, resource operations, and business logic invocation**, and is designed by default to be **deployed in a local trusted environment (accessible only via the 127.0.0.1 loopback interface)**. If you deploy the agent in untrusted environments without strict security measures, it may introduce security risks.
+KKOCLAW 具备**系统指令执行、资源操作、业务逻辑调用**等关键高权限能力，默认设计为**部署在本地可信环境（仅本机 127.0.0.1 回环访问）**。若将 agent 部署至不可信局域网、公网云服务器等环境，且未采取严格的安全防护措施，可能导致安全风险。
 
-### Security Recommendations
+### 安全使用建议
 
-We strongly recommend deploying KKOCLAW in a local trusted network environment. If you need cross-device or cross-network deployment, you must implement strict security measures, such as:
+建议将 KKOCLAW 部署在本地可信的网络环境下。若您有跨设备、跨网络的部署需求，必须加入严格的安全措施：
 
-- **IP allowlist**: Use `iptables` or hardware firewalls to configure IP allowlist rules
-- **Authentication gateway**: Configure a reverse proxy (e.g., nginx) and enable strong pre-authentication
-- **Network isolation**: Place the agent and trusted devices in the same dedicated VLAN
-- **Stay updated**: Continue to follow KKOCLAW's security feature updates
+- **设置访问 IP 白名单**：使用 iptables 或硬件防火墙配置 IP 白名单
+- **前置身份验证**：配置反向代理（nginx 等），开启高强度的前置身份验证
+- **网络隔离**：将 agent 和可信设备划分到同一个专用 VLAN
+- **持续关注项目更新**：持续关注 KKOCLAW 项目的安全功能更新
 
-## Contributing
+## 参与贡献
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, workflow, and guidelines.
+欢迎参与贡献。开发环境、工作流和相关规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-## License
+## 许可证
 
-This project is open source and available under the [MIT License](./LICENSE).
+本项目采用 [MIT License](./LICENSE) 开源发布。

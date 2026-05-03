@@ -61,6 +61,11 @@ export default function LoginPage() {
   const nextParam = searchParams.get("next");
   const redirectPath = validateNextParam(nextParam) ?? "/workspace";
 
+  // Only check setup-status when user opens login page directly (no next param).
+  // When redirected from a protected page due to session expiry, the system
+  // is already set up — skip this check to avoid bouncing to /setup.
+  const isRedirected = nextParam !== null;
+
   // Redirect if already authenticated (client-side, post-login)
   useEffect(() => {
     if (isAuthenticated) {
@@ -68,8 +73,10 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, redirectPath, router]);
 
-  // Redirect to setup if the system has no users yet
+  // Redirect to setup if the system has no users yet (only on direct access, not re-auth)
   useEffect(() => {
+    if (isRedirected) return; // System already set up, skip setup check
+
     let cancelled = false;
 
     void fetch("/api/v1/auth/setup-status")
@@ -86,7 +93,7 @@ export default function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [isRedirected, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

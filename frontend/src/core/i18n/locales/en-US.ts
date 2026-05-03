@@ -231,13 +231,7 @@ export const enUS: Translations = {
 
   // Workspace
   workspace: {
-    officialWebsite: "KKOCLAW official website",
-    githubTooltip: "KKOCLAW on Github",
     settingsAndMore: "Settings and more",
-    visitGithub: "KKOCLAW on GitHub",
-    reportIssue: "Report a issue",
-    contactUs: "Contact us",
-    about: "About KKOCLAW",
     logout: "Log out",
   },
 
@@ -368,7 +362,6 @@ export const enUS: Translations = {
       tools: "Tools",
       skills: "Skills",
       notification: "Notification",
-      about: "About",
     },
     memory: {
       title: "Memory",
