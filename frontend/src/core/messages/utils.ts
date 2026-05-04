@@ -35,6 +35,11 @@ export function groupMessages<T>(
   }
 
   const groups: MessageGroup[] = [];
+  let groupIndex = 0;
+
+  function nextGroupId(messageId: string | undefined): string {
+    return `${messageId ?? "unknown"}--${groupIndex++}`;
+  }
 
   // Returns the last group if it can still accept tool messages
   // (i.e. it's an in-flight processing group, not a terminal human/assistant group).
@@ -61,7 +66,7 @@ export function groupMessages<T>(
     }
 
     if (message.type === "human") {
-      groups.push({ id: message.id, type: "human", messages: [message] });
+      groups.push({ id: nextGroupId(message.id), type: "human", messages: [message] });
       continue;
     }
 
@@ -71,7 +76,7 @@ export function groupMessages<T>(
         // then also open a standalone clarification group for prominent display.
         lastOpenGroup()?.messages.push(message);
         groups.push({
-          id: message.id,
+          id: nextGroupId(message.id),
           type: "assistant:clarification",
           messages: [message],
         });
@@ -98,13 +103,13 @@ export function groupMessages<T>(
     if (message.type === "ai") {
       if (hasPresentFiles(message)) {
         groups.push({
-          id: message.id,
+          id: nextGroupId(message.id),
           type: "assistant:present-files",
           messages: [message],
         });
       } else if (hasSubagent(message)) {
         groups.push({
-          id: message.id,
+          id: nextGroupId(message.id),
           type: "assistant:subagent",
           messages: [message],
         });
@@ -113,7 +118,7 @@ export function groupMessages<T>(
         // Accumulate consecutive intermediate AI messages into one processing group.
         if (lastGroup?.type !== "assistant:processing") {
           groups.push({
-            id: message.id,
+            id: nextGroupId(message.id),
             type: "assistant:processing",
             messages: [message],
           });
@@ -125,7 +130,7 @@ export function groupMessages<T>(
       // Not an else-if: a message with reasoning + content (but no tool calls) goes
       // into the processing group above AND gets its own assistant bubble here.
       if (hasContent(message) && !hasToolCalls(message)) {
-        groups.push({ id: message.id, type: "assistant", messages: [message] });
+        groups.push({ id: nextGroupId(message.id), type: "assistant", messages: [message] });
       }
     }
   }

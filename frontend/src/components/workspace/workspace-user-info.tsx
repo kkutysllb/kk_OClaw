@@ -1,5 +1,6 @@
 "use client";
 
+import { UserIcon } from "lucide-react";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -13,10 +14,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
-
-function getUserInitial(email: string): string {
-  return email.charAt(0).toUpperCase();
-}
 
 function getRoleLabel(
   role: string,
@@ -36,9 +33,9 @@ export function WorkspaceUserInfo() {
   if (!user) return null;
 
   const avatar = (
-    <Avatar className="size-8 shrink-0">
-      <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-        {getUserInitial(user.email)}
+    <Avatar className="size-8 shrink-0 ring-2 ring-offset-1 ring-offset-background ring-violet-500/30">
+      <AvatarFallback className="bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 text-white text-sm font-bold shadow-sm">
+        <UserIcon className="size-4" />
       </AvatarFallback>
     </Avatar>
   );

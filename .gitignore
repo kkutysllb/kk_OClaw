@@ -104,6 +104,9 @@ yarn-error.log*
 config.yaml
 extensions_config.json
 
+# Custom skills (user-created, not tracked)
+skills/custom/
+
 # ═══════════════════════════════════════
 # Claude / Qoder local settings
 # ═══════════════════════════════════════
