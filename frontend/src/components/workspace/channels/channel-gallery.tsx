@@ -4,7 +4,6 @@ import { MessageCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   fetchChannelConfigs,
@@ -89,12 +88,30 @@ export function ChannelGallery() {
   return (
     <div className="flex size-full flex-col">
       {/* Page header */}
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold">{t.channels.title}</h1>
-          <p className="text-muted-foreground mt-0.5 text-sm">
-            {t.channels.description}
-          </p>
+      <div className="relative shrink-0 border-b bg-gradient-to-b from-muted/30 to-transparent">
+        {/* Decorative background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-24 -right-24 size-64 rounded-full bg-blue-500/5 blur-3xl" />
+          <div className="absolute -bottom-16 left-1/3 size-48 rounded-full bg-cyan-500/5 blur-3xl" />
+        </div>
+
+        <div className="relative flex items-center justify-between px-6 py-5">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-extrabold tracking-tight">
+              <span className="bg-gradient-to-r from-blue-500 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
+                {t.channels.title}
+              </span>
+            </h1>
+            <p className="text-muted-foreground text-sm max-w-xl">
+              {t.channels.description}
+            </p>
+          </div>
+          {channelEntries.length > 0 && !loading && (
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-flex size-2 rounded-full bg-blue-400" />
+              {channelEntries.length} 个渠道
+            </div>
+          )}
         </div>
       </div>
 
@@ -103,24 +120,46 @@ export function ChannelGallery() {
         {loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-48 w-full rounded-xl" />
+              <div
+                key={i}
+                className="h-48 animate-pulse rounded-xl border bg-muted/30"
+              >
+                <div className="h-1 w-full rounded-t-xl bg-blue-500/20" />
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-muted" />
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 w-2/3 rounded bg-muted" />
+                      <div className="h-3 w-1/3 rounded bg-muted" />
+                    </div>
+                  </div>
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-3 w-2/3 rounded bg-muted" />
+                </div>
+              </div>
             ))}
           </div>
         ) : error ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-            <p className="text-destructive text-sm">{error}</p>
+            <div className="size-16 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <MessageCircleIcon className="size-7 text-red-400" />
+            </div>
+            <p className="text-destructive text-sm font-medium">{error}</p>
             <Button variant="outline" onClick={refresh}>
               Retry
             </Button>
           </div>
         ) : channelEntries.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-            <div className="bg-violet-500/10 flex h-14 w-14 items-center justify-center rounded-full">
-              <MessageCircleIcon className="text-violet-500 h-7 w-7" />
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-blue-500/10 blur-xl" />
+              <div className="relative bg-blue-500/10 flex h-16 w-16 items-center justify-center rounded-2xl ring-1 ring-blue-500/20">
+                <MessageCircleIcon className="text-blue-500 h-8 w-8" />
+              </div>
             </div>
             <div>
-              <p className="font-medium">{t.channels.emptyTitle}</p>
-              <p className="text-muted-foreground mt-1 text-sm">
+              <p className="font-semibold text-lg">{t.channels.emptyTitle}</p>
+              <p className="text-muted-foreground mt-1 text-sm max-w-sm">
                 {t.channels.emptyDescription}
               </p>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit2Icon, MessageCircleIcon, RefreshCwIcon } from "lucide-react";
+import { Edit2Icon, LockIcon, MessageCircleIcon, RefreshCwIcon, ZapIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,13 +62,13 @@ export function ChannelCard({
   const iconColor = CHANNEL_ICON_COLORS[name] ?? "bg-violet-500/10 text-violet-500";
 
   return (
-    <Card className="group flex flex-col overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+    <Card className="group flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
       {/* Gradient top accent */}
       <div className={`h-1 w-full bg-gradient-to-r ${gradient}`} />
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           {/* Colored icon badge */}
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconColor}`}>
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset transition-transform duration-200 group-hover:scale-110 ${iconColor} ${iconColor.replace('bg-', 'ring-').replace('/10', '/20')}`}>
             <MessageCircleIcon className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -107,7 +107,8 @@ export function ChannelCard({
         </div>
 
         {/* Credential keys */}
-        <div className="text-xs">
+        <div className="text-xs flex items-center gap-1.5">
+          <LockIcon className="text-muted-foreground/50 h-3 w-3 shrink-0" />
           <span className="text-muted-foreground font-medium">{t.channels.credentials}:</span>{" "}
           <span className="text-muted-foreground/70 font-mono">
             {config.credential_keys.join(", ")}
@@ -116,9 +117,10 @@ export function ChannelCard({
 
         {/* Streaming support */}
         {config.supports_streaming && (
-          <p className="text-muted-foreground/50 text-xs">
-            支持流式响应
-          </p>
+          <div className="text-xs flex items-center gap-1.5">
+            <ZapIcon className="text-cyan-500/60 h-3 w-3" />
+            <span className="text-muted-foreground/50">支持流式响应</span>
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex justify-end gap-1 border-t pt-3">

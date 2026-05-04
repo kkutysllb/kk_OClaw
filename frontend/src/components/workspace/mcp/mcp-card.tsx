@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit2Icon, TerminalIcon, Trash2Icon } from "lucide-react";
+import { Edit2Icon, LinkIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,13 +57,13 @@ export function McpCard({ name, config, onEdit, onDelete }: McpCardProps) {
   const typeLabel = TYPE_LABELS[transportType] ?? transportType.toUpperCase();
 
   return (
-    <Card className="group flex flex-col overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+    <Card className="group flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
       {/* Gradient top accent */}
       <div className={`h-1 w-full bg-gradient-to-r ${gradient}`} />
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconColor}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset transition-transform duration-200 group-hover:scale-110 ${iconColor} ${iconColor.replace('bg-', 'ring-').replace('/10', '/20')}`}
           >
             <TerminalIcon className="h-5 w-5" />
           </div>
@@ -105,12 +105,14 @@ export function McpCard({ name, config, onEdit, onDelete }: McpCardProps) {
 
         {/* Transport details */}
         {transportType === "stdio" && config.command && (
-          <p className="text-muted-foreground/50 truncate font-mono text-xs">
+          <p className="text-muted-foreground/50 truncate font-mono text-xs flex items-center gap-1">
+            <TerminalIcon className="h-3 w-3 shrink-0" />
             $ {config.command} {(config.args ?? []).join(" ")}
           </p>
         )}
         {(transportType === "sse" || transportType === "http") && config.url && (
-          <p className="text-muted-foreground/50 truncate font-mono text-xs">
+          <p className="text-muted-foreground/50 truncate font-mono text-xs flex items-center gap-1">
+            <LinkIcon className="h-3 w-3 shrink-0" />
             {config.url}
           </p>
         )}

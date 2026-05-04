@@ -1,6 +1,6 @@
 "use client";
 
-import { BotIcon, MessageSquareIcon, Trash2Icon } from "lucide-react";
+import { AlertTriangleIcon, BotIcon, CpuIcon, MessageSquareIcon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -53,13 +53,13 @@ export function AgentCard({ agent }: AgentCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+      <Card className="group flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
         {/* Gradient top accent */}
         <div className="h-1 w-full bg-gradient-to-r from-violet-400 to-purple-400" />
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-3">
-              <div className="bg-violet-500/10 text-violet-500 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+              <div className="bg-violet-500/10 text-violet-500 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ring-violet-500/20 transition-transform duration-200 group-hover:scale-110">
                 <BotIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -71,6 +71,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                     variant="secondary"
                     className="bg-violet-500/10 text-violet-600 dark:text-violet-400 mt-0.5 border-0 text-xs font-medium"
                   >
+                    <CpuIcon className="mr-1 h-3 w-3" />
                     {agent.model}
                   </Badge>
                 )}
@@ -109,8 +110,12 @@ export function AgentCard({ agent }: AgentCardProps) {
           </CardContent>
         )}
 
-        <CardFooter className="mt-auto flex items-center justify-between gap-2 pt-3">
-          <Button size="sm" className="flex-1" onClick={handleChat}>
+        <CardFooter className="mt-auto border-t pt-3">
+          <Button
+            size="sm"
+            className="flex-1 bg-gradient-to-r from-violet-500 to-purple-500 text-white hover:from-violet-600 hover:to-purple-600"
+            onClick={handleChat}
+          >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
             {t.agents.chat}
           </Button>
@@ -130,12 +135,20 @@ export function AgentCard({ agent }: AgentCardProps) {
 
       {/* Delete Confirm */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.agents.delete}</DialogTitle>
-            <DialogDescription>{t.agents.deleteConfirm}</DialogDescription>
+        <DialogContent className="p-0">
+          <div className="h-1.5 w-full rounded-t-lg bg-gradient-to-r from-red-400 to-rose-400" />
+          <DialogHeader className="px-6 pt-4">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                <AlertTriangleIcon className="h-4 w-4" />
+              </span>
+              {t.agents.delete}
+            </DialogTitle>
+            <DialogDescription className="pl-10">
+              {t.agents.deleteConfirm}
+            </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-5">
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}
@@ -147,6 +160,7 @@ export function AgentCard({ agent }: AgentCardProps) {
               variant="destructive"
               onClick={handleDelete}
               disabled={deleteAgent.isPending}
+              className="shadow-sm"
             >
               {deleteAgent.isPending ? t.common.loading : t.common.delete}
             </Button>

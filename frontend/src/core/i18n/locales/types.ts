@@ -121,6 +121,7 @@ export interface Translations {
     skills: string;
     channels: string;
     mcp: string;
+    crons: string;
   };
 
   // Agents
@@ -244,6 +245,44 @@ export interface Translations {
     guideSseTitle: string;
     guideSseSteps: string;
     guideLinks: string;
+  };
+
+  // Crons
+  crons: {
+    title: string;
+    description: string;
+    addJob: string;
+    editJob: string;
+    deleteJob: string;
+    deleteConfirm: string;
+    deleteSuccess: string;
+    createSuccess: string;
+    updateSuccess: string;
+    enabled: string;
+    disabled: string;
+    name: string;
+    nameHint: string;
+    cron: string;
+    cronHint: string;
+    cronPlaceholder: string;
+    jobDescription: string;
+    jobDescriptionHint: string;
+    agent: string;
+    agentHint: string;
+    model: string;
+    modelHint: string;
+    modelPlaceholder: string;
+    prompt: string;
+    promptHint: string;
+    promptPlaceholder: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    guide: string;
+    guideIntro: string;
+    guideCronSyntax: string;
+    guideCronFormat: string;
+    guideExamples: string;
+    guideModelNote: string;
   };
 
   // Conversation

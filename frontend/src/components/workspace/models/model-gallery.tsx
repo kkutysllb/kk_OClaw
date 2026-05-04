@@ -1,6 +1,6 @@
 "use client";
 
-import { CpuIcon, PlusIcon } from "lucide-react";
+import { AlertTriangleIcon, CpuIcon, PlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   createModel,
@@ -94,17 +93,40 @@ export function ModelGallery() {
   return (
     <div className="flex size-full flex-col">
       {/* Page header */}
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold">{t.models.title}</h1>
-          <p className="text-muted-foreground mt-0.5 text-sm">
-            {t.models.description}
-          </p>
+      <div className="relative shrink-0 border-b bg-gradient-to-b from-muted/30 to-transparent">
+        {/* Decorative background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-24 -right-24 size-64 rounded-full bg-emerald-500/5 blur-3xl" />
+          <div className="absolute -bottom-16 left-1/3 size-48 rounded-full bg-teal-500/5 blur-3xl" />
         </div>
-        <Button onClick={handleAdd}>
-          <PlusIcon className="mr-1.5 h-4 w-4" />
-          {t.models.addModel}
-        </Button>
+
+        <div className="relative flex items-center justify-between px-6 py-5">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-extrabold tracking-tight">
+              <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
+                {t.models.title}
+              </span>
+            </h1>
+            <p className="text-muted-foreground text-sm max-w-xl">
+              {t.models.description}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {models.length > 0 && (
+              <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex size-2 rounded-full bg-emerald-400" />
+                {models.length} 个模型
+              </div>
+            )}
+            <Button
+              onClick={handleAdd}
+              className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md shadow-emerald-500/25 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-500/30"
+            >
+              <PlusIcon className="mr-1.5 h-4 w-4" />
+              {t.models.addModel}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Content */}
@@ -112,28 +134,53 @@ export function ModelGallery() {
         {loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-48 w-full rounded-xl" />
+              <div
+                key={i}
+                className="h-48 animate-pulse rounded-xl border bg-muted/30"
+              >
+                <div className="h-1 w-full rounded-t-xl bg-emerald-500/20" />
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-xl bg-muted" />
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 w-2/3 rounded bg-muted" />
+                      <div className="h-3 w-1/3 rounded bg-muted" />
+                    </div>
+                  </div>
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-3 w-2/3 rounded bg-muted" />
+                </div>
+              </div>
             ))}
           </div>
         ) : error ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-            <p className="text-destructive text-sm">{error}</p>
+            <div className="size-16 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <CpuIcon className="size-7 text-red-400" />
+            </div>
+            <p className="text-destructive text-sm font-medium">{error}</p>
             <Button variant="outline" onClick={refresh}>
               Retry
             </Button>
           </div>
         ) : models.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
-            <div className="bg-emerald-500/10 flex h-14 w-14 items-center justify-center rounded-full">
-              <CpuIcon className="text-emerald-500 h-7 w-7" />
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-emerald-500/10 blur-xl" />
+              <div className="relative bg-emerald-500/10 flex h-16 w-16 items-center justify-center rounded-2xl ring-1 ring-emerald-500/20">
+                <CpuIcon className="text-emerald-500 h-8 w-8" />
+              </div>
             </div>
             <div>
-              <p className="font-medium">{t.models.emptyTitle}</p>
-              <p className="text-muted-foreground mt-1 text-sm">
+              <p className="font-semibold text-lg">{t.models.emptyTitle}</p>
+              <p className="text-muted-foreground mt-1 text-sm max-w-sm">
                 {t.models.emptyDescription}
               </p>
             </div>
-            <Button variant="outline" className="mt-2" onClick={handleAdd}>
+            <Button
+              onClick={handleAdd}
+              className="mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600"
+            >
               <PlusIcon className="mr-1.5 h-4 w-4" />
               {t.models.addModel}
             </Button>
@@ -167,17 +214,23 @@ export function ModelGallery() {
           if (!open) setDeletingModel(null);
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.models.deleteModel}</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="p-0">
+          <div className="h-1.5 w-full rounded-t-lg bg-gradient-to-r from-red-400 to-rose-400" />
+          <DialogHeader className="px-6 pt-4">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                <AlertTriangleIcon className="h-4 w-4" />
+              </span>
+              {t.models.deleteModel}
+            </DialogTitle>
+            <DialogDescription className="pl-10">
               {t.models.deleteConfirm.replace(
                 "{name}",
                 deletingModel?.name ?? "",
               )}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-5">
             <Button
               variant="outline"
               onClick={() => setDeletingModel(null)}
@@ -189,6 +242,7 @@ export function ModelGallery() {
               variant="destructive"
               onClick={handleDelete}
               disabled={deleting}
+              className="shadow-sm"
             >
               {deleting ? t.common.loading : t.common.delete}
             </Button>

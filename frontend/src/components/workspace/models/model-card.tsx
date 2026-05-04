@@ -5,6 +5,8 @@ import {
   CpuIcon,
   Edit2Icon,
   EyeIcon,
+  GlobeIcon,
+  HashIcon,
   Trash2Icon,
   ZapIcon,
 } from "lucide-react";
@@ -68,13 +70,13 @@ export function ModelCard({
     });
 
   return (
-    <Card className="group flex flex-col overflow-hidden transition-all hover:shadow-lg hover:-translate-y-0.5">
+    <Card className="group flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
       {/* Gradient top accent */}
       <div className="h-1 w-full bg-gradient-to-r from-emerald-400 to-teal-400" />
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
           {/* Colored icon badge */}
-          <div className="bg-emerald-500/10 text-emerald-500 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+          <div className="bg-emerald-500/10 text-emerald-500 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ring-emerald-500/20 transition-transform duration-200 group-hover:scale-110">
             <CpuIcon className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
@@ -89,6 +91,7 @@ export function ModelCard({
       </CardHeader>
       <CardContent className="flex-1 space-y-2.5">
         <div className="flex items-center gap-1.5 text-xs">
+          <GlobeIcon className="text-muted-foreground/50 h-3 w-3 shrink-0" />
           <span className="text-muted-foreground shrink-0 font-medium">
             {t.models.provider}:
           </span>
@@ -97,6 +100,7 @@ export function ModelCard({
           </span>
         </div>
         <div className="flex items-center gap-1.5 text-xs">
+          <HashIcon className="text-muted-foreground/50 h-3 w-3 shrink-0" />
           <span className="text-muted-foreground shrink-0 font-medium">
             {t.models.modelId}:
           </span>
