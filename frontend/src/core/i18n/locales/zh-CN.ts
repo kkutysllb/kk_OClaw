@@ -169,6 +169,7 @@ export const zhCN: Translations = {
     agents: "智能体",
     models: "模型管理",
     skills: "技能",
+    channels: "渠道管理",
   },
 
   // Agents
@@ -222,6 +223,34 @@ export const zhCN: Translations = {
   workspace: {
     settingsAndMore: "设置和更多",
     logout: "退出登录",
+    userInfo: {
+      email: "邮箱",
+      role: "角色",
+      admin: "管理员",
+      user: "用户",
+    },
+  },
+
+  // Channels
+  channels: {
+    title: "IM 渠道管理",
+    description: "管理外部即时通讯平台集成，配置后可通过飞书、钉钉、微信等 IM 工具与 KKOCLAW 交互。",
+    enabled: "已启用",
+    disabled: "未启用",
+    running: "运行中",
+    stopped: "已停止",
+    configured: "已配置凭证",
+    notConfigured: "未配置凭证",
+    editConfig: "编辑配置",
+    restart: "重启渠道",
+    restartSuccess: "渠道已重启",
+    help: "配置帮助",
+    saveSuccess: "渠道配置已保存",
+    emptyTitle: "暂无已配置的渠道",
+    emptyDescription: "配置 IM 渠道后，用户可通过飞书、钉钉等平台与 KKOCLAW 对话。",
+    credentials: "凭证",
+    status: "状态",
+    guide: "配置指引",
   },
 
   // Conversation

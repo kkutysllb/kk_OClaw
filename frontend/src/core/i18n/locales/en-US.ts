@@ -175,6 +175,7 @@ export const enUS: Translations = {
     agents: "Agents",
     models: "Models",
     skills: "Skills",
+    channels: "Channels",
   },
 
   // Agents
@@ -234,6 +235,34 @@ export const enUS: Translations = {
   workspace: {
     settingsAndMore: "Settings and more",
     logout: "Log out",
+    userInfo: {
+      email: "Email",
+      role: "Role",
+      admin: "Admin",
+      user: "User",
+    },
+  },
+
+  // Channels
+  channels: {
+    title: "IM Channel Management",
+    description: "Manage external messaging platform integrations. Once configured, users can interact with KKOCLAW via Feishu, DingTalk, WeChat, and other IM tools.",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    running: "Running",
+    stopped: "Stopped",
+    configured: "Credentials Configured",
+    notConfigured: "No Credentials",
+    editConfig: "Edit Config",
+    restart: "Restart",
+    restartSuccess: "Channel restarted",
+    help: "Setup Guide",
+    saveSuccess: "Channel config saved",
+    emptyTitle: "No channels configured",
+    emptyDescription: "Configure IM channels to let users interact with KKOCLAW via Feishu, DingTalk, and other platforms.",
+    credentials: "Credentials",
+    status: "Status",
+    guide: "Setup Guide",
   },
 
   // Conversation

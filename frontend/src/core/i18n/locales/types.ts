@@ -119,6 +119,7 @@ export interface Translations {
     agents: string;
     models: string;
     skills: string;
+    channels: string;
   };
 
   // Agents
@@ -166,6 +167,34 @@ export interface Translations {
   workspace: {
     settingsAndMore: string;
     logout: string;
+    userInfo: {
+      email: string;
+      role: string;
+      admin: string;
+      user: string;
+    };
+  };
+
+  // Channels
+  channels: {
+    title: string;
+    description: string;
+    enabled: string;
+    disabled: string;
+    running: string;
+    stopped: string;
+    configured: string;
+    notConfigured: string;
+    editConfig: string;
+    restart: string;
+    restartSuccess: string;
+    help: string;
+    saveSuccess: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    credentials: string;
+    status: string;
+    guide: string;
   };
 
   // Conversation
