@@ -31,14 +31,18 @@ function NavMenuButtonContent({
   t: ReturnType<typeof useI18n>["t"];
 }) {
   return isSidebarOpen ? (
-    <div className="text-muted-foreground flex w-full items-center gap-2 text-left text-sm">
-      <SettingsIcon className="size-4" />
-      <span>{t.workspace.settingsAndMore}</span>
+    <div className="flex w-full items-center gap-2 text-left text-sm">
+      <span className="flex size-5 items-center justify-center rounded-md bg-gradient-to-br from-slate-500 via-zinc-500 to-neutral-600 text-white">
+        <SettingsIcon className="size-3" />
+      </span>
+      <span className="text-muted-foreground">{t.workspace.settingsAndMore}</span>
       <ChevronsUpDown className="text-muted-foreground ml-auto size-4" />
     </div>
   ) : (
     <div className="flex size-full items-center justify-center">
-      <SettingsIcon className="text-muted-foreground size-4" />
+      <span className="flex size-5 items-center justify-center rounded-md bg-gradient-to-br from-slate-500 via-zinc-500 to-neutral-600 text-white">
+        <SettingsIcon className="size-3" />
+      </span>
     </div>
   );
 }
@@ -86,7 +90,7 @@ export function WorkspaceNavMenu() {
                     setSettingsOpen(true);
                   }}
                 >
-                  <Settings2Icon />
+                  <Settings2Icon className="size-4 text-violet-500" />
                   {t.common.settings}
                 </DropdownMenuItem>
               </DropdownMenuContent>

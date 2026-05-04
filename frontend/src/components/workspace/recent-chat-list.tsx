@@ -213,18 +213,18 @@ export function RecentChatList() {
                                   )
                                 }
                               >
-                                <Pencil className="text-muted-foreground" />
+                                <Pencil className="text-blue-500" />
                                 <span>{t.common.rename}</span>
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={() => handleShare(thread)}
                               >
-                                <Share2 className="text-muted-foreground" />
+                                <Share2 className="text-emerald-500" />
                                 <span>{t.common.share}</span>
                               </DropdownMenuItem>
                               <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                  <Download className="text-muted-foreground" />
+                                  <Download className="text-violet-500" />
                                   <span>{t.common.export}</span>
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
@@ -233,7 +233,7 @@ export function RecentChatList() {
                                       handleExport(thread, "markdown")
                                     }
                                   >
-                                    <FileText className="text-muted-foreground" />
+                                    <FileText className="text-cyan-500" />
                                     <span>{t.common.exportAsMarkdown}</span>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
@@ -241,7 +241,7 @@ export function RecentChatList() {
                                       handleExport(thread, "json")
                                     }
                                   >
-                                    <FileJson className="text-muted-foreground" />
+                                    <FileJson className="text-amber-500" />
                                     <span>{t.common.exportAsJSON}</span>
                                   </DropdownMenuItem>
                                 </DropdownMenuSubContent>
@@ -250,7 +250,7 @@ export function RecentChatList() {
                               <DropdownMenuItem
                                 onSelect={() => handleDelete(thread.thread_id)}
                               >
-                                <Trash2 className="text-muted-foreground" />
+                                <Trash2 className="text-rose-500" />
                                 <span>{t.common.delete}</span>
                               </DropdownMenuItem>
                             </DropdownMenuContent>

@@ -56,7 +56,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             asChild
           >
             <Link className="text-muted-foreground" href="/workspace/chats/new">
-              <MessageSquarePlus size={16} />
+              <MessageSquarePlus size={16} className="text-cyan-500" />
               <span>{t.sidebar.newChat}</span>
             </Link>
           </SidebarMenuButton>
