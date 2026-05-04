@@ -86,9 +86,13 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
                 existing_tool_msg_ids.add(msg.tool_call_id)
 
         # Check if any patching is needed
+        # Use isinstance(AIMessage) instead of type == "ai" to also catch
+        # cloned/custom AIMessages produced by summarization skill rescue.
         needs_patch = False
+        from langchain_core.messages import AIMessage
+
         for msg in messages:
-            if getattr(msg, "type", None) != "ai":
+            if not isinstance(msg, AIMessage):
                 continue
             for tc in self._message_tool_calls(msg):
                 tc_id = tc.get("id")
@@ -107,7 +111,7 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
         patch_count = 0
         for msg in messages:
             patched.append(msg)
-            if getattr(msg, "type", None) != "ai":
+            if not isinstance(msg, AIMessage):
                 continue
             for tc in self._message_tool_calls(msg):
                 tc_id = tc.get("id")
@@ -123,7 +127,13 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
                     patched_ids.add(tc_id)
                     patch_count += 1
 
-        logger.warning(f"Injecting {patch_count} placeholder ToolMessage(s) for dangling tool calls")
+        logger.warning(
+            "Injecting %d placeholder ToolMessage(s) for dangling tool calls "
+            "(total messages: %d, existing ToolMessages: %d)",
+            patch_count,
+            len(messages),
+            len(existing_tool_msg_ids),
+        )
         return patched
 
     @override

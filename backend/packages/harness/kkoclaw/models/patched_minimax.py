@@ -96,7 +96,14 @@ def _with_reasoning_content(
 
 
 class PatchedChatMiniMax(ChatOpenAI):
-    """ChatOpenAI adapter that preserves MiniMax reasoning output."""
+    """ChatOpenAI adapter that preserves MiniMax reasoning output.
+
+    Also strips ``name`` from HumanMessage entries in the request payload
+    because MiniMax requires all messages of the same role to use the same
+    ``name`` value.  The backend injects synthetic HumanMessages with
+    ``name="summary"`` and ``name="loop_warning"``, which conflicts with
+    regular user messages that have no ``name``.
+    """
 
     def _get_request_payload(
         self,
@@ -106,6 +113,15 @@ class PatchedChatMiniMax(ChatOpenAI):
         **kwargs: Any,
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+
+        # MiniMax requires consistent ``name`` across same-role messages.
+        # Strip synthetic names from HumanMessages to avoid API rejection.
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("role") == "user" and "name" in msg:
+                    del msg["name"]
+
         extra_body = payload.get("extra_body")
         if isinstance(extra_body, dict):
             payload["extra_body"] = {
