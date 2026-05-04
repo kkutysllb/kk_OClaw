@@ -120,6 +120,7 @@ export interface Translations {
     models: string;
     skills: string;
     channels: string;
+    mcp: string;
   };
 
   // Agents
@@ -195,6 +196,54 @@ export interface Translations {
     credentials: string;
     status: string;
     guide: string;
+  };
+
+  // MCP
+  mcp: {
+    title: string;
+    description: string;
+    addServer: string;
+    editServer: string;
+    deleteServer: string;
+    deleteConfirm: string;
+    deleteSuccess: string;
+    saveSuccess: string;
+    createSuccess: string;
+    updateSuccess: string;
+    enabled: string;
+    disabled: string;
+    type: string;
+    typeStdio: string;
+    typeSse: string;
+    typeHttp: string;
+    command: string;
+    commandHint: string;
+    args: string;
+    argsHint: string;
+    env: string;
+    envHint: string;
+    url: string;
+    urlHint: string;
+    headers: string;
+    headersHint: string;
+    serverDescription: string;
+    descriptionHint: string;
+    oauth: string;
+    oauthEnabled: string;
+    oauthTokenUrl: string;
+    grantType: string;
+    clientId: string;
+    clientSecret: string;
+    scope: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    guide: string;
+    guideIntro: string;
+    guideStdioTitle: string;
+    guideStdioSteps: string;
+    guideSseTitle: string;
+    guideSseSteps: string;
+    guideLinks: string;
   };
 
   // Conversation
