@@ -1,8 +1,12 @@
 import base64
+import mimetypes
 import os
 
 import requests
 from PIL import Image
+
+# MiniMax API base URL (domestic: api.minimaxi.com, international: api.minimax.io)
+MINIMAX_API_BASE = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/v1")
 
 
 def validate_image(image_path: str) -> bool:
@@ -27,6 +31,14 @@ def validate_image(image_path: str) -> bool:
         return False
 
 
+def _get_mime_type(file_path: str) -> str:
+    """Detect MIME type from file path, defaulting to image/jpeg."""
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type and mime_type.startswith("image/"):
+        return mime_type
+    return "image/jpeg"
+
+
 def generate_image(
     prompt_file: str,
     reference_images: list[str],
@@ -35,65 +47,85 @@ def generate_image(
 ) -> str:
     with open(prompt_file, "r", encoding="utf-8") as f:
         prompt = f.read()
-    parts = []
-    i = 0
-    
-    # Filter out invalid reference images
+
+    api_key = os.getenv("MINIMAX_API_KEY")
+    if not api_key:
+        return "MINIMAX_API_KEY is not set"
+
+    # Build request body
+    request_body: dict = {
+        "model": "image-01",
+        "prompt": prompt,
+        "aspect_ratio": aspect_ratio,
+        "response_format": "base64",
+        "n": 1,
+        "prompt_optimizer": False,
+    }
+
+    # Add reference images as subject_reference (image-to-image)
     valid_reference_images = []
     for ref_img in reference_images:
         if validate_image(ref_img):
             valid_reference_images.append(ref_img)
         else:
             print(f"Skipping invalid reference image: {ref_img}")
-    
+
     if len(valid_reference_images) < len(reference_images):
-        print(f"Note: {len(reference_images) - len(valid_reference_images)} reference image(s) were skipped due to validation failure.")
-    
-    for reference_image in valid_reference_images:
-        i += 1
-        with open(reference_image, "rb") as f:
-            image_b64 = base64.b64encode(f.read()).decode("utf-8")
-        parts.append(
-            {
-                "inlineData": {
-                    "mimeType": "image/jpeg",
-                    "data": image_b64,
-                }
-            }
+        print(
+            f"Note: {len(reference_images) - len(valid_reference_images)} "
+            f"reference image(s) were skipped due to validation failure."
         )
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return "GEMINI_API_KEY is not set"
+    if valid_reference_images:
+        subject_refs = []
+        for ref_img in valid_reference_images:
+            mime_type = _get_mime_type(ref_img)
+            with open(ref_img, "rb") as f:
+                image_b64 = base64.b64encode(f.read()).decode("utf-8")
+            subject_refs.append({
+                "type": "character",
+                "image_file": f"data:{mime_type};base64,{image_b64}",
+            })
+        request_body["subject_reference"] = subject_refs
+
     response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent",
+        f"{MINIMAX_API_BASE}/v1/image_generation",
         headers={
-            "x-goog-api-key": api_key,
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={
-            "generationConfig": {"imageConfig": {"aspectRatio": aspect_ratio}},
-            "contents": [{"parts": [*parts, {"text": prompt}]}],
-        },
+        json=request_body,
     )
     response.raise_for_status()
-    json = response.json()
-    parts: list[dict] = json["candidates"][0]["content"]["parts"]
-    image_parts = [part for part in parts if part.get("inlineData", False)]
-    if len(image_parts) == 1:
-        base64_image = image_parts[0]["inlineData"]["data"]
-        # Save the image to a file
+    result = response.json()
+
+    # Check MiniMax error code
+    base_resp = result.get("base_resp", {})
+    if base_resp.get("status_code") != 0:
+        raise Exception(
+            f"MiniMax API error (code={base_resp.get('status_code')}): "
+            f"{base_resp.get('status_msg', 'unknown error')}"
+        )
+
+    # Extract base64 image data
+    data = result.get("data", {})
+    image_base64_list = data.get("image_base64", [])
+    if image_base64_list:
+        base64_image = image_base64_list[0]
         with open(output_file, "wb") as f:
             f.write(base64.b64decode(base64_image))
         return f"Successfully generated image to {output_file}"
     else:
-        raise Exception("Failed to generate image")
+        raise Exception(
+            f"Failed to generate image: no image data in response. "
+            f"Response keys: {list(result.keys())}"
+        )
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate images using Gemini API")
+    parser = argparse.ArgumentParser(description="Generate images using MiniMax API")
     parser.add_argument(
         "--prompt-file",
         required=True,

@@ -80,9 +80,15 @@ export function groupMessages<T>(
         if (open) {
           open.messages.push(message);
         } else {
-          console.error(
-            "Unexpected tool message outside a processing group",
-            message,
+          // Tool messages without an open processing group are typically
+          // caused by upstream LLM failures (e.g. model errors, timeouts)
+          // that prevented the corresponding tool-call AI message from
+          // being created.  The backend already surfaces the error to the
+          // user via the error-handling middleware, so we silently skip
+          // the orphaned tool result here.
+          console.warn(
+            "Orphaned tool message (no open processing group) — this is expected when an LLM call fails upstream",
+            message.name ?? message.type,
           );
         }
       }

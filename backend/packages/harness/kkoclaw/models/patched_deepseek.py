@@ -38,10 +38,13 @@ class PatchedChatDeepSeek(ChatDeepSeek):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> dict:
-        """Get request payload with reasoning_content preserved.
+        """Get request payload with reasoning_content preserved and image_url stripped.
 
-        Overrides the parent method to inject reasoning_content from
-        additional_kwargs into assistant messages in the payload.
+        Overrides the parent method to:
+        1. Inject reasoning_content from additional_kwargs into assistant messages.
+        2. Strip image_url content from user messages — DeepSeek's standard
+           /v1/chat/completions endpoint does not support the image_url content
+           type and rejects requests with error 400 (unknown variant 'image_url').
         """
         # Get the original messages before conversion
         original_messages = self._convert_input(input_).to_messages()
@@ -49,11 +52,25 @@ class PatchedChatDeepSeek(ChatDeepSeek):
         # Call parent to get the base payload
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
 
-        # Match payload messages with original messages to restore reasoning_content
+        # Strip image_url parts from multi-modal user messages.
+        # DeepSeek's API cannot deserialize image_url content in user messages.
         payload_messages = payload.get("messages", [])
+        for msg in payload_messages:
+            if isinstance(msg, dict) and msg.get("role") in ("user", "human"):
+                content = msg.get("content")
+                if isinstance(content, list):
+                    stripped = [
+                        block for block in content
+                        if not (isinstance(block, dict) and block.get("type") == "image_url")
+                    ]
+                    if stripped:
+                        msg["content"] = stripped
+                    else:
+                        # All content was image_url — replace with a placeholder
+                        msg["content"] = [{"type": "text", "text": "[Image content omitted — DeepSeek API does not support direct image input]"}]
 
+        # Restore reasoning_content on assistant messages
         # The payload messages and original messages should be in the same order
-        # Iterate through both and match by position
         if len(payload_messages) == len(original_messages):
             for payload_msg, orig_msg in zip(payload_messages, original_messages):
                 if payload_msg.get("role") == "assistant" and isinstance(orig_msg, AIMessage):

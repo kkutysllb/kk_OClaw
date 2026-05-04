@@ -56,6 +56,10 @@ def _setup_langgraph_logger() -> None:
     Writes agent execution traces, persistence operations, and other runtime
     logs to ``logs/langgraph.log``, separate from the gateway REST API log.
 
+    The log file is truncated on each service restart so that old entries
+    do not accumulate across restarts. The rotating file handler then appends
+    new entries, with rotation at 10 MB and 3 backup generations.
+
     The handler inherits the log level set by ``apply_logging_level()`` so
     it respects ``log_level`` in config.yaml.
     """
@@ -66,6 +70,12 @@ def _setup_langgraph_logger() -> None:
         for h in langgraph_logger.handlers
     ):
         return
+
+    # Truncate the log file on each service restart so old entries from a
+    # previous run do not persist. Must be done BEFORE creating the handler
+    # because RotatingFileHandler opens the file immediately in append mode.
+    with open("../logs/langgraph.log", "w", encoding="utf-8") as _:
+        pass
 
     handler = RotatingFileHandler(
         "../logs/langgraph.log",
