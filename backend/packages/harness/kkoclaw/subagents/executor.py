@@ -409,8 +409,10 @@ class SubagentExecutor:
             state = await self._build_initial_state(task)
 
             # Build config with thread_id for sandbox access and recursion limit
+            # Include "subagent:{name}" tag so RunJournal classifies token usage correctly.
             run_config: RunnableConfig = {
                 "recursion_limit": self.config.max_turns,
+                "tags": [f"subagent:{self.config.name}"],
             }
             context: dict[str, Any] = {}
             if self.thread_id:
