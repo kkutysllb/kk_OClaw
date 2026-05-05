@@ -16,6 +16,7 @@ from kkoclaw.sandbox.security import LOCAL_BASH_SUBAGENT_DISABLED_MESSAGE, is_ho
 from kkoclaw.subagents import SubagentExecutor, get_available_subagent_names, get_subagent_config
 from kkoclaw.subagents.config import resolve_subagent_model_name
 from kkoclaw.subagents.executor import (
+    SubagentResult,
     SubagentStatus,
     cleanup_background_task,
     get_background_task_result,
@@ -26,6 +27,94 @@ if TYPE_CHECKING:
     from kkoclaw.config.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _iter_callbacks(callbacks: Any):
+    """Yield individual callback handlers from *callbacks*.
+
+    LangGraph/LangChain stores callbacks as either a plain ``list[BaseCallbackHandler]``
+    or an ``AsyncCallbackManager`` / ``CallbackManager`` wrapper.  This helper
+    normalises both shapes into an iterable of handlers.
+    """
+    if callbacks is None:
+        return
+    # CallbackManager / AsyncCallbackManager expose a .handlers list
+    if hasattr(callbacks, "handlers"):
+        yield from callbacks.handlers
+        return
+    # Plain iterable (list, tuple, etc.)
+    try:
+        for cb in callbacks:
+            yield cb
+    except TypeError:
+        pass
+
+
+def _find_run_journal(config_source: Any) -> "RunJournal | None":
+    """Locate the RunJournal from various config sources.
+
+    Tries multiple strategies because the callbacks list may not always
+    be available through ``ToolRuntime.config`` in all LangGraph versions.
+    """
+    from kkoclaw.runtime.journal import RunJournal
+
+    # Strategy 1: Look in config_source.callbacks directly
+    if config_source is not None:
+        try:
+            callbacks = config_source.get("callbacks", []) if isinstance(config_source, dict) else getattr(config_source, "callbacks", [])
+        except Exception:
+            callbacks = []
+        for cb in _iter_callbacks(callbacks):
+            if isinstance(cb, RunJournal):
+                return cb
+
+    # Strategy 2: Use langgraph.config.get_config() as fallback
+    try:
+        from langgraph.config import get_config
+        lg_config = get_config()
+        if lg_config:
+            callbacks = lg_config.get("callbacks", [])
+            for cb in _iter_callbacks(callbacks):
+                if isinstance(cb, RunJournal):
+                    return cb
+    except RuntimeError:
+        pass  # Not inside a LangGraph execution context
+    except Exception:
+        pass
+
+    return None
+
+
+def _report_subagent_tokens(runtime: Any, subagent_name: str, result: SubagentResult) -> None:
+    """Report subagent token usage to the parent RunJournal (if attached).
+
+    The subagent runs in an isolated event loop where the RunJournal callback
+    handler is not present.  This function locates the RunJournal in the
+    parent's callbacks and "replays" the subagent's token totals so they
+    appear in the run's completion data.
+    """
+    # Try ToolRuntime.config first, then fall back to langgraph's get_config()
+    journal = _find_run_journal(getattr(runtime, "config", None) if runtime is not None else None)
+
+    if journal is None:
+        logger.warning(
+            "No RunJournal found for subagent token reporting (subagent=%s, total_tokens=%d). "
+            "Token usage will not appear in the run stats.",
+            subagent_name, result.total_tokens,
+        )
+        return
+
+    journal.record_subagent_tokens(
+        subagent_name,
+        total_tokens=result.total_tokens,
+        total_input_tokens=result.total_input_tokens,
+        total_output_tokens=result.total_output_tokens,
+        llm_call_count=result.llm_call_count,
+    )
+    logger.info(
+        "Reported subagent token usage to RunJournal: subagent=%s, total=%d",
+        subagent_name, result.total_tokens,
+    )
 
 
 def _get_runtime_app_config(runtime: Any) -> "AppConfig | None":
@@ -235,6 +324,10 @@ async def task_tool(
             if result.status == SubagentStatus.COMPLETED:
                 writer({"type": "task_completed", "task_id": task_id, "result": result.result})
                 logger.info(f"[trace={trace_id}] Task {task_id} completed after {poll_count} polls")
+                # Report subagent token usage to the parent RunJournal so it's
+                # included in the run's completion data.
+                if result.total_tokens > 0:
+                    _report_subagent_tokens(runtime, subagent_type, result)
                 cleanup_background_task(task_id)
                 return f"Task Succeeded. Result: {result.result}"
             elif result.status == SubagentStatus.FAILED:

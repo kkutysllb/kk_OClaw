@@ -114,23 +114,80 @@ class PatchedChatMiniMax(ChatOpenAI):
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
 
-        # MiniMax requires consistent ``name`` across same-role messages.
-        # Strip synthetic names from HumanMessages to avoid API rejection.
         messages = payload.get("messages")
         if isinstance(messages, list):
+            # MiniMax requires consistent ``name`` across same-role messages.
+            # Strip synthetic names from HumanMessages to avoid API rejection.
             for msg in messages:
                 if isinstance(msg, dict) and msg.get("role") == "user" and "name" in msg:
                     del msg["name"]
 
-        extra_body = payload.get("extra_body")
-        if isinstance(extra_body, dict):
+            # MiniMax only accepts a single ``system`` message.  When subagents
+            # load skills, each skill is injected as a separate SystemMessage,
+            # resulting in dozens of ``role: system`` entries that trigger
+            # error 2013 ("invalid chat setting").  Merge them into one.
+            merged = self._merge_system_messages(messages)
+            if merged is not None:
+                payload["messages"] = merged
+
+        extra_body = payload.get("extra_body") or {}
+
+        # Only add reasoning_split when thinking is enabled.
+        # MiniMax returns 2013 ("invalid chat setting") when reasoning_split
+        # is sent without an active thinking configuration.
+        thinking_cfg = extra_body.get("thinking") if isinstance(extra_body, dict) else None
+        if isinstance(thinking_cfg, dict) and thinking_cfg.get("type") == "enabled":
             payload["extra_body"] = {
                 **extra_body,
                 "reasoning_split": True,
             }
+        elif isinstance(extra_body, dict) and extra_body.get("reasoning_split") is not None:
+            # Preserve explicit reasoning_split from config (e.g. when_thinking_disabled)
+            payload["extra_body"] = extra_body
         else:
-            payload["extra_body"] = {"reasoning_split": True}
+            # Remove extra_body entirely when empty to avoid MiniMax 2013 errors
+            if extra_body:
+                payload["extra_body"] = extra_body
+            elif "extra_body" in payload:
+                del payload["extra_body"]
+
         return payload
+
+    @staticmethod
+    def _merge_system_messages(messages: list[dict]) -> list[dict] | None:
+        """Merge consecutive ``system`` messages into a single message.
+
+        MiniMax's chat completions API only accepts **one** ``role: system``
+        entry.  Consecutive system messages (e.g. from skill loading) are
+        concatenated with ``\n\n`` separators.  Non-system messages between
+        system blocks are left untouched, and the merged system block is
+        placed at the beginning.
+
+        Returns ``None`` when no merging is needed (0 or 1 system messages).
+        """
+        system_parts: list[str] = []
+        non_system: list[tuple[int, dict]] = []  # (original_index, msg)
+
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict) and msg.get("role") == "system":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    system_parts.append(content.strip())
+            else:
+                non_system.append((i, msg))
+
+        if len(system_parts) <= 1:
+            return None  # nothing to merge
+
+        merged_content = "\n\n".join(system_parts)
+        merged_system: dict = {"role": "system", "content": merged_content}
+
+        # Rebuild the message list: merged system first, then everything else
+        # in original order.
+        result: list[dict] = [merged_system]
+        for _, msg in non_system:
+            result.append(msg)
+        return result
 
     def _convert_chunk_to_generation_chunk(
         self,

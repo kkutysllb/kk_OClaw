@@ -58,6 +58,10 @@ class SubagentResult:
         started_at: When execution started.
         completed_at: When execution completed.
         ai_messages: List of complete AI messages (as dicts) generated during execution.
+        total_tokens: Total tokens consumed by the subagent's LLM calls.
+        total_input_tokens: Total input tokens consumed.
+        total_output_tokens: Total output tokens consumed.
+        llm_call_count: Number of LLM calls made by the subagent.
     """
 
     task_id: str
@@ -68,6 +72,10 @@ class SubagentResult:
     started_at: datetime | None = None
     completed_at: datetime | None = None
     ai_messages: list[dict[str, Any]] | None = None
+    total_tokens: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    llm_call_count: int = 0
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def __post_init__(self):
@@ -548,6 +556,28 @@ class SubagentExecutor:
 
             result.status = SubagentStatus.COMPLETED
             result.completed_at = datetime.now()
+
+            # Extract token usage from collected AI messages
+            for msg_dict in ai_messages:
+                usage = msg_dict.get("usage_metadata") or msg_dict.get("additional_kwargs", {}).get("usage_metadata")
+                if not usage:
+                    continue
+                input_tk = usage.get("input_tokens", 0) or 0
+                output_tk = usage.get("output_tokens", 0) or 0
+                total_tk = usage.get("total_tokens", 0) or 0
+                if total_tk == 0:
+                    total_tk = input_tk + output_tk
+                if total_tk > 0:
+                    result.total_input_tokens += input_tk
+                    result.total_output_tokens += output_tk
+                    result.total_tokens += total_tk
+                    result.llm_call_count += 1
+
+            if result.total_tokens > 0:
+                logger.info(
+                    f"[trace={self.trace_id}] Subagent {self.config.name} token usage: "
+                    f"input={result.total_input_tokens}, output={result.total_output_tokens}, total={result.total_tokens}, llm_calls={result.llm_call_count}"
+                )
 
         except Exception as e:
             logger.exception(f"[trace={self.trace_id}] Subagent {self.config.name} async execution failed")

@@ -367,6 +367,45 @@ class RunJournal(BaseCallbackHandler):
             content={"name": name, "hook": hook, "action": action, "changes": changes},
         )
 
+    def record_subagent_tokens(
+        self,
+        name: str,
+        *,
+        total_tokens: int,
+        total_input_tokens: int = 0,
+        total_output_tokens: int = 0,
+        llm_call_count: int = 0,
+    ) -> None:
+        """Record token usage from a subagent execution.
+
+        Called by the ``task`` tool after a subagent completes, because the
+        subagent runs in an isolated event loop where the RunJournal callback
+        is not attached.  This method "replays" the token totals into the
+        journal's accumulators so they appear in the run's completion data.
+
+        Args:
+            name: Subagent name (e.g. "bash", "research").
+            total_tokens: Total tokens consumed.
+            total_input_tokens: Total input tokens.
+            total_output_tokens: Total output tokens.
+            llm_call_count: Number of LLM calls made.
+        """
+        if total_tokens <= 0:
+            return
+        self._total_input_tokens += total_input_tokens
+        self._total_output_tokens += total_output_tokens
+        self._total_tokens += total_tokens
+        self._llm_call_count += llm_call_count
+        self._subagent_tokens += total_tokens
+        logger.info(
+            "Recorded subagent token usage: name=%s, input=%d, output=%d, total=%d, llm_calls=%d",
+            name,
+            total_input_tokens,
+            total_output_tokens,
+            total_tokens,
+            llm_call_count,
+        )
+
     async def flush(self) -> None:
         """Force flush remaining buffer. Called in worker's finally block."""
         if self._pending_flush_tasks:
