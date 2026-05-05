@@ -28,6 +28,41 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/threads", tags=["runs"])
 
 
+def _get_default_model_name(request: Request) -> str | None:
+    """Return the first configured model name, used to resolve 'unknown' entries."""
+    config = getattr(request.app.state, "config", None)
+    if config is not None and config.models:
+        return config.models[0].name
+    return None
+
+
+def _resolve_unknown_models(agg: dict, request: Request) -> dict:
+    """Replace 'unknown' model keys in by_model with the configured default model name.
+
+    When runs were created before the model_name field existed, they are stored
+    as NULL and coalesced to 'unknown' by the aggregation query. We resolve them
+    to the default model name so the UI displays a meaningful name.
+    """
+    default_model = _get_default_model_name(request)
+    if not default_model or "unknown" not in agg.get("by_model", {}):
+        return agg
+
+    by_model = agg["by_model"]
+    unknown_data = by_model.pop("unknown")
+
+    # Merge into the default model entry if it already exists
+    if default_model in by_model:
+        existing = by_model[default_model]
+        existing["tokens"] += unknown_data.get("tokens", 0)
+        existing["runs"] += unknown_data.get("runs", 0)
+        existing["input_tokens"] = existing.get("input_tokens", 0) + unknown_data.get("input_tokens", 0)
+        existing["output_tokens"] = existing.get("output_tokens", 0) + unknown_data.get("output_tokens", 0)
+    else:
+        by_model[default_model] = unknown_data
+
+    return agg
+
+
 # ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
@@ -368,10 +403,37 @@ async def list_run_events(
     return await event_store.list_events(thread_id, run_id, event_types=types, limit=limit)
 
 
+@router.get("/token-usage/stats")
+async def global_token_usage_stats(request: Request) -> dict:
+    """Global token usage statistics across all threads for the current user."""
+    run_store = get_run_store(request)
+    user_id = await get_current_user(request)
+    agg = await run_store.aggregate_tokens_global(user_id=user_id)
+    return _resolve_unknown_models(agg, request)
+
+
+@router.get("/token-usage/timeseries")
+async def token_usage_timeseries(
+    request: Request,
+    days: int = Query(default=30, ge=1, le=365),
+) -> list[dict]:
+    """Daily token usage breakdown by model, grouped by date."""
+    run_store = get_run_store(request)
+    user_id = await get_current_user(request)
+    items = await run_store.aggregate_tokens_timeseries(user_id=user_id, days=days)
+    default_model = _get_default_model_name(request)
+    if default_model:
+        for item in items:
+            if item.get("model_name") == "unknown":
+                item["model_name"] = default_model
+    return items
+
+
 @router.get("/{thread_id}/token-usage")
 @require_permission("threads", "read", owner_check=True)
 async def thread_token_usage(thread_id: str, request: Request) -> dict:
     """Thread-level token usage aggregation."""
     run_store = get_run_store(request)
     agg = await run_store.aggregate_tokens_by_thread(thread_id)
-    return {"thread_id": thread_id, **agg}
+    resolved = _resolve_unknown_models(agg, request)
+    return {"thread_id": thread_id, **resolved}

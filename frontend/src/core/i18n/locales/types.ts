@@ -411,6 +411,7 @@ export interface Translations {
       tools: string;
       skills: string;
       notification: string;
+      tokenUsage: string;
     };
     memory: {
       title: string;
@@ -519,6 +520,22 @@ export interface Translations {
       testBody: string;
       notSupported: string;
       disableNotification: string;
+    };
+    tokenUsage: {
+      title: string;
+      description: string;
+      summaryTotalTokens: string;
+      summaryTotalRuns: string;
+      summaryModels: string;
+      byModel: string;
+      byCaller: string;
+      modelColumn: string;
+      tokensColumn: string;
+      runsColumn: string;
+      leadAgent: string;
+      subagent: string;
+      middleware: string;
+      noData: string;
     };
     acknowledge: {
       emptyTitle: string;

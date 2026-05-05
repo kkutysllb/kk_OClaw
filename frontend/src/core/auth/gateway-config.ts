@@ -12,22 +12,21 @@ let _cached: GatewayConfig | null = null;
 export function getGatewayConfig(): GatewayConfig {
   if (_cached) return _cached;
 
-  const isDev = process.env.NODE_ENV === "development";
-
-  const rawUrl = process.env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL?.trim();
+  const rawUrl =
+    process.env.KKOCLAW_INTERNAL_GATEWAY_BASE_URL?.trim() ??
+    process.env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL?.trim();
   const internalGatewayUrl =
-    rawUrl?.replace(/\/+$/, "") ??
-    (isDev ? "http://localhost:9987" : undefined);
+    rawUrl?.replace(/\/+$/, "") ?? "http://localhost:9987";
 
-  const rawOrigins = process.env.DEER_FLOW_TRUSTED_ORIGINS?.trim();
+  const rawOrigins =
+    process.env.KKOCLAW_TRUSTED_ORIGINS?.trim() ??
+    process.env.DEER_FLOW_TRUSTED_ORIGINS?.trim();
   const trustedOrigins = rawOrigins
     ? rawOrigins
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
-    : isDev
-      ? ["http://localhost:3333"]
-      : undefined;
+    : ["http://localhost:3333"];
 
   _cached = gatewayConfigSchema.parse({ internalGatewayUrl, trustedOrigins });
   return _cached;

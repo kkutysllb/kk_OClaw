@@ -70,6 +70,7 @@ class RunRepository(RunStore):
         thread_id,
         assistant_id=None,
         user_id: str | None | _AutoSentinel = AUTO,
+        model_name=None,
         status="pending",
         multitask_strategy="reject",
         metadata=None,
@@ -85,6 +86,7 @@ class RunRepository(RunStore):
             thread_id=thread_id,
             assistant_id=assistant_id,
             user_id=resolved_user_id,
+            model_name=model_name,
             status=status,
             multitask_strategy=multitask_strategy,
             metadata_json=self._safe_json(metadata) or {},
@@ -233,6 +235,129 @@ class RunRepository(RunStore):
         by_model: dict[str, dict] = {}
         for r in rows:
             by_model[r.model] = {"tokens": r.total_tokens, "runs": r.runs}
+            total_tokens += r.total_tokens
+            total_input += r.total_input_tokens
+            total_output += r.total_output_tokens
+            total_runs += r.runs
+            lead_agent += r.lead_agent
+            subagent += r.subagent
+            middleware += r.middleware
+
+        return {
+            "total_tokens": total_tokens,
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_runs": total_runs,
+            "by_model": by_model,
+            "by_caller": {
+                "lead_agent": lead_agent,
+                "subagent": subagent,
+                "middleware": middleware,
+            },
+        }
+
+    async def backfill_unknown_model_names(self, default_model_name: str) -> int:
+        """Backfill NULL model_name rows with the default model name.
+
+        Returns the number of rows updated.
+        """
+        stmt = (
+            update(RunRow)
+            .where(RunRow.model_name.is_(None))
+            .values(model_name=default_model_name)
+        )
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+        return result.rowcount
+
+    async def aggregate_tokens_timeseries(
+        self,
+        *,
+        user_id: str | None = None,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Return daily token usage breakdown grouped by date and model."""
+        from datetime import timedelta
+
+        _completed = RunRow.status.in_(("success", "error"))
+        conditions = [_completed]
+        if user_id is not None:
+            conditions.append(RunRow.user_id == user_id)
+
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        conditions.append(RunRow.created_at >= cutoff)
+
+        date_col = func.date(RunRow.created_at).label("date")
+        model_col = func.coalesce(RunRow.model_name, "unknown").label("model")
+
+        stmt = (
+            select(
+                date_col,
+                model_col,
+                func.count().label("run_count"),
+                func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
+            )
+            .where(*conditions)
+            .group_by(func.date(RunRow.created_at), func.coalesce(RunRow.model_name, "unknown"))
+            .order_by(func.date(RunRow.created_at).asc())
+        )
+
+        async with self._sf() as session:
+            rows = (await session.execute(stmt)).all()
+
+        return [
+            {
+                "date": str(r.date),
+                "model_name": r.model,
+                "run_count": r.run_count,
+                "total_tokens": r.total_tokens,
+            }
+            for r in rows
+        ]
+
+    async def aggregate_tokens_global(
+        self,
+        *,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate token usage across all threads.
+
+        Uses a single SQL GROUP BY query for efficiency.
+        """
+        _completed = RunRow.status.in_(("success", "error"))
+        conditions = [_completed]
+        if user_id is not None:
+            conditions.append(RunRow.user_id == user_id)
+
+        stmt = (
+            select(
+                func.coalesce(RunRow.model_name, "unknown").label("model"),
+                func.count().label("runs"),
+                func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(RunRow.total_input_tokens), 0).label("total_input_tokens"),
+                func.coalesce(func.sum(RunRow.total_output_tokens), 0).label("total_output_tokens"),
+                func.coalesce(func.sum(RunRow.lead_agent_tokens), 0).label("lead_agent"),
+                func.coalesce(func.sum(RunRow.subagent_tokens), 0).label("subagent"),
+                func.coalesce(func.sum(RunRow.middleware_tokens), 0).label("middleware"),
+            )
+            .where(*conditions)
+            .group_by(func.coalesce(RunRow.model_name, "unknown"))
+        )
+
+        async with self._sf() as session:
+            rows = (await session.execute(stmt)).all()
+
+        total_tokens = total_input = total_output = total_runs = 0
+        lead_agent = subagent = middleware = 0
+        by_model: dict[str, dict] = {}
+        for r in rows:
+            by_model[r.model] = {
+                "tokens": r.total_tokens,
+                "runs": r.runs,
+                "input_tokens": r.total_input_tokens,
+                "output_tokens": r.total_output_tokens,
+            }
             total_tokens += r.total_tokens
             total_input += r.total_input_tokens
             total_output += r.total_output_tokens

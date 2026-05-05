@@ -23,6 +23,7 @@ class RunStore(abc.ABC):
         thread_id: str,
         assistant_id: str | None = None,
         user_id: str | None = None,
+        model_name: str | None = None,
         status: str = "pending",
         multitask_strategy: str = "reject",
         metadata: dict[str, Any] | None = None,
@@ -91,5 +92,37 @@ class RunStore(abc.ABC):
         Returns a dict with keys: total_tokens, total_input_tokens,
         total_output_tokens, total_runs, by_model (model_name → {tokens, runs}),
         by_caller ({lead_agent, subagent, middleware}).
+        """
+        pass
+
+    @abc.abstractmethod
+    async def aggregate_tokens_global(
+        self,
+        *,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate token usage across all threads for the current user.
+
+        When user_id is provided, only runs owned by that user are counted.
+        When user_id is None, all runs are counted (single-user mode).
+
+        Returns a dict with keys:
+        - total_tokens, total_input_tokens, total_output_tokens, total_runs
+        - by_model: {model_name: {tokens, runs, input_tokens, output_tokens}}
+        - by_caller: {lead_agent, subagent, middleware}
+        """
+        pass
+
+    @abc.abstractmethod
+    async def aggregate_tokens_timeseries(
+        self,
+        *,
+        user_id: str | None = None,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Return daily token usage breakdown grouped by date and model.
+
+        Returns a list of {date, model_name, run_count, total_tokens}
+        ordered by date ascending.
         """
         pass

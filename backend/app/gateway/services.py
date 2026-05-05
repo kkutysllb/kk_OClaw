@@ -249,11 +249,24 @@ async def start_run(
 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
+    # Extract model_name from body.context for persistence.
+    # Falls back to the first configured model if not provided.
+    model_name: str | None = None
+    body_context = getattr(body, "context", None)
+    if body_context and isinstance(body_context, dict):
+        model_name = body_context.get("model_name")
+
+    if model_name is None:
+        config = getattr(request.app.state, "config", None)
+        if config is not None and config.models:
+            model_name = config.models[0].name
+
     try:
         record = await run_mgr.create_or_reject(
             thread_id,
             body.assistant_id,
             on_disconnect=disconnect,
+            model_name=model_name,
             metadata=body.metadata or {},
             kwargs={"input": body.input, "config": body.config},
             multitask_strategy=body.multitask_strategy,

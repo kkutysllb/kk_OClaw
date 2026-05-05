@@ -90,6 +90,33 @@ def _setup_langgraph_logger() -> None:
     langgraph_logger.addHandler(handler)
 
 
+async def _backfill_model_names(app: FastAPI) -> None:
+    """Startup hook: backfill NULL model_name in runs with the default model.
+
+    Runs created before the model_name column existed (or before the field
+    was properly populated) have NULL model_name, which displays as
+    'unknown' in token usage statistics. This one-time backfill resolves
+    them to the first configured model name.
+    """
+    from kkoclaw.persistence.run.sql import RunRepository
+
+    run_store = getattr(app.state, "run_store", None)
+    if not isinstance(run_store, RunRepository):
+        return  # MemoryRunStore does not need backfill
+
+    config = getattr(app.state, "config", None)
+    if config is None or not config.models:
+        return
+
+    default_model_name = config.models[0].name
+    try:
+        count = await run_store.backfill_unknown_model_names(default_model_name)
+        if count > 0:
+            logger.info("Backfilled %d runs with model_name='%s'", count, default_model_name)
+    except Exception:
+        logger.warning("Failed to backfill model_name (non-fatal)", exc_info=True)
+
+
 async def _ensure_admin_user(app: FastAPI) -> None:
     """Startup hook: handle first boot and migrate orphan threads otherwise.
 
@@ -225,6 +252,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Ensure admin user exists (auto-create on first boot)
         # Must run AFTER langgraph_runtime so app.state.store is available for thread migration
         await _ensure_admin_user(app)
+
+        # Backfill NULL model_name in runs table with the default configured model
+        await _backfill_model_names(app)
 
         # Start IM channel service if any channels are configured
         try:

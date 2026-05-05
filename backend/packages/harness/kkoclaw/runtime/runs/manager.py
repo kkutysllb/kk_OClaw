@@ -28,6 +28,7 @@ class RunRecord:
     status: RunStatus
     on_disconnect: DisconnectMode
     multitask_strategy: str = "reject"
+    model_name: str | None = None
     metadata: dict = field(default_factory=dict)
     kwargs: dict = field(default_factory=dict)
     created_at: str = ""
@@ -60,6 +61,7 @@ class RunManager:
                 record.run_id,
                 thread_id=record.thread_id,
                 assistant_id=record.assistant_id,
+                model_name=record.model_name,
                 status=record.status.value,
                 multitask_strategy=record.multitask_strategy,
                 metadata=record.metadata or {},
@@ -83,6 +85,7 @@ class RunManager:
         assistant_id: str | None = None,
         *,
         on_disconnect: DisconnectMode = DisconnectMode.cancel,
+        model_name: str | None = None,
         metadata: dict | None = None,
         kwargs: dict | None = None,
         multitask_strategy: str = "reject",
@@ -96,6 +99,7 @@ class RunManager:
             assistant_id=assistant_id,
             status=RunStatus.pending,
             on_disconnect=on_disconnect,
+            model_name=model_name,
             multitask_strategy=multitask_strategy,
             metadata=metadata or {},
             kwargs=kwargs or {},
@@ -168,6 +172,7 @@ class RunManager:
         assistant_id: str | None = None,
         *,
         on_disconnect: DisconnectMode = DisconnectMode.cancel,
+        model_name: str | None = None,
         metadata: dict | None = None,
         kwargs: dict | None = None,
         multitask_strategy: str = "reject",
@@ -216,6 +221,7 @@ class RunManager:
                 assistant_id=assistant_id,
                 status=RunStatus.pending,
                 on_disconnect=on_disconnect,
+                model_name=model_name,
                 multitask_strategy=multitask_strategy,
                 metadata=metadata or {},
                 kwargs=kwargs or {},

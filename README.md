@@ -35,6 +35,7 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
   - [Sandbox 与文件系统](#sandbox-与文件系统)
   - [Context Engineering](#context-engineering)
   - [长期记忆](#长期记忆)
+  - [Token 用量统计](#token-用量统计)
 - [推荐模型](#推荐模型)
 - [内嵌 Python Client](#内嵌-python-client)
 - [文档](#文档)
@@ -317,6 +318,25 @@ KKOCLAW 不只是"会说它能做"，它是真的有一台自己的"电脑"。
 大多数 agents 会在对话结束后把一切都忘掉，KKOCLAW 不一样。
 
 跨 session 使用时，KKOCLAW 会逐步积累关于你的持久 memory，包括你的个人偏好、知识背景，以及长期沉淀下来的工作习惯。你用得越多，它越了解你的写作风格、技术栈和重复出现的工作流。memory 保存在本地，控制权也始终在你手里。
+
+### Token 用量统计
+
+KKOCLAW 内置了 Token 用量统计功能，帮你追踪和可视化每次 LLM 调用的 token 消耗。
+
+**启用方式**：在 `config.yaml` 中设置：
+
+```yaml
+token_usage:
+  enabled: true
+```
+
+启用后，KKOCLAW 会在每次模型调用后自动记录 input/output/total tokens，并在设置页面的「Token 用量」标签下展示以下内容：
+
+- **总览卡片**：总 Token 用量、总运行次数、配置模型数
+- **按模型分布**：每个模型的 API 调用次数、Token 用量，以及按日期的趋势图表（面积图 + 柱状图）
+- **按调用方统计**：区分 Lead Agent、Sub-Agent、Middleware 三类调用方各自的 Token 消耗占比
+
+统计数据按登录用户隔离——每个用户只能看到自己的用量。历史数据中模型名缺失的记录会在启动时自动回填为默认模型名。
 
 ## 推荐模型
 

@@ -22,6 +22,7 @@ class MemoryRunStore(RunStore):
         thread_id,
         assistant_id=None,
         user_id=None,
+        model_name=None,
         status="pending",
         multitask_strategy="reject",
         metadata=None,
@@ -35,6 +36,7 @@ class MemoryRunStore(RunStore):
             "thread_id": thread_id,
             "assistant_id": assistant_id,
             "user_id": user_id,
+            "model_name": model_name,
             "status": status,
             "multitask_strategy": multitask_strategy,
             "metadata": metadata or {},
@@ -96,3 +98,65 @@ class MemoryRunStore(RunStore):
                 "middleware": sum(r.get("middleware_tokens", 0) for r in completed),
             },
         }
+
+    async def aggregate_tokens_global(
+        self,
+        *,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        completed = [
+            r for r in self._runs.values()
+            if r.get("status") in ("success", "error")
+            and (user_id is None or r.get("user_id") == user_id)
+        ]
+        by_model: dict[str, dict] = {}
+        for r in completed:
+            model = r.get("model_name") or "unknown"
+            entry = by_model.setdefault(model, {"tokens": 0, "runs": 0, "input_tokens": 0, "output_tokens": 0})
+            entry["tokens"] += r.get("total_tokens", 0)
+            entry["input_tokens"] += r.get("total_input_tokens", 0)
+            entry["output_tokens"] += r.get("total_output_tokens", 0)
+            entry["runs"] += 1
+        return {
+            "total_tokens": sum(r.get("total_tokens", 0) for r in completed),
+            "total_input_tokens": sum(r.get("total_input_tokens", 0) for r in completed),
+            "total_output_tokens": sum(r.get("total_output_tokens", 0) for r in completed),
+            "total_runs": len(completed),
+            "by_model": by_model,
+            "by_caller": {
+                "lead_agent": sum(r.get("lead_agent_tokens", 0) for r in completed),
+                "subagent": sum(r.get("subagent_tokens", 0) for r in completed),
+                "middleware": sum(r.get("middleware_tokens", 0) for r in completed),
+            },
+        }
+
+    async def aggregate_tokens_timeseries(
+        self,
+        *,
+        user_id: str | None = None,
+        days: int = 30,
+    ) -> list[dict[str, Any]]:
+        """Return daily token usage breakdown grouped by date and model."""
+        from datetime import timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        completed = [
+            r for r in self._runs.values()
+            if r.get("status") in ("success", "error")
+            and (user_id is None or r.get("user_id") == user_id)
+        ]
+
+        groups: dict[str, dict[str, Any]] = {}
+        for r in completed:
+            created = r.get("created_at", "")
+            date_key = created[:10] if created else "unknown"
+            model = r.get("model_name") or "unknown"
+            key = f"{date_key}|{model}"
+            if key not in groups:
+                groups[key] = {"date": date_key, "model_name": model, "run_count": 0, "total_tokens": 0}
+            groups[key]["run_count"] += 1
+            groups[key]["total_tokens"] += r.get("total_tokens", 0)
+
+        result = sorted(groups.values(), key=lambda x: x["date"])
+        cutoff_str = cutoff.strftime("%Y-%m-%d")
+        return [g for g in result if g["date"] >= cutoff_str]

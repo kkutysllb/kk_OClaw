@@ -63,6 +63,11 @@ class RunJournal(BaseCallbackHandler):
         self._total_tokens = 0
         self._llm_call_count = 0
 
+        # Per-caller token accumulators
+        self._lead_agent_tokens = 0
+        self._subagent_tokens = 0
+        self._middleware_tokens = 0
+
         # Convenience fields
         self._last_ai_msg: str | None = None
         self._first_human_msg: str | None = None
@@ -226,6 +231,13 @@ class RunJournal(BaseCallbackHandler):
                     self._total_output_tokens += output_tk
                     self._total_tokens += total_tk
                     self._llm_call_count += 1
+                    # Per-caller token accumulation
+                    if caller.startswith("subagent:") or caller == "subagent":
+                        self._subagent_tokens += total_tk
+                    elif caller.startswith("middleware:") or caller == "middleware":
+                        self._middleware_tokens += total_tk
+                    else:
+                        self._lead_agent_tokens += total_tk
 
     def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         self._llm_start_times.pop(str(run_id), None)
@@ -376,6 +388,9 @@ class RunJournal(BaseCallbackHandler):
             "total_output_tokens": self._total_output_tokens,
             "total_tokens": self._total_tokens,
             "llm_call_count": self._llm_call_count,
+            "lead_agent_tokens": self._lead_agent_tokens,
+            "subagent_tokens": self._subagent_tokens,
+            "middleware_tokens": self._middleware_tokens,
             "message_count": self._msg_count,
             "last_ai_message": self._last_ai_msg,
             "first_human_message": self._first_human_msg,
