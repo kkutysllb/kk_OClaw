@@ -8,10 +8,11 @@ import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 
 function parseSidebarOpenCookie(
   value: string | undefined,
-): boolean | undefined {
+): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
-  return undefined;
+  // Default to collapsed when no cookie is set
+  return false;
 }
 
 export async function WorkspaceContent({

@@ -181,8 +181,14 @@ export default function AgentChatPage() {
                   </div>
                 </div>
 
+                {isNewThread && (
+                  <div className={cn("max-w-(--container-width-sm) mx-auto w-full")}>
+                    <AgentWelcome agent={agent} agentName={agent_name} />
+                  </div>
+                )}
+
                 <InputBox
-                  className={cn("bg-background/5 w-full -translate-y-4")}
+                  className={cn("bg-background/5 w-full", isNewThread ? "" : "-translate-y-4")}
                   isNewThread={isNewThread}
                   threadId={threadId}
                   autoFocus={isNewThread}
@@ -194,11 +200,6 @@ export default function AgentChatPage() {
                         : "ready"
                   }
                   context={settings.context}
-                  extraHeader={
-                    isNewThread && (
-                      <AgentWelcome agent={agent} agentName={agent_name} />
-                    )
-                  }
                   disabled={env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true"}
                   onContextChange={(context) => setSettings("context", context)}
                   onFollowupsVisibilityChange={setShowFollowups}

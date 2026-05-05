@@ -1,9 +1,14 @@
 "use client";
 
 import {
+  BellIcon,
+  BrainIcon,
   ChevronsUpDown,
-  Settings2Icon,
+  CoinsIcon,
+  PaletteIcon,
   SettingsIcon,
+  UserIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -22,6 +27,28 @@ import {
 import { useI18n } from "@/core/i18n/hooks";
 
 import { SettingsDialog } from "./settings";
+
+type SettingsSection =
+  | "account"
+  | "appearance"
+  | "memory"
+  | "tools"
+  | "notification"
+  | "tokenUsage";
+
+const MENU_ITEMS: {
+  id: SettingsSection;
+  icon: typeof UserIcon;
+  color: string;
+  labelKey: "account" | "appearance" | "memory" | "tools" | "notification" | "tokenUsage";
+}[] = [
+  { id: "account", icon: UserIcon, color: "text-sky-500", labelKey: "account" },
+  { id: "appearance", icon: PaletteIcon, color: "text-violet-500", labelKey: "appearance" },
+  { id: "memory", icon: BrainIcon, color: "text-amber-500", labelKey: "memory" },
+  { id: "tokenUsage", icon: CoinsIcon, color: "text-emerald-500", labelKey: "tokenUsage" },
+  { id: "tools", icon: WrenchIcon, color: "text-orange-500", labelKey: "tools" },
+  { id: "notification", icon: BellIcon, color: "text-cyan-500", labelKey: "notification" },
+];
 
 function NavMenuButtonContent({
   isSidebarOpen,
@@ -49,9 +76,7 @@ function NavMenuButtonContent({
 
 export function WorkspaceNavMenu() {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsDefaultSection, setSettingsDefaultSection] = useState<
-    "appearance" | "memory" | "tools" | "notification"
-  >("appearance");
+  const [settingsDefaultSection, setSettingsDefaultSection] = useState<SettingsSection>("appearance");
   const [mounted, setMounted] = useState(false);
   const { open: isSidebarOpen } = useSidebar();
   const { t } = useI18n();
@@ -84,15 +109,21 @@ export function WorkspaceNavMenu() {
                 align="end"
                 sideOffset={4}
               >
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSettingsDefaultSection("appearance");
-                    setSettingsOpen(true);
-                  }}
-                >
-                  <Settings2Icon className="size-4 text-violet-500" />
-                  {t.common.settings}
-                </DropdownMenuItem>
+                {MENU_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={item.id}
+                      onClick={() => {
+                        setSettingsDefaultSection(item.id);
+                        setSettingsOpen(true);
+                      }}
+                    >
+                      <Icon className={`size-4 ${item.color}`} />
+                      {t.settings.sections[item.labelKey]}
+                    </DropdownMenuItem>
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (

@@ -158,9 +158,14 @@ export default function ChatPage() {
                     />
                   </div>
                 </div>
+                {isNewThread && (
+                  <div className={cn("max-w-(--container-width-sm) mx-auto w-full")}>
+                    <Welcome mode={settings.context.mode} />
+                  </div>
+                )}
                 {mountedRef.current ? (
                   <InputBox
-                    className={cn("bg-background/5 w-full -translate-y-4")}
+                    className={cn("bg-background/5 w-full", isNewThread ? "" : "-translate-y-4")}
                     isNewThread={isNewThread}
                     threadId={threadId}
                     autoFocus={isNewThread}
@@ -172,9 +177,6 @@ export default function ChatPage() {
                           : "ready"
                     }
                     context={settings.context}
-                    extraHeader={
-                      isNewThread && <Welcome mode={settings.context.mode} />
-                    }
                     disabled={
                       env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
                       isUploading

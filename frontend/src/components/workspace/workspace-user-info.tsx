@@ -1,18 +1,20 @@
 "use client";
 
-import { UserIcon } from "lucide-react";
+import { LogOutIcon, UserIcon } from "lucide-react";
+
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import { useSidebar } from "@/components/ui/sidebar";
 
 function getRoleLabel(
@@ -25,7 +27,7 @@ function getRoleLabel(
 }
 
 export function WorkspaceUserInfo() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useI18n();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -40,45 +42,59 @@ export function WorkspaceUserInfo() {
     </Avatar>
   );
 
-  // Collapsed: show only avatar with tooltip
+  const collapsedDropdown = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className="outline-none">
+          {avatar}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="end" className="min-w-48">
+        <DropdownMenuItem onClick={logout}>
+          <LogOutIcon className="size-4 text-rose-500" />
+          {t.workspace.logout}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // Collapsed: avatar with logout dropdown
   if (isCollapsed) {
     return (
       <div className="px-2 pt-2">
         <Separator className="mb-2" />
         <div className="flex justify-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" className="cursor-default">
-                {avatar}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" align="center">
-              <p className="text-xs font-medium">{user.email}</p>
-              <p className="text-muted-foreground text-xs">
-                {getRoleLabel(user.system_role, t)}
-              </p>
-            </TooltipContent>
-          </Tooltip>
+          {collapsedDropdown}
         </div>
       </div>
     );
   }
 
-  // Expanded: show avatar + email + role
+  // Expanded: avatar + email + role with logout dropdown
   return (
     <div className="px-2 pt-2">
       <Separator className="mb-3" />
-      <div className="flex items-center gap-3 rounded-md px-2 py-1.5">
-        {avatar}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium leading-tight">
-            {user.email}
-          </p>
-          <p className="text-muted-foreground truncate text-xs leading-tight">
-            {getRoleLabel(user.system_role, t)}
-          </p>
-        </div>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            {avatar}
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-medium leading-tight">
+                {user.email}
+              </p>
+              <p className="text-muted-foreground truncate text-xs leading-tight">
+                {getRoleLabel(user.system_role, t)}
+              </p>
+            </div>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="end" className="min-w-48">
+          <DropdownMenuItem onClick={logout}>
+            <LogOutIcon className="size-4 text-rose-500" />
+            {t.workspace.logout}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
