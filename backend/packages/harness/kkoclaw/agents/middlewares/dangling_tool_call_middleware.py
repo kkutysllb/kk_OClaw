@@ -77,26 +77,51 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
 
         For each AIMessage with dangling tool_calls (no corresponding ToolMessage),
         a synthetic ToolMessage is inserted immediately after that AIMessage.
+
+        Also handles **misordered** tool messages: if an AIMessage has tool_calls
+        but the immediately following messages are not all the corresponding
+        ToolMessages (e.g. a HumanMessage appears between the AIMessage and
+        its ToolMessages), synthetic ToolMessages are inserted right after the
+        AIMessage and the out-of-order ToolMessages are removed from their
+        original position so that the sequence satisfies the API contract:
+        AIMessage(tool_calls) → ToolMessage* → (other messages).
+
         Returns None if no patches are needed.
         """
+        from langchain_core.messages import AIMessage
+
         # Collect IDs of all existing ToolMessages
         existing_tool_msg_ids: set[str] = set()
         for msg in messages:
             if isinstance(msg, ToolMessage):
                 existing_tool_msg_ids.add(msg.tool_call_id)
 
-        # Check if any patching is needed
-        # Use isinstance(AIMessage) instead of type == "ai" to also catch
-        # cloned/custom AIMessages produced by summarization skill rescue.
-        needs_patch = False
-        from langchain_core.messages import AIMessage
+        # Determine which tool_call_ids are misordered: they belong to an
+        # AIMessage but are NOT immediately after it.
+        misordered_ids: set[str] = set()
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, AIMessage):
+                continue
+            tc_ids_for_msg = {tc.get("id") for tc in self._message_tool_calls(msg) if tc.get("id")}
+            if not tc_ids_for_msg:
+                continue
+            # Check which tool_call_ids appear immediately after this AIMessage
+            found_after: set[str] = set()
+            j = i + 1
+            while j < len(messages) and isinstance(messages[j], ToolMessage):
+                found_after.add(messages[j].tool_call_id)
+                j += 1
+            # Any tool_call_id not found immediately after is misordered
+            misordered_ids.update(tc_ids_for_msg - found_after)
 
+        # Check if any patching is needed
+        needs_patch = False
         for msg in messages:
             if not isinstance(msg, AIMessage):
                 continue
             for tc in self._message_tool_calls(msg):
                 tc_id = tc.get("id")
-                if tc_id and tc_id not in existing_tool_msg_ids:
+                if tc_id and (tc_id not in existing_tool_msg_ids or tc_id in misordered_ids):
                     needs_patch = True
                     break
             if needs_patch:
@@ -106,16 +131,21 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
             return None
 
         # Build new list with patches inserted right after each dangling AIMessage
+        # and remove misordered ToolMessages from their original position
         patched: list = []
         patched_ids: set[str] = set()
         patch_count = 0
         for msg in messages:
+            # Skip misordered ToolMessages — they'll be replaced by patches
+            if isinstance(msg, ToolMessage) and msg.tool_call_id in misordered_ids:
+                continue
+
             patched.append(msg)
             if not isinstance(msg, AIMessage):
                 continue
             for tc in self._message_tool_calls(msg):
                 tc_id = tc.get("id")
-                if tc_id and tc_id not in existing_tool_msg_ids and tc_id not in patched_ids:
+                if tc_id and (tc_id not in existing_tool_msg_ids or tc_id in misordered_ids) and tc_id not in patched_ids:
                     patched.append(
                         ToolMessage(
                             content="[Tool call was interrupted and did not return a result.]",
@@ -128,11 +158,12 @@ class DanglingToolCallMiddleware(AgentMiddleware[AgentState]):
                     patch_count += 1
 
         logger.warning(
-            "Injecting %d placeholder ToolMessage(s) for dangling tool calls "
-            "(total messages: %d, existing ToolMessages: %d)",
+            "Injecting %d placeholder ToolMessage(s) for dangling/misordered tool calls "
+            "(total messages: %d, existing ToolMessages: %d, misordered: %d)",
             patch_count,
             len(messages),
             len(existing_tool_msg_ids),
+            len(misordered_ids),
         )
         return patched
 

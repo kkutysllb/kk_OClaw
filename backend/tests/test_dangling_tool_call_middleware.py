@@ -145,6 +145,79 @@ class TestBuildPatchedMessagesPatching:
         assert patched[1].status == "error"
 
 
+class TestMisorderedToolMessages:
+    """Tests for the misordered-tool-message detection and repair."""
+
+    def test_tool_message_after_human_message_is_misordered(self):
+        """ToolMessage not immediately after AIMessage should be replaced with a patch."""
+        mw = DanglingToolCallMiddleware()
+        msgs = [
+            _ai_with_tool_calls([_tc("bash", "call_1")]),
+            HumanMessage(content="interrupting message"),
+            _tool_msg("call_1", "bash"),
+        ]
+        patched = mw._build_patched_messages(msgs)
+        assert patched is not None
+        # AIMessage + synthetic ToolMessage + HumanMessage (original ToolMessage removed)
+        assert len(patched) == 3
+        assert isinstance(patched[0], AIMessage)
+        assert isinstance(patched[1], ToolMessage)
+        assert patched[1].tool_call_id == "call_1"
+        assert patched[1].status == "error"
+        assert isinstance(patched[2], HumanMessage)
+
+    def test_properly_ordered_tool_messages_not_touched(self):
+        """ToolMessages immediately after AIMessage should NOT be considered misordered."""
+        mw = DanglingToolCallMiddleware()
+        msgs = [
+            _ai_with_tool_calls([_tc("bash", "call_1")]),
+            _tool_msg("call_1", "bash"),
+            HumanMessage(content="thanks"),
+        ]
+        assert mw._build_patched_messages(msgs) is None
+
+    def test_mixed_proper_and_misordered(self):
+        """One ToolMessage properly placed, another misordered."""
+        mw = DanglingToolCallMiddleware()
+        msgs = [
+            _ai_with_tool_calls([_tc("bash", "call_1"), _tc("read", "call_2")]),
+            _tool_msg("call_1", "bash"),
+            HumanMessage(content="interrupt"),
+            _tool_msg("call_2", "read"),
+        ]
+        patched = mw._build_patched_messages(msgs)
+        assert patched is not None
+        # AIMessage + call_1 ToolMessage + synthetic call_2 ToolMessage + HumanMessage
+        # (original call_2 ToolMessage removed from its misordered position)
+        assert len(patched) == 4
+        tool_msgs = [m for m in patched if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 2
+        ids = {tm.tool_call_id for tm in tool_msgs}
+        assert ids == {"call_1", "call_2"}
+        # call_2 should be a synthetic (error) message, not the original
+        call_2_msgs = [tm for tm in tool_msgs if tm.tool_call_id == "call_2"]
+        assert len(call_2_msgs) == 1
+        assert call_2_msgs[0].status == "error"
+
+    def test_misordered_removed_from_original_position(self):
+        """Misordered ToolMessages should be removed, not duplicated."""
+        mw = DanglingToolCallMiddleware()
+        msgs = [
+            _ai_with_tool_calls([_tc("bash", "call_1")]),
+            HumanMessage(content="between"),
+            _tool_msg("call_1", "bash"),
+            HumanMessage(content="after"),
+        ]
+        patched = mw._build_patched_messages(msgs)
+        assert patched is not None
+        # AIMessage + synthetic ToolMessage + HumanMessage + HumanMessage
+        assert len(patched) == 4
+        # The original ToolMessage (at position 2) should be removed
+        tool_msgs = [m for m in patched if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert tool_msgs[0].status == "error"
+
+
 class TestWrapModelCall:
     def test_no_patch_passthrough(self):
         mw = DanglingToolCallMiddleware()
