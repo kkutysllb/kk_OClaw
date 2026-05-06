@@ -18,7 +18,7 @@ This tutorial shows you how to use the KKOCLAW Harness programmatically — impo
 ## Install
 
 ```bash
-cd deer-flow/backend
+cd backend
 uv sync
 ```
 
@@ -36,12 +36,12 @@ models:
     api_key: $OPENAI_API_KEY
 
 sandbox:
-  use: deerflow.sandbox.local:LocalSandboxProvider
+  use: kkoclaw.sandbox.local:LocalSandboxProvider
 
 tools:
-  - use: deerflow.community.ddg_search.tools:web_search_tool
-  - use: deerflow.sandbox.tools:read_file_tool
-  - use: deerflow.sandbox.tools:write_file_tool
+  - use: kkoclaw.community.ddg_search.tools:web_search_tool
+  - use: kkoclaw.sandbox.tools:read_file_tool
+  - use: kkoclaw.sandbox.tools:write_file_tool
 ```
 
 ## Write the code
@@ -55,15 +55,15 @@ Create `my_agent.py` in the `backend/` directory:
 ```python
 import asyncio
 import os
-from deerflow.client import DeerFlowClient
-from deerflow.config import load_config
+from kkoclaw.client import KKOCLAWHarnessClient
+from kkoclaw.config import load_config
 
 os.environ["OPENAI_API_KEY"] = "sk-..."
 
 # Load config.yaml
 load_config()
 
-client = DeerFlowClient()
+client = KKOCLAWHarnessClient()
 
 async def main():
     async for event in client.astream(

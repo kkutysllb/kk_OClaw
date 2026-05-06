@@ -89,13 +89,13 @@ task(agent="general-purpose", task="...", context="...")
 
 ```yaml
 tools:
-  - use: deerflow.sandbox.tools:ls_tool
-  - use: deerflow.sandbox.tools:read_file_tool
-  - use: deerflow.sandbox.tools:glob_tool
-  - use: deerflow.sandbox.tools:grep_tool
-  - use: deerflow.sandbox.tools:write_file_tool
-  - use: deerflow.sandbox.tools:str_replace_tool
-  - use: deerflow.sandbox.tools:bash_tool
+  - use: kkoclaw.sandbox.tools:ls_tool
+  - use: kkoclaw.sandbox.tools:read_file_tool
+  - use: kkoclaw.sandbox.tools:glob_tool
+  - use: kkoclaw.sandbox.tools:grep_tool
+  - use: kkoclaw.sandbox.tools:write_file_tool
+  - use: kkoclaw.sandbox.tools:str_replace_tool
+  - use: kkoclaw.sandbox.tools:bash_tool
 ```
 
 ## 社区工具
@@ -108,36 +108,36 @@ tools:
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.ddg_search.tools:web_search_tool
+  - use: kkoclaw.community.ddg_search.tools:web_search_tool
 ```
 无需 API Key。默认配置，适合开发和通用用途。
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.tavily.tools:web_search_tool
+  - use: kkoclaw.community.tavily.tools:web_search_tool
     api_key: $TAVILY_API_KEY
 ```
 高质量搜索，带结构化结果。需要 [Tavily](https://tavily.com) API Key。
 
-安装：`cd backend && uv add 'deerflow-harness[tavily]'`
+安装：`cd backend && uv add 'kkoclaw-harness[tavily]'`
 
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.exa.tools:web_search_tool
+  - use: kkoclaw.community.exa.tools:web_search_tool
     api_key: $EXA_API_KEY
 ```
 带神经检索的语义搜索。需要 [Exa](https://exa.ai) API Key。
 
-安装：`cd backend && uv add 'deerflow-harness[exa]'`
+安装：`cd backend && uv add 'kkoclaw-harness[exa]'`
 
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.firecrawl.tools:web_search_tool
+  - use: kkoclaw.community.firecrawl.tools:web_search_tool
     api_key: $FIRECRAWL_API_KEY
 ```
 Firecrawl 驱动的搜索和爬取。需要 [Firecrawl](https://firecrawl.dev) API Key。
@@ -150,7 +150,7 @@ Firecrawl 驱动的搜索和爬取。需要 [Firecrawl](https://firecrawl.dev) A
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.jina_ai.tools:web_fetch_tool
+  - use: kkoclaw.community.jina_ai.tools:web_fetch_tool
     api_key: $JINA_API_KEY # 可选；匿名使用有速率限制
 ```
 将网页转换为干净的 Markdown。无 API Key 也可使用，但有更严格的速率限制。
@@ -158,7 +158,7 @@ tools:
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.exa.tools:web_fetch_tool
+  - use: kkoclaw.community.exa.tools:web_fetch_tool
     api_key: $EXA_API_KEY
 ```
   </Tabs.Tab>
@@ -168,7 +168,7 @@ tools:
 
 ```yaml
 tools:
-  - use: deerflow.community.image_search.tools:image_search_tool
+  - use: kkoclaw.community.image_search.tools:image_search_tool
 ```
 
 ## 工具组

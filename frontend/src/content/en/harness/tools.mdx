@@ -92,13 +92,13 @@ These are configured in `config.yaml` under `tools:`:
 
 ```yaml
 tools:
-  - use: deerflow.sandbox.tools:ls_tool
-  - use: deerflow.sandbox.tools:read_file_tool
-  - use: deerflow.sandbox.tools:glob_tool
-  - use: deerflow.sandbox.tools:grep_tool
-  - use: deerflow.sandbox.tools:write_file_tool
-  - use: deerflow.sandbox.tools:str_replace_tool
-  - use: deerflow.sandbox.tools:bash_tool # requires host bash or container sandbox
+  - use: kkoclaw.sandbox.tools:ls_tool
+  - use: kkoclaw.sandbox.tools:read_file_tool
+  - use: kkoclaw.sandbox.tools:glob_tool
+  - use: kkoclaw.sandbox.tools:grep_tool
+  - use: kkoclaw.sandbox.tools:write_file_tool
+  - use: kkoclaw.sandbox.tools:str_replace_tool
+  - use: kkoclaw.sandbox.tools:bash_tool # requires host bash or container sandbox
 ```
 
 ## Community tools
@@ -111,36 +111,36 @@ Community tools connect the agent to external services. They are configured in `
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.ddg_search.tools:web_search_tool
+  - use: kkoclaw.community.ddg_search.tools:web_search_tool
 ```
 No API key required. Default configuration. Suitable for development and general use.
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.tavily.tools:web_search_tool
+  - use: kkoclaw.community.tavily.tools:web_search_tool
     api_key: $TAVILY_API_KEY
 ```
 High-quality search with structured results. Requires a [Tavily](https://tavily.com) API key.
 
-Install: `cd backend && uv add 'deerflow-harness[tavily]'`
+Install: `cd backend && uv add 'kkoclaw-harness[tavily]'`
 
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.exa.tools:web_search_tool
+  - use: kkoclaw.community.exa.tools:web_search_tool
     api_key: $EXA_API_KEY
 ```
 Semantic search with neural retrieval. Requires an [Exa](https://exa.ai) API key.
 
-Install: `cd backend && uv add 'deerflow-harness[exa]'`
+Install: `cd backend && uv add 'kkoclaw-harness[exa]'`
 
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.infoquest.tools:web_search_tool
+  - use: kkoclaw.community.infoquest.tools:web_search_tool
     api_key: $INFOQUEST_API_KEY
 ```
 InfoQuest search integration.
@@ -148,12 +148,12 @@ InfoQuest search integration.
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.firecrawl.tools:web_search_tool
+  - use: kkoclaw.community.firecrawl.tools:web_search_tool
     api_key: $FIRECRAWL_API_KEY
 ```
 Firecrawl-powered search and crawl. Requires a [Firecrawl](https://firecrawl.dev) API key.
 
-Install: `cd backend && uv add 'deerflow-harness[firecrawl]'`
+Install: `cd backend && uv add 'kkoclaw-harness[firecrawl]'`
 
   </Tabs.Tab>
 </Tabs>
@@ -164,7 +164,7 @@ Install: `cd backend && uv add 'deerflow-harness[firecrawl]'`
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.jina_ai.tools:web_fetch_tool
+  - use: kkoclaw.community.jina_ai.tools:web_fetch_tool
     api_key: $JINA_API_KEY # optional; anonymous usage has rate limits
 ```
 Converts web pages to clean Markdown. Works without an API key at reduced rate
@@ -173,21 +173,21 @@ limits.
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.exa.tools:web_fetch_tool
+  - use: kkoclaw.community.exa.tools:web_fetch_tool
     api_key: $EXA_API_KEY
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.infoquest.tools:web_fetch_tool
+  - use: kkoclaw.community.infoquest.tools:web_fetch_tool
     api_key: $INFOQUEST_API_KEY
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```yaml
 tools:
-  - use: deerflow.community.firecrawl.tools:web_fetch_tool
+  - use: kkoclaw.community.firecrawl.tools:web_fetch_tool
     api_key: $FIRECRAWL_API_KEY
 ```
   </Tabs.Tab>
@@ -197,9 +197,9 @@ tools:
 
 ```yaml
 tools:
-  - use: deerflow.community.image_search.tools:image_search_tool
+  - use: kkoclaw.community.image_search.tools:image_search_tool
   # Or use InfoQuest:
-  # - use: deerflow.community.infoquest.tools:image_search_tool
+  # - use: kkoclaw.community.infoquest.tools:image_search_tool
   #   api_key: $INFOQUEST_API_KEY
 ```
 

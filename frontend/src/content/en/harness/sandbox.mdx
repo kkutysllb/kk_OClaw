@@ -28,7 +28,7 @@ Commands run directly on the host machine's filesystem. There is no container is
 
 ```yaml
 sandbox:
-  use: deerflow.sandbox.local:LocalSandboxProvider
+  use: kkoclaw.sandbox.local:LocalSandboxProvider
   allow_host_bash: false # default; set to true only for fully trusted workflows
 ```
 
@@ -40,7 +40,7 @@ Commands run in an isolated container (Docker on Linux/Windows, or Apple Contain
 
 ```yaml
 sandbox:
-  use: deerflow.community.aio_sandbox:AioSandboxProvider
+  use: kkoclaw.community.aio_sandbox:AioSandboxProvider
 
   # Optional: container image (default shown below)
   image: enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:latest
@@ -48,8 +48,8 @@ sandbox:
   # Optional: max concurrent containers (default: 3, LRU eviction when exceeded)
   replicas: 3
 
-  # Optional: container name prefix (default: deer-flow-sandbox)
-  container_prefix: deer-flow-sandbox
+  # Optional: container name prefix (default: kkoclaw-sandbox)
+  container_prefix: kkoclaw-sandbox
 
   # Optional: idle timeout in seconds (default: 600)
   idle_timeout: 600
@@ -65,7 +65,7 @@ sandbox:
     API_KEY: $MY_API_KEY
 ```
 
-Install: `cd backend && uv add 'deerflow-harness[aio-sandbox]'`
+Install: `cd backend && uv add 'kkoclaw-harness[aio-sandbox]'`
 
 ### Provisioner-managed Sandbox (Kubernetes)
 
@@ -73,7 +73,7 @@ Each sandbox gets a dedicated Pod in a Kubernetes cluster, managed by the provis
 
 ```yaml
 sandbox:
-  use: deerflow.community.aio_sandbox:AioSandboxProvider
+  use: kkoclaw.community.aio_sandbox:AioSandboxProvider
   provisioner_url: http://provisioner:9194
 ```
 
@@ -86,7 +86,7 @@ The sandbox uses path mappings to bridge the host filesystem and the container's
 | Host path                                   | Container path                               | Access     |
 | ------------------------------------------- | -------------------------------------------- | ---------- |
 | `skills/` (from `skills.path`)              | `/mnt/skills` (from `skills.container_path`) | Read-only  |
-| `.deer-flow/threads/{thread_id}/user-data/` | `/mnt/user-data/`                            | Read-write |
+| `.kkoclaw/threads/{thread_id}/user-data/` | `/mnt/user-data/`                            | Read-write |
 
 The skills directory is always mounted read-only. Threads write their working data (uploads, outputs, intermediate files) to `/mnt/user-data/`.
 
@@ -96,7 +96,7 @@ You can add additional mounts for the local sandbox using the `mounts:` configur
 
 ```yaml
 sandbox:
-  use: deerflow.sandbox.local:LocalSandboxProvider
+  use: kkoclaw.sandbox.local:LocalSandboxProvider
   mounts:
     - host_path: /home/user/my-project
       container_path: /mnt/my-project
@@ -114,7 +114,7 @@ The sandbox tools limit output size to keep the agent's context manageable. Thes
 
 ```yaml
 sandbox:
-  use: deerflow.sandbox.local:LocalSandboxProvider
+  use: kkoclaw.sandbox.local:LocalSandboxProvider
 
   # bash uses middle-truncation (head + tail)
   bash_output_max_chars: 20000

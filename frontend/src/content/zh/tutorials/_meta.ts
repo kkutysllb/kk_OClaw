@@ -13,7 +13,7 @@ const meta: MetaRecord = {
   "work-with-memory": {
     title: "使用记忆系统",
   },
-  "deploy-your-own-deerflow": {
+  "deploy-your-own-kkoclaw": {
     title: "部署你的 KKOCLAW",
   },
 };

@@ -11,8 +11,8 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   },
 };
 
-export const LOCAL_SETTINGS_KEY = "deerflow.local-settings";
-export const THREAD_MODEL_KEY_PREFIX = "deerflow.thread-model.";
+export const LOCAL_SETTINGS_KEY = "kkoclaw.local-settings";
+export const THREAD_MODEL_KEY_PREFIX = "kkoclaw.thread-model.";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined";

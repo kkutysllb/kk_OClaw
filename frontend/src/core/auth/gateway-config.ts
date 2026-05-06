@@ -12,17 +12,12 @@ let _cached: GatewayConfig | null = null;
 export function getGatewayConfig(): GatewayConfig {
   if (_cached) return _cached;
 
-  const rawUrl =
-    process.env.KKOCLAW_INTERNAL_GATEWAY_BASE_URL?.trim() ??
-    process.env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL?.trim();
   const internalGatewayUrl =
-    rawUrl?.replace(/\/+$/, "") ?? "http://localhost:9987";
+    process.env.KKOCLAW_INTERNAL_GATEWAY_BASE_URL?.trim()?.replace(/\/+$/, "") ??
+    "http://localhost:9987";
 
-  const rawOrigins =
-    process.env.KKOCLAW_TRUSTED_ORIGINS?.trim() ??
-    process.env.DEER_FLOW_TRUSTED_ORIGINS?.trim();
-  const trustedOrigins = rawOrigins
-    ? rawOrigins
+  const trustedOrigins = process.env.KKOCLAW_TRUSTED_ORIGINS?.trim()
+    ? process.env.KKOCLAW_TRUSTED_ORIGINS?.trim()
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean)
