@@ -5,8 +5,10 @@ Equivalent to the original RunManager._runs dict behavior.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from kkoclaw.persistence.run.sql import get_local_tz_offset_hours
 
 from kkoclaw.runtime.runs.store.base import RunStore
 
@@ -136,9 +138,12 @@ class MemoryRunStore(RunStore):
         user_id: str | None = None,
         days: int = 30,
     ) -> list[dict[str, Any]]:
-        """Return daily token usage breakdown grouped by date and model."""
-        from datetime import timedelta
+        """Return daily token usage breakdown grouped by date and model.
 
+        Dates are converted to the server's local timezone before grouping
+        so that the chart reflects the user's actual calendar days.
+        """
+        tz_offset = get_local_tz_offset_hours()
         cutoff = datetime.now(UTC) - timedelta(days=days)
         completed = [
             r for r in self._runs.values()
@@ -149,7 +154,17 @@ class MemoryRunStore(RunStore):
         groups: dict[str, dict[str, Any]] = {}
         for r in completed:
             created = r.get("created_at", "")
-            date_key = created[:10] if created else "unknown"
+            if created:
+                # Convert UTC datetime string to local date
+                try:
+                    utc_dt = datetime.fromisoformat(created)
+                    from datetime import timezone
+                    local_dt = utc_dt.replace(tzinfo=timezone.utc).astimezone()
+                    date_key = local_dt.strftime("%Y-%m-%d")
+                except (ValueError, TypeError):
+                    date_key = created[:10]
+            else:
+                date_key = "unknown"
             model = r.get("model_name") or "unknown"
             key = f"{date_key}|{model}"
             if key not in groups:

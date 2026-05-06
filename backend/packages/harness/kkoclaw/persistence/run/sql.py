@@ -8,15 +8,27 @@ minutes -- we don't hold connections across long execution.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kkoclaw.persistence.run.model import RunRow
 from kkoclaw.runtime.runs.store.base import RunStore
 from kkoclaw.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
+
+# Server local timezone offset (hours from UTC).
+# Used to convert UTC-stored created_at to local dates for display.
+_LOCAL_TZ_OFFSET_HOURS: float | None = None
+
+
+def get_local_tz_offset_hours() -> float:
+    """Return the local timezone offset from UTC in hours (cached after first call)."""
+    global _LOCAL_TZ_OFFSET_HOURS
+    if _LOCAL_TZ_OFFSET_HOURS is None:
+        _LOCAL_TZ_OFFSET_HOURS = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    return _LOCAL_TZ_OFFSET_HOURS
 
 
 class RunRepository(RunStore):
@@ -277,20 +289,31 @@ class RunRepository(RunStore):
         user_id: str | None = None,
         days: int = 30,
     ) -> list[dict[str, Any]]:
-        """Return daily token usage breakdown grouped by date and model."""
+        """Return daily token usage breakdown grouped by date and model.
+    
+        Dates are converted to the server's local timezone before grouping
+        so that the chart reflects the user's actual calendar days.
+        """
         from datetime import timedelta
-
+    
+        tz_offset = get_local_tz_offset_hours()
+        offset_str = f"{tz_offset:+.0f}" if tz_offset == int(tz_offset) else f"{tz_offset:+.1f}"
+    
         _completed = RunRow.status.in_(("success", "error"))
         conditions = [_completed]
         if user_id is not None:
             conditions.append(RunRow.user_id == user_id)
-
+    
         cutoff = datetime.now(UTC) - timedelta(days=days)
         conditions.append(RunRow.created_at >= cutoff)
-
-        date_col = func.date(RunRow.created_at).label("date")
+    
+        # Convert UTC created_at to local timezone before extracting date.
+        # SQLite: datetime(col, '+N hours'); PostgreSQL would use date_trunc.
+        date_col = func.date(
+            text(f"datetime(runs.created_at, '{offset_str} hours')")
+        ).label("date")
         model_col = func.coalesce(RunRow.model_name, "unknown").label("model")
-
+    
         stmt = (
             select(
                 date_col,
@@ -299,13 +322,13 @@ class RunRepository(RunStore):
                 func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
             )
             .where(*conditions)
-            .group_by(func.date(RunRow.created_at), func.coalesce(RunRow.model_name, "unknown"))
-            .order_by(func.date(RunRow.created_at).asc())
+            .group_by(date_col, model_col)
+            .order_by(date_col.asc())
         )
-
+    
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
-
+    
         return [
             {
                 "date": str(r.date),
