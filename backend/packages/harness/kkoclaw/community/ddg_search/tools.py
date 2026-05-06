@@ -4,12 +4,50 @@ Web Search Tool - Search the web using DuckDuckGo (no API key required).
 
 import json
 import logging
+import time
 
 from langchain.tools import tool
 
 from kkoclaw.config import get_app_config
 
 logger = logging.getLogger(__name__)
+
+# Circuit-breaker state for DDG search failures
+_last_failure_time: float = 0.0
+_consecutive_failures: int = 0
+_CIRCUIT_BREAK_THRESHOLD = 3  # Open circuit after 3 consecutive failures
+_CIRCUIT_BREAK_RESET_SEC = 300.0  # Reset circuit after 5 minutes
+
+
+def _is_circuit_open() -> bool:
+    """Check if the circuit breaker is open (search should be skipped)."""
+    global _consecutive_failures, _last_failure_time
+    if _consecutive_failures >= _CIRCUIT_BREAK_THRESHOLD:
+        # Check if enough time has passed to try again (half-open state)
+        if time.monotonic() - _last_failure_time > _CIRCUIT_BREAK_RESET_SEC:
+            logger.info("DDG search circuit breaker: half-open, allowing retry")
+            return False
+        return True
+    return False
+
+
+def _record_failure() -> None:
+    """Record a search failure for circuit breaker tracking."""
+    global _consecutive_failures, _last_failure_time
+    _consecutive_failures += 1
+    _last_failure_time = time.monotonic()
+    if _consecutive_failures >= _CIRCUIT_BREAK_THRESHOLD:
+        logger.warning(
+            "DDG search circuit breaker OPEN after %d consecutive failures. "
+            "Search will be skipped for %.0f seconds.",
+            _consecutive_failures, _CIRCUIT_BREAK_RESET_SEC,
+        )
+
+
+def _record_success() -> None:
+    """Record a successful search, resetting the circuit breaker."""
+    global _consecutive_failures
+    _consecutive_failures = 0
 
 
 def _search_text(
@@ -30,6 +68,14 @@ def _search_text(
     Returns:
         List of search results
     """
+    # Check circuit breaker before attempting
+    if _is_circuit_open():
+        logger.warning(
+            "DDG search skipped (circuit breaker open, %d consecutive failures). Query: %s",
+            _consecutive_failures, query[:80],
+        )
+        return []
+
     try:
         from ddgs import DDGS
     except ImportError:
@@ -45,10 +91,14 @@ def _search_text(
             safesearch=safesearch,
             max_results=max_results,
         )
-        return list(results) if results else []
+        found = list(results) if results else []
+        if found:
+            _record_success()
+        return found
 
     except Exception as e:
         logger.error(f"Failed to search web: {e}")
+        _record_failure()
         return []
 
 
@@ -75,7 +125,11 @@ def web_search_tool(
     )
 
     if not results:
-        return json.dumps({"error": "No results found", "query": query}, ensure_ascii=False)
+        return json.dumps({
+            "error": "No results found",
+            "query": query,
+            "suggestion": "Web search may be temporarily unavailable. Try rephrasing your query or use alternative information sources.",
+        }, ensure_ascii=False)
 
     normalized_results = [
         {
