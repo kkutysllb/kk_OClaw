@@ -85,6 +85,10 @@ export function Welcome({
           <span className="bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
             ✨ {t.welcome.createYourOwnSkill} ✨
           </span>
+        ) : searchParams.get("mode") === "cron" ? (
+          <span className="bg-linear-to-r from-orange-400 via-amber-400 to-yellow-400 bg-clip-text text-transparent">
+            ⏰ {t.welcome.createCronJob} ⏰
+          </span>
         ) : (
           <div className="flex items-center gap-2.5">
             <div className={cn("inline-block text-3xl", !waved ? "animate-bounce" : "")}>
@@ -108,6 +112,10 @@ export function Welcome({
             <p>{t.welcome.createYourOwnSkillDescription}</p>
           )}
         </div>
+      ) : searchParams.get("mode") === "cron" ? (
+        <div className="relative text-muted-foreground text-sm leading-relaxed max-w-lg">
+          <p>{t.welcome.createCronJobDescription}</p>
+        </div>
       ) : (
         <div className="relative text-muted-foreground text-sm leading-relaxed max-w-lg">
           {t.welcome.description.includes("\n") ? (
@@ -121,7 +129,7 @@ export function Welcome({
       )}
 
       {/* Feature badges */}
-      {searchParams.get("mode") !== "skill" && (
+      {searchParams.get("mode") !== "skill" && searchParams.get("mode") !== "cron" && (
         <div className="relative flex flex-wrap items-center justify-center gap-2 pt-1">
           {FEATURE_BADGES.map(({ label, color }) => (
             <span

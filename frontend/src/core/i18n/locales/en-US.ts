@@ -67,6 +67,9 @@ export const enUS: Translations = {
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
       "Create your own skill to release the power of KKOCLAW. With customized skills,\nKKOCLAW can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+    createCronJob: "Create Cron Job",
+    createCronJobDescription:
+      "Describe the cron job you want through conversation. The agent will help you set up the schedule, choose an agent and prompt. For example, generate a daily summary at 9 AM, send weekly reports every Friday, etc.",
   },
 
   // Clipboard
@@ -82,6 +85,8 @@ export const enUS: Translations = {
     placeholder: "How can I assist you today?",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
+    createCronPrompt:
+      "Let's create a scheduled cron job together. Tell me: when should it run and what should it do? For example, generate a daily summary every morning at 9 AM.",
     addAttachments: "Add attachments",
     mode: "Mode",
     flashMode: "Flash",
@@ -351,6 +356,8 @@ export const enUS: Translations = {
     guideCronFormat: "6-field format: second minute hour day month weekday (space-separated)",
     guideExamples: "Common Examples",
     guideModelNote: "When model is left empty, the system default model will be used.",
+    jobCount: "jobs",
+    retry: "Retry",
   },
 
   // Conversation

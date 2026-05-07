@@ -1,6 +1,6 @@
 "use client";
 
-import { ClockIcon, Edit2Icon, QuoteIcon, TerminalIcon, Trash2Icon } from "lucide-react";
+import { ClockIcon, QuoteIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -27,11 +28,11 @@ const ICON_COLOR = "bg-orange-500/10 text-orange-500";
 interface CronCardProps {
   name: string;
   config: CronJobConfig;
-  onEdit: (name: string) => void;
+  onToggle: (name: string, enabled: boolean) => void;
   onDelete: (name: string) => void;
 }
 
-export function CronCard({ name, config, onEdit, onDelete }: CronCardProps) {
+export function CronCard({ name, config, onToggle, onDelete }: CronCardProps) {
   const { t } = useI18n();
 
   return (
@@ -100,22 +101,16 @@ export function CronCard({ name, config, onEdit, onDelete }: CronCardProps) {
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex justify-end gap-1 border-t pt-3">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hover:bg-orange-500/10 hover:text-orange-500"
-                onClick={() => onEdit(name)}
-              >
-                <Edit2Icon className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t.crons.editJob}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+      <CardFooter className="flex items-center justify-between gap-2 border-t pt-3">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={config.enabled}
+            onCheckedChange={(checked) => onToggle(name, checked)}
+          />
+          <span className="text-xs text-muted-foreground">
+            {config.enabled ? t.crons.enabled : t.crons.disabled}
+          </span>
+        </div>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

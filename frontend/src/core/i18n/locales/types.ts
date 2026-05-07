@@ -52,6 +52,8 @@ export interface Translations {
     description: string;
     createYourOwnSkill: string;
     createYourOwnSkillDescription: string;
+    createCronJob: string;
+    createCronJobDescription: string;
   };
 
   // Clipboard
@@ -66,6 +68,7 @@ export interface Translations {
   inputBox: {
     placeholder: string;
     createSkillPrompt: string;
+    createCronPrompt: string;
     addAttachments: string;
     mode: string;
     flashMode: string;
@@ -283,6 +286,8 @@ export interface Translations {
     guideCronFormat: string;
     guideExamples: string;
     guideModelNote: string;
+    jobCount: string;
+    retry: string;
   };
 
   // Conversation

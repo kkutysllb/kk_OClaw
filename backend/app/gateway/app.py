@@ -18,6 +18,7 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     channels,
+    crons,
     feedback,
     mcp,
     memory,
@@ -443,6 +444,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Thread Runs API (LangGraph Platform-compatible runs lifecycle)
     app.include_router(thread_runs.router)
+
+    # Cron Jobs API is mounted at /api/crons
+    app.include_router(crons.router)
 
     # Stateless Runs API (stream/wait without a pre-existing thread)
     app.include_router(runs.router)

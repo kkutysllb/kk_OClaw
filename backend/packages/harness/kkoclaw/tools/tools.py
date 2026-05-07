@@ -87,6 +87,13 @@ def get_available_tools(
 
         builtin_tools.append(skill_manage_tool)
 
+    # Conditionally add cron_manage_tool based on config
+    cron_management_config = getattr(config, "cron_management", None)
+    if getattr(cron_management_config, "enabled", False):
+        from kkoclaw.tools.cron_manage_tool import cron_manage_tool
+
+        builtin_tools.append(cron_manage_tool)
+
     # Add subagent tools only if enabled via runtime parameter
     if subagent_enabled:
         builtin_tools.extend(SUBAGENT_TOOLS)

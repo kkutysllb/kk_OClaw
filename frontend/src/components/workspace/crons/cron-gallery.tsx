@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangleIcon, ClockIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,25 +17,19 @@ import {
 import { useI18n } from "@/core/i18n/hooks";
 import type { CronJobConfig } from "@/core/crons/types";
 import {
-  createCronJob,
   deleteCronJob,
   fetchCronJobs,
-  updateCronJob,
+  toggleCronJob,
 } from "@/core/crons/api";
 
 import { CronCard } from "./cron-card";
-import { CronDialog } from "./cron-dialog";
 
 export function CronGallery() {
   const { t } = useI18n();
+  const router = useRouter();
   const [cronJobs, setCronJobs] = useState<Record<string, CronJobConfig>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingName, setEditingName] = useState<string | null>(null);
-  const [editingConfig, setEditingConfig] = useState<CronJobConfig | null>(null);
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -57,32 +52,16 @@ export function CronGallery() {
   }, [load]);
 
   const handleAdd = () => {
-    setEditingName(null);
-    setEditingConfig(null);
-    setDialogOpen(true);
+    router.push("/workspace/chats/new?mode=cron");
   };
 
-  const handleEdit = (name: string) => {
-    const config = cronJobs[name];
-    if (!config) return;
-    setEditingName(name);
-    setEditingConfig(config);
-    setDialogOpen(true);
-  };
-
-  const handleSave = async (
-    name: string,
-    isNew: boolean,
-    config: CronJobConfig,
-  ) => {
-    if (isNew) {
-      await createCronJob(name, config);
-      toast.success(t.crons.createSuccess);
-    } else {
-      await updateCronJob(name, config);
-      toast.success(t.crons.updateSuccess);
+  const handleToggle = async (name: string, enabled: boolean) => {
+    try {
+      await toggleCronJob(name, enabled);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Toggle failed");
     }
-    await load();
   };
 
   const handleDeleteConfirm = async () => {
@@ -124,16 +103,9 @@ export function CronGallery() {
             {entries.length > 0 && !loading && (
               <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="inline-flex size-2 rounded-full bg-orange-400" />
-                {entries.length} 个任务
+                {entries.length} {t.crons.jobCount}
               </div>
             )}
-            <Button
-              onClick={handleAdd}
-              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 shadow-md shadow-orange-500/25 transition-all duration-200 hover:shadow-lg hover:shadow-orange-500/30"
-            >
-              <PlusIcon className="mr-1.5 h-4 w-4" />
-              {t.crons.addJob}
-            </Button>
           </div>
         </div>
       </div>
@@ -174,7 +146,7 @@ export function CronGallery() {
             <p className="text-destructive text-sm font-medium mb-3">{error}</p>
             <Button variant="outline" onClick={load}>
               <RefreshCwIcon className="mr-1.5 h-4 w-4" />
-              重试
+              {t.crons.retry}
             </Button>
           </div>
         )}
@@ -210,22 +182,13 @@ export function CronGallery() {
                 key={name}
                 name={name}
                 config={config}
-                onEdit={handleEdit}
+                onToggle={handleToggle}
                 onDelete={setDeleteTarget}
               />
             ))}
           </div>
         )}
       </div>
-
-      {/* Dialog */}
-      <CronDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        name={editingName}
-        config={editingConfig}
-        onSave={handleSave}
-      />
 
       {/* Delete confirmation */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>

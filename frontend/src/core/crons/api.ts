@@ -69,3 +69,23 @@ export async function deleteCronJob(name: string): Promise<void> {
     );
   }
 }
+
+/** Toggle a cron job's enabled state. */
+export async function toggleCronJob(
+  name: string,
+  enabled: boolean,
+): Promise<CronJobConfig> {
+  const response = await fetch(`${getBackendBaseURL()}/api/crons/${encodeURIComponent(name)}/toggle`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => ({}));
+    throw new Error(
+      (detail as { detail?: string }).detail ??
+        `Failed to toggle cron job (${response.status})`,
+    );
+  }
+  return response.json() as Promise<CronJobConfig>;
+}

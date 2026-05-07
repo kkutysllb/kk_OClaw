@@ -846,7 +846,7 @@ export function InputBox({
         )}
       </PromptInput>
 
-      {isNewThread && searchParams.get("mode") !== "skill" && (
+      {isNewThread && searchParams.get("mode") !== "skill" && searchParams.get("mode") !== "cron" && (
         <div className="flex items-center justify-center pt-2">
           <SuggestionList />
         </div>

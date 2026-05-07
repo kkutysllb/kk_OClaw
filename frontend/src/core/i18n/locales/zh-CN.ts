@@ -67,6 +67,9 @@ export const zhCN: Translations = {
     createYourOwnSkill: "创建你自己的 Agent SKill",
     createYourOwnSkillDescription:
       "创建你的 Agent Skill 来释放 KKOCLAW 的潜力。通过自定义技能，KKOCLAW\n可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n网页等作品，几乎可以做任何事情。",
+    createCronJob: "创建定时任务",
+    createCronJobDescription:
+      "通过对话描述你想要的定时任务，Agent 会帮你设置时间表、选择智能体和提示词。例如每天早9点生成工作总结、每周五下午发送报告等。",
   },
 
   // Clipboard
@@ -82,6 +85,8 @@ export const zhCN: Translations = {
     placeholder: "今天我能为你做些什么？",
     createSkillPrompt:
       "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",
+    createCronPrompt:
+      "我们一起创建一个定时任务吧。请告诉我：你想在什么时间、执行什么任务？例如每天早上9点生成工作总结。",
     addAttachments: "添加附件",
     mode: "模式",
     flashMode: "闪速",
@@ -339,6 +344,8 @@ export const zhCN: Translations = {
     guideCronFormat: "6 字段格式：秒 分 时 日 月 周（每个字段用空格分隔）",
     guideExamples: "常用示例",
     guideModelNote: "模型选择留空时，将使用系统默认模型。",
+    jobCount: "个任务",
+    retry: "重试",
   },
 
   // Conversation
