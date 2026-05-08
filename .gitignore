@@ -137,3 +137,20 @@ temp/
 # ═══════════════════════════════════════
 .vercel/
 .pids/
+
+# ═══════════════════════════════════════
+# Custom Skills
+# ═══════════════════════════════════════
+analysis/
+api/
+backtrader_strategies/
+chan_theory_v2/
+database/
+factor_mining/
+integration/
+skills/public/analysis-report/
+
+# ═══════════════════════════════════════
+# Crontab Configure
+# ═══════════════════════════════════════
+cron_config.json
