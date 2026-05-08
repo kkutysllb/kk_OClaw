@@ -266,7 +266,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception:
             logger.exception("No IM channels configured or channel service failed to start")
 
+        # Start cron scheduler
+        try:
+            from app.gateway.cron_scheduler import start_cron_scheduler
+
+            await start_cron_scheduler()
+            logger.info("Cron scheduler started")
+        except Exception:
+            logger.exception("Cron scheduler failed to start")
+
         yield
+
+        # Stop cron scheduler on shutdown
+        try:
+            from app.gateway.cron_scheduler import stop_cron_scheduler
+
+            await asyncio.wait_for(
+                stop_cron_scheduler(),
+                timeout=_SHUTDOWN_HOOK_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Cron scheduler shutdown exceeded %.1fs; proceeding with worker exit.",
+                _SHUTDOWN_HOOK_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.exception("Failed to stop cron scheduler")
 
         # Stop channel service on shutdown (bounded to prevent worker hang)
         try:

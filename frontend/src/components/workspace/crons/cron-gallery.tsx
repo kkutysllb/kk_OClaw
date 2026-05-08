@@ -106,6 +106,13 @@ export function CronGallery() {
                 {entries.length} {t.crons.jobCount}
               </div>
             )}
+            <Button
+              onClick={handleAdd}
+              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 shadow-md shadow-orange-500/25 transition-all duration-200 hover:shadow-lg hover:shadow-orange-500/30"
+            >
+              <PlusIcon className="mr-1.5 h-4 w-4" />
+              {t.crons.addJob}
+            </Button>
           </div>
         </div>
       </div>
@@ -164,13 +171,6 @@ export function CronGallery() {
             <p className="text-muted-foreground mt-1 text-sm max-w-sm">
               {t.crons.emptyDescription}
             </p>
-            <Button
-              onClick={handleAdd}
-              className="mt-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600"
-            >
-              <PlusIcon className="mr-1.5 h-4 w-4" />
-              {t.crons.addJob}
-            </Button>
           </div>
         )}
 
