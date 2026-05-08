@@ -203,7 +203,11 @@ async def task_tool(
     # No longer appended to system_prompt here.
 
     if max_turns is not None:
-        overrides["max_turns"] = max_turns
+        # Enforce a minimum so the subagent has enough room to complete
+        # multi-step tasks.  LLMs sometimes propose very low values (e.g. 10)
+        # which maps directly to LangGraph's recursion_limit and causes
+        # GraphRecursionError before the agent can finish.
+        overrides["max_turns"] = max(25, max_turns)
 
     # Extract parent context from runtime
     sandbox_state = None

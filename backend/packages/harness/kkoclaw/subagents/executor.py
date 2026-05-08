@@ -418,8 +418,12 @@ class SubagentExecutor:
 
             # Build config with thread_id for sandbox access and recursion limit
             # Include "subagent:{name}" tag so RunJournal classifies token usage correctly.
+            # NOTE: recursion_limit is fixed at 100 (same as the gateway default) so that
+            # long-running subagent tasks always have enough graph steps.  We do NOT tie it
+            # to max_turns because each agent "turn" may consume multiple graph nodes
+            # (agent node + tool node), causing premature GraphRecursionError.
             run_config: RunnableConfig = {
-                "recursion_limit": self.config.max_turns,
+                "recursion_limit": 100,
                 "tags": [f"subagent:{self.config.name}"],
             }
             context: dict[str, Any] = {}
