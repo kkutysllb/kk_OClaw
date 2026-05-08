@@ -18,7 +18,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -96,8 +96,17 @@ class CronScheduler:
 
     # -- internals --
 
+    def _croniter(self, cron_expr: str, base: datetime) -> croniter:
+        """Create a croniter instance with correct 6-field support."""
+        parts = cron_expr.strip().split()
+        if len(parts) == 6:
+            return croniter(cron_expr, base, second_at_beginning=True)
+        return croniter(cron_expr, base)
+
     async def _run_loop(self) -> None:
         """Main scheduling loop."""
+        # Initial load
+        self._refresh_schedule(datetime.now(tz=timezone.utc))
         while self._running:
             try:
                 await self._tick()
@@ -111,21 +120,19 @@ class CronScheduler:
         """One iteration of the scheduling loop."""
         now = datetime.now(tz=timezone.utc)
 
-        # Reload config periodically to pick up changes
-        if not self._next_fire or now.second % _CONFIG_POLL_INTERVAL == 0:
+        # Reload config periodically to pick up changes (every ~30s)
+        if now.second % _CONFIG_POLL_INTERVAL == 0:
             self._refresh_schedule(now)
 
         # Check each job to see if it should fire
         for name, fire_time in list(self._next_fire.items()):
             if now >= fire_time:
-                # Schedule next fire time immediately (before invoking, so
-                # we don't block the next schedule if the invocation is slow)
                 try:
                     config = _load_cron_config()
                     job = config.get("cronJobs", {}).get(name)
                     if job and job.get("enabled", True):
                         cron_expr = job.get("cron", "")
-                        cron = croniter(cron_expr, now)
+                        cron = self._croniter(cron_expr, fire_time)
                         self._next_fire[name] = cron.get_next(datetime)
                         # Fire the job in a separate task so the scheduler
                         # loop is not blocked by a slow agent invocation.
@@ -138,7 +145,8 @@ class CronScheduler:
                         self._next_fire.pop(name, None)
                 except Exception:
                     logger.exception("Failed to compute next fire time for '%s'", name)
-                    self._next_fire.pop(name, None)
+                    # Re-schedule from now to avoid permanent failure
+                    self._next_fire[name] = now + timedelta(minutes=1)
 
     def _refresh_schedule(self, now: datetime) -> None:
         """Re-read cron_config.json and update next fire times."""
@@ -156,7 +164,7 @@ class CronScheduler:
             if name not in current_names:
                 del self._next_fire[name]
 
-        # Add or update jobs
+        # Add new jobs or update existing ones
         for name, job in jobs.items():
             if not job.get("enabled", True):
                 self._next_fire.pop(name, None)
@@ -165,10 +173,10 @@ class CronScheduler:
             if not cron_expr:
                 continue
             try:
-                # Only compute next fire if not already tracked
-                if name not in self._next_fire:
-                    cron = croniter(cron_expr, now)
-                    self._next_fire[name] = cron.get_next(datetime)
+                cron = self._croniter(cron_expr, now)
+                next_time = cron.get_next(datetime)
+                # Always update: handles new jobs and ensures correctness
+                self._next_fire[name] = next_time
             except (ValueError, KeyError):
                 logger.warning("Invalid cron expression '%s' for job '%s'", cron_expr, name)
                 self._next_fire.pop(name, None)
