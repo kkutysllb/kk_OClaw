@@ -106,7 +106,11 @@ class CronScheduler:
     async def _run_loop(self) -> None:
         """Main scheduling loop."""
         # Initial load
-        self._refresh_schedule(datetime.now(tz=timezone.utc))
+        now = datetime.now(tz=timezone.utc)
+        self._refresh_schedule(now)
+        logger.info("CronScheduler initial schedule: %s", {
+            k: v.isoformat() for k, v in self._next_fire.items()
+        })
         while self._running:
             try:
                 await self._tick()
@@ -133,7 +137,12 @@ class CronScheduler:
                     if job and job.get("enabled", True):
                         cron_expr = job.get("cron", "")
                         cron = self._croniter(cron_expr, fire_time)
-                        self._next_fire[name] = cron.get_next(datetime)
+                        next_fire = cron.get_next(datetime)
+                        self._next_fire[name] = next_fire
+                        logger.info(
+                            "CronScheduler firing job '%s' at %s, next fire at %s",
+                            name, fire_time.isoformat(), next_fire.isoformat(),
+                        )
                         # Fire the job in a separate task so the scheduler
                         # loop is not blocked by a slow agent invocation.
                         asyncio.create_task(
@@ -164,7 +173,7 @@ class CronScheduler:
             if name not in current_names:
                 del self._next_fire[name]
 
-        # Add new jobs or update existing ones
+        # Add new jobs (only compute next_fire for jobs not yet tracked)
         for name, job in jobs.items():
             if not job.get("enabled", True):
                 self._next_fire.pop(name, None)
@@ -172,11 +181,13 @@ class CronScheduler:
             cron_expr = job.get("cron", "")
             if not cron_expr:
                 continue
+            # Skip jobs that are already scheduled — refresh must NOT
+            # overwrite a fire_time that the tick loop is counting down to.
+            if name in self._next_fire:
+                continue
             try:
                 cron = self._croniter(cron_expr, now)
-                next_time = cron.get_next(datetime)
-                # Always update: handles new jobs and ensures correctness
-                self._next_fire[name] = next_time
+                self._next_fire[name] = cron.get_next(datetime)
             except (ValueError, KeyError):
                 logger.warning("Invalid cron expression '%s' for job '%s'", cron_expr, name)
                 self._next_fire.pop(name, None)
