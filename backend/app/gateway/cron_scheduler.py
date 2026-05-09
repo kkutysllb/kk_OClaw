@@ -243,7 +243,7 @@ class CronScheduler:
             gw = get_gateway_config()
             self._csrf_token = generate_csrf_token()
             self._client = get_client(
-                url=f"http://{gw.host}:{gw.port}",
+                url=f"http://{gw.host}:{gw.port}/api",
                 headers={
                     **create_internal_auth_headers(),
                     CSRF_HEADER_NAME: self._csrf_token,
