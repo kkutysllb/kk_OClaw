@@ -20,6 +20,10 @@ export function Hero({ className }: { className?: string }) {
         <SolarSystem starCount={300} particleCount={120} />
       </div>
       <div className="container-md relative z-10 mx-auto flex h-screen flex-col items-center justify-start pt-[28vh]">
+        {/* KK 商业标记 */}
+        <div className="text-5xl font-black bg-gradient-to-r from-pink-500 via-red-400 via-amber-400 via-yellow-300 via-emerald-400 via-cyan-400 to-blue-500 bg-clip-text text-transparent select-none mb-4">
+          KK
+        </div>
         <h1 className="flex flex-wrap items-center justify-center gap-2 text-4xl font-bold md:text-6xl">
           <WordRotate
             words={[
@@ -38,9 +42,9 @@ export function Hero({ className }: { className?: string }) {
               "学任何东西",
             ]}
           />{" "}
-          <div className="bg-gradient-to-r from-cyan-300 via-blue-400 to-purple-400 bg-clip-text text-transparent">
-            就用 KKOCLAW
-          </div>
+          <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+            就用 OClaw
+          </span>
         </h1>
         <p className="text-muted-foreground mt-6 scale-105 text-center text-2xl text-shadow-sm max-w-3xl">
           一个开源的智能体编排平台，可深度研究、编写代码并创造内容。
