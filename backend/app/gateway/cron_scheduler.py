@@ -99,6 +99,15 @@ class CronScheduler:
 
     # -- internals --
 
+    @staticmethod
+    def _local_now() -> datetime:
+        """Current time in the server's local timezone.
+
+        Cron expressions should be interpreted in local time so that
+        ``7-23`` means 7am-11pm in the user's timezone, not UTC.
+        """
+        return datetime.now().astimezone()
+
     def _croniter(self, cron_expr: str, base: datetime) -> croniter:
         """Create a croniter instance with correct 6-field support."""
         parts = cron_expr.strip().split()
@@ -109,7 +118,7 @@ class CronScheduler:
     async def _run_loop(self) -> None:
         """Main scheduling loop."""
         # Initial load
-        now = datetime.now(tz=timezone.utc)
+        now = self._local_now()
         self._refresh_schedule(now)
         logger.info("CronScheduler initial schedule: %s", {
             k: v.isoformat() for k, v in self._next_fire.items()
@@ -125,7 +134,7 @@ class CronScheduler:
 
     async def _tick(self) -> None:
         """One iteration of the scheduling loop."""
-        now = datetime.now(tz=timezone.utc)
+        now = self._local_now()
 
         # Reload config periodically to pick up changes (every ~30s)
         if now.second % _CONFIG_POLL_INTERVAL == 0:
