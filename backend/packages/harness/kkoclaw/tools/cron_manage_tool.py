@@ -163,6 +163,17 @@ async def _cron_manage_impl(
                 if name in jobs:
                     raise ValueError(f"Cron job '{name}' already exists.")
 
+                # Capture the current thread_id so the scheduler reuses
+                # this thread's workspace (/mnt/user-data) when executing
+                # the job.  This ensures scripts and files created in the
+                # current conversation are accessible to the cron run.
+                current_thread_id = None
+                try:
+                    ctx = runtime.context or {}
+                    current_thread_id = ctx.get("thread_id")
+                except Exception:
+                    pass
+
                 job_data = {
                     "enabled": enabled if enabled is not None else True,
                     "cron": cron.strip(),
@@ -171,9 +182,11 @@ async def _cron_manage_impl(
                     "model": model.strip() if model else None,
                     "prompt": prompt.strip(),
                 }
+                if current_thread_id:
+                    job_data["thread_id"] = current_thread_id
                 jobs[name] = job_data
                 await _to_thread(_save_cron_config, config)
-                logger.info("Cron job '%s' created via agent tool", name)
+                logger.info("Cron job '%s' created via agent tool (thread_id=%s)", name, current_thread_id)
             return f"Created cron job '{name}' with schedule '{cron}'."
 
         # --- update ---

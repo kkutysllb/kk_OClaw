@@ -209,20 +209,22 @@ class CronScheduler:
         agent_name = job.get("agent", "lead_agent")
         model = job.get("model")
         prompt = job.get("prompt", "")
+        thread_id = job.get("thread_id")  # Optional: reuse existing thread
         if not prompt:
             logger.warning("Cron job '%s' has no prompt — skipping", name)
             return
 
         logger.info(
-            "CronScheduler firing job '%s': agent=%s model=%s prompt=%r",
+            "CronScheduler firing job '%s': agent=%s model=%s thread=%s prompt=%r",
             name,
             agent_name,
             model or "default",
+            thread_id or "(new)",
             prompt[:100],
         )
 
         try:
-            await self._invoke_via_client(agent_name, model, prompt)
+            await self._invoke_via_client(agent_name, model, prompt, thread_id=thread_id)
             logger.info("Cron job '%s' completed successfully", name)
         except Exception:
             logger.exception("Cron job '%s' invocation failed", name)
@@ -253,18 +255,28 @@ class CronScheduler:
         return self._client
 
     async def _invoke_via_client(
-        self, agent_name: str, model: str | None, prompt: str
+        self, agent_name: str, model: str | None, prompt: str, *, thread_id: str | None = None
     ) -> None:
         """Use the LangGraph SDK client to invoke the agent.
 
-        Connects to the gateway/langgraph service via HTTP with internal
-        auth and CSRF headers, same as the IM channel manager does.
+        If *thread_id* is provided, the run is created on that existing thread
+        so that ``/mnt/user-data`` maps to the thread's workspace (which may
+        contain scripts and files created in earlier conversations).  When
+        *thread_id* is ``None``, a fresh throwaway thread is created instead.
         """
         client = self._get_client()
-        thread_id = str(uuid.uuid4())
 
-        # Create a thread for this invocation
-        await client.threads.create(thread_id=thread_id)
+        if thread_id:
+            # Reuse an existing thread — its workspace /mnt/user-data
+            # will contain the files from previous conversations.
+            try:
+                await client.threads.create(thread_id=thread_id)
+            except Exception:
+                # Thread already exists — that's fine, we'll just run on it.
+                pass
+        else:
+            thread_id = str(uuid.uuid4())
+            await client.threads.create(thread_id=thread_id)
 
         config: dict[str, Any] = {}
         if model:
