@@ -70,6 +70,9 @@ class CronScheduler:
         self._running = False
         # job_name -> next fire datetime (UTC)
         self._next_fire: dict[str, datetime] = {}
+        # Lazy-init: LangGraph SDK client with internal auth + CSRF
+        self._client = None
+        self._csrf_token: str | None = None
 
     # -- public API --
 
@@ -215,24 +218,40 @@ class CronScheduler:
         except Exception:
             logger.exception("Cron job '%s' invocation failed", name)
 
+    def _get_client(self):
+        """Return the LangGraph SDK async client with internal auth + CSRF.
+
+        Mirrors ChannelManager._get_client() so that both CSRF middleware
+        and AuthMiddleware accept the request.
+        """
+        if self._client is None:
+            from langgraph_sdk import get_client
+
+            from app.gateway.config import get_gateway_config
+            from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, generate_csrf_token
+            from app.gateway.internal_auth import create_internal_auth_headers
+
+            gw = get_gateway_config()
+            self._csrf_token = generate_csrf_token()
+            self._client = get_client(
+                url=f"http://{gw.host}:{gw.port}",
+                headers={
+                    **create_internal_auth_headers(),
+                    CSRF_HEADER_NAME: self._csrf_token,
+                    "Cookie": f"{CSRF_COOKIE_NAME}={self._csrf_token}",
+                },
+            )
+        return self._client
+
     async def _invoke_via_client(
         self, agent_name: str, model: str | None, prompt: str
     ) -> None:
         """Use the LangGraph SDK client to invoke the agent.
 
-        Connects to the gateway/langgraph service via HTTP, same as the
-        IM channel manager does.  Uses ``runs.stream`` with
-        ``stream_mode=["values"]`` and collects until the run ends,
-        discarding the streamed output (cron jobs are fire-and-forget).
+        Connects to the gateway/langgraph service via HTTP with internal
+        auth and CSRF headers, same as the IM channel manager does.
         """
-        from langgraph_sdk import get_client
-
-        from app.gateway.config import get_gateway_config
-
-        gw = get_gateway_config()
-        base_url = f"http://{gw.host}:{gw.port}"
-
-        client = get_client(url=base_url)
+        client = self._get_client()
         thread_id = str(uuid.uuid4())
 
         # Create a thread for this invocation
