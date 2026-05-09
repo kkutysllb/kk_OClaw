@@ -163,14 +163,17 @@ async def _cron_manage_impl(
                 if name in jobs:
                     raise ValueError(f"Cron job '{name}' already exists.")
 
-                # Capture the current thread_id so the scheduler reuses
-                # this thread's workspace (/mnt/user-data) when executing
+                # Capture the current thread_id and user_id so the scheduler
+                # reuses this thread's workspace (/mnt/user-data) when executing
                 # the job.  This ensures scripts and files created in the
                 # current conversation are accessible to the cron run.
                 current_thread_id = None
+                current_user_id = None
                 try:
                     ctx = runtime.context or {}
                     current_thread_id = ctx.get("thread_id")
+                    from kkoclaw.runtime.user_context import get_effective_user_id
+                    current_user_id = get_effective_user_id()
                 except Exception:
                     pass
 
@@ -184,9 +187,14 @@ async def _cron_manage_impl(
                 }
                 if current_thread_id:
                     job_data["thread_id"] = current_thread_id
+                if current_user_id:
+                    job_data["user_id"] = current_user_id
                 jobs[name] = job_data
                 await _to_thread(_save_cron_config, config)
-                logger.info("Cron job '%s' created via agent tool (thread_id=%s)", name, current_thread_id)
+                logger.info(
+                    "Cron job '%s' created via agent tool (thread_id=%s, user_id=%s)",
+                    name, current_thread_id, current_user_id,
+                )
             return f"Created cron job '{name}' with schedule '{cron}'."
 
         # --- update ---

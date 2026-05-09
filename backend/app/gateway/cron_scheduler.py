@@ -209,22 +209,28 @@ class CronScheduler:
         agent_name = job.get("agent", "lead_agent")
         model = job.get("model")
         prompt = job.get("prompt", "")
-        thread_id = job.get("thread_id")  # Optional: reuse existing thread
+        thread_id = job.get("thread_id")  # Original thread with scripts
+        user_id = job.get("user_id")      # Original user who owns the scripts
         if not prompt:
             logger.warning("Cron job '%s' has no prompt — skipping", name)
             return
 
         logger.info(
-            "CronScheduler firing job '%s': agent=%s model=%s thread=%s prompt=%r",
+            "CronScheduler firing job '%s': agent=%s model=%s thread=%s user=%s prompt=%r",
             name,
             agent_name,
             model or "default",
             thread_id or "(new)",
+            user_id or "(default)",
             prompt[:100],
         )
 
         try:
-            await self._invoke_via_client(agent_name, model, prompt, thread_id=thread_id)
+            await self._invoke_via_client(
+                agent_name, model, prompt,
+                workspace_thread_id=thread_id,
+                workspace_user_id=user_id,
+            )
             logger.info("Cron job '%s' completed successfully", name)
         except Exception:
             logger.exception("Cron job '%s' invocation failed", name)
@@ -255,36 +261,38 @@ class CronScheduler:
         return self._client
 
     async def _invoke_via_client(
-        self, agent_name: str, model: str | None, prompt: str, *, thread_id: str | None = None
+        self, agent_name: str, model: str | None, prompt: str,
+        *,
+        workspace_thread_id: str | None = None,
+        workspace_user_id: str | None = None,
     ) -> None:
         """Use the LangGraph SDK client to invoke the agent.
 
-        If *thread_id* is provided, the run is created on that existing thread
-        so that ``/mnt/user-data`` maps to the thread's workspace (which may
-        contain scripts and files created in earlier conversations).  When
-        *thread_id* is ``None``, a fresh throwaway thread is created instead.
+        Always creates a fresh thread for the cron invocation so the
+        checkpointer is happy (threads are user-isolated).  The original
+        *workspace_thread_id* and *workspace_user_id* are passed via
+        ``config.configurable`` so that ``ThreadDataMiddleware`` computes
+        the correct workspace paths (allowing ``/mnt/user-data`` to resolve
+        to the workspace that contains the user's scripts).
         """
         client = self._get_client()
-
-        if thread_id:
-            # Reuse an existing thread — its workspace /mnt/user-data
-            # will contain the files from previous conversations.
-            try:
-                await client.threads.create(thread_id=thread_id)
-            except Exception:
-                # Thread already exists — that's fine, we'll just run on it.
-                pass
-        else:
-            thread_id = str(uuid.uuid4())
-            await client.threads.create(thread_id=thread_id)
+        cron_thread_id = str(uuid.uuid4())
+        await client.threads.create(thread_id=cron_thread_id)
 
         config: dict[str, Any] = {}
         if model:
             config.setdefault("configurable", {})["model_name"] = model
+        # Pass workspace_thread_id and workspace_user_id so that
+        # ThreadDataMiddleware computes workspace paths pointing to the
+        # thread/user that owns the scripts.
+        if workspace_thread_id:
+            config.setdefault("configurable", {})["workspace_thread_id"] = workspace_thread_id
+        if workspace_user_id:
+            config.setdefault("configurable", {})["workspace_user_id"] = workspace_user_id
 
         # Stream the run to completion (fire-and-forget)
         async for _ in client.runs.stream(
-            thread_id,
+            cron_thread_id,
             agent_name,
             input={"messages": [{"role": "human", "content": prompt}]},
             config=config,

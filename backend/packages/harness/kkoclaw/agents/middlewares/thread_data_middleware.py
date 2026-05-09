@@ -80,16 +80,32 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
 
     @override
     def before_agent(self, state: ThreadDataMiddlewareState, runtime: Runtime) -> dict | None:
-        context = runtime.context or {}
-        thread_id = context.get("thread_id")
-        if thread_id is None:
-            config = get_config()
-            thread_id = config.get("configurable", {}).get("thread_id")
+        # Check for workspace path overrides first (used by cron scheduler
+        # and other internal callers that need to access another thread's
+        # workspace while running in a different thread context).
+        configurable: dict = {}
+        try:
+            configurable = get_config().get("configurable", {}) or {}
+        except RuntimeError:
+            pass  # Not inside a runnable context — no configurable overrides
+        workspace_thread_id = configurable.get("workspace_thread_id")
+        workspace_user_id = configurable.get("workspace_user_id")
 
-        if thread_id is None:
-            raise ValueError("Thread ID is required in runtime context or config.configurable")
+        if workspace_thread_id:
+            # Override mode: use the specified thread/user for path computation
+            thread_id = workspace_thread_id
+            user_id = workspace_user_id or get_effective_user_id()
+        else:
+            # Normal mode: resolve from runtime context or configurable
+            context = runtime.context or {}
+            thread_id = context.get("thread_id")
+            if thread_id is None:
+                thread_id = configurable.get("thread_id")
 
-        user_id = get_effective_user_id()
+            if thread_id is None:
+                raise ValueError("Thread ID is required in runtime context or config.configurable")
+
+            user_id = get_effective_user_id()
 
         if self._lazy_init:
             # Lazy initialization: only compute paths, don't create directories
