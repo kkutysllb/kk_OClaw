@@ -151,7 +151,7 @@ class TestLoopDetection:
         assert result is not None
         msgs = result["messages"]
         assert len(msgs) == 1
-        assert isinstance(msgs[0], HumanMessage)
+        assert isinstance(msgs[0], AIMessage)
         assert "LOOP DETECTED" in msgs[0].content
 
     def test_warn_only_injected_once(self):
@@ -483,7 +483,7 @@ class TestToolFrequencyDetection:
         result = mw._apply(_make_state(tool_calls=[self._read_call("/file_4.py")]), runtime)
         assert result is not None
         msg = result["messages"][0]
-        assert isinstance(msg, HumanMessage)
+        assert isinstance(msg, AIMessage)
         assert "read_file" in msg.content
         assert "LOOP DETECTED" in msg.content
 

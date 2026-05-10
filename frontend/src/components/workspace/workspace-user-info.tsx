@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOutIcon, UserIcon } from "lucide-react";
+import { LogOutIcon, ShieldCheckIcon, UserIcon } from "lucide-react";
 
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
@@ -12,6 +12,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -49,7 +51,19 @@ export function WorkspaceUserInfo() {
           {avatar}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="end" className="min-w-48">
+      <DropdownMenuContent side="right" align="end" className="min-w-52">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col gap-1">
+            <p className="truncate text-sm font-medium">{user.email}</p>
+            <div className="flex items-center gap-1.5">
+              <ShieldCheckIcon className={user.system_role === "admin" ? "size-3.5 text-amber-500" : "size-3.5 text-slate-400"} />
+              <span className="text-muted-foreground text-xs">
+                {getRoleLabel(user.system_role, t)}
+              </span>
+            </div>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout}>
           <LogOutIcon className="size-4 text-rose-500" />
           {t.workspace.logout}
@@ -88,7 +102,19 @@ export function WorkspaceUserInfo() {
             </div>
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="right" align="end" className="min-w-48">
+        <DropdownMenuContent side="right" align="end" className="min-w-52">
+          <DropdownMenuLabel className="font-normal">
+            <div className="flex flex-col gap-1">
+              <p className="truncate text-sm font-medium">{user.email}</p>
+              <div className="flex items-center gap-1.5">
+                <ShieldCheckIcon className={user.system_role === "admin" ? "size-3.5 text-amber-500" : "size-3.5 text-slate-400"} />
+                <span className="text-muted-foreground text-xs">
+                  {getRoleLabel(user.system_role, t)}
+                </span>
+              </div>
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout}>
             <LogOutIcon className="size-4 text-rose-500" />
             {t.workspace.logout}

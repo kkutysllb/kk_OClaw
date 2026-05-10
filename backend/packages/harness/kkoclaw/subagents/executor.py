@@ -289,6 +289,16 @@ class SubagentExecutor:
         # Reuse shared middleware composition with lead agent.
         middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
 
+        # Dynamic LoopDetectionMiddleware: scale tool frequency limits based on max_turns.
+        # A subagent with max_turns=50 may legitimately call the same tool many times
+        # across dozens of turns.  Use a 3x multiplier (each turn can call 1 tool)
+        # with a floor of 80 so short tasks are still protected.
+        from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+
+        tool_freq_hard = max(80, self.config.max_turns * 3)
+        tool_freq_warn = max(40, tool_freq_hard // 2)
+        middlewares.append(LoopDetectionMiddleware(tool_freq_warn=tool_freq_warn, tool_freq_hard_limit=tool_freq_hard))
+
         return create_agent(
             model=model,
             tools=self.tools,
