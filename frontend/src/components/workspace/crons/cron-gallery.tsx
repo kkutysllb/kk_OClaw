@@ -121,25 +121,12 @@ export function CronGallery() {
       <div className="flex-1 overflow-y-auto p-6">
         {/* Loading state */}
         {loading && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-48 animate-pulse rounded-xl border bg-muted/30"
-              >
-                <div className="h-1 w-full rounded-t-xl bg-orange-500/20" />
-                <div className="p-4 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-xl bg-muted" />
-                    <div className="space-y-2 flex-1">
-                      <div className="h-4 w-2/3 rounded bg-muted" />
-                      <div className="h-3 w-1/3 rounded bg-muted" />
-                    </div>
-                  </div>
-                  <div className="h-3 w-full rounded bg-muted" />
-                  <div className="h-3 w-2/3 rounded bg-muted" />
-                </div>
-              </div>
+                className="h-14 animate-pulse rounded-lg border bg-muted/30"
+              />
             ))}
           </div>
         )}
@@ -176,7 +163,7 @@ export function CronGallery() {
 
         {/* Cards */}
         {!loading && !error && entries.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="flex flex-col gap-2">
             {entries.map(([name, config]) => (
               <CronCard
                 key={name}

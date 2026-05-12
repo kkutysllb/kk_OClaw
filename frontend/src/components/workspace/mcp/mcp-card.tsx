@@ -5,14 +5,6 @@ import { Edit2Icon, LinkIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -20,12 +12,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/core/i18n/hooks";
 import type { MCPServerConfig } from "@/core/mcp/types";
-
-const TYPE_GRADIENTS: Record<string, string> = {
-  stdio: "from-emerald-400 to-teal-400",
-  sse: "from-blue-400 to-cyan-400",
-  http: "from-purple-400 to-fuchsia-400",
-};
 
 const TYPE_ICONS: Record<string, string> = {
   stdio: "bg-emerald-500/10 text-emerald-500",
@@ -50,84 +36,72 @@ export function McpCard({ name, config, onEdit, onDelete }: McpCardProps) {
   const { t } = useI18n();
 
   const transportType = config.type || "stdio";
-  const gradient =
-    TYPE_GRADIENTS[transportType] ?? "from-amber-400 to-orange-400";
-  const iconColor =
-    TYPE_ICONS[transportType] ?? "bg-amber-500/10 text-amber-500";
+  const iconColor = TYPE_ICONS[transportType] ?? "bg-amber-500/10 text-amber-500";
   const typeLabel = TYPE_LABELS[transportType] ?? transportType.toUpperCase();
 
   return (
-    <Card className="group flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
-      {/* Gradient top accent */}
-      <div className={`h-1 w-full bg-gradient-to-r ${gradient}`} />
-      <CardHeader className="pb-3">
-        <div className="flex items-start gap-3">
-          <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset transition-transform duration-200 group-hover:scale-110 ${iconColor} ${iconColor.replace('bg-', 'ring-').replace('/10', '/20')}`}
-          >
-            <TerminalIcon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <CardTitle className="truncate text-base">{name}</CardTitle>
-            <CardDescription className="text-muted-foreground/70 mt-0.5 truncate font-mono text-xs">
-              {typeLabel}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-2.5">
-        {/* Status badges */}
-        <div className="flex flex-wrap gap-1.5">
+    <div className="group flex items-center gap-4 rounded-lg border bg-card px-4 py-3 transition-all duration-200 hover:bg-accent/50 hover:shadow-sm">
+      {/* Icon */}
+      <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconColor}`}>
+        <TerminalIcon className="size-4.5" />
+      </div>
+
+      {/* Name + details */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold">{name}</span>
           <Badge
             variant={config.enabled ? "default" : "secondary"}
             className={
               config.enabled
-                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs"
-                : "bg-muted text-muted-foreground text-xs"
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] px-1.5 py-0"
+                : "bg-muted text-muted-foreground text-[10px] px-1.5 py-0"
             }
           >
             {config.enabled ? t.mcp.enabled : t.mcp.disabled}
           </Badge>
           <Badge
             variant="outline"
-            className={`text-xs ${iconColor} border-current/20`}
+            className={`text-[10px] px-1.5 py-0 ${iconColor} border-current/20`}
           >
-            {t.mcp.type}: {typeLabel}
+            {typeLabel}
           </Badge>
         </div>
-
-        {/* Description */}
         {config.description && (
-          <p className="text-muted-foreground/70 line-clamp-2 text-xs leading-relaxed">
+          <p className="text-muted-foreground/70 mt-0.5 truncate text-xs">
             {config.description}
           </p>
         )}
+      </div>
 
-        {/* Transport details */}
+      {/* Transport detail */}
+      <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground/60 font-mono shrink-0 max-w-[260px] truncate">
         {transportType === "stdio" && config.command && (
-          <p className="text-muted-foreground/50 truncate font-mono text-xs flex items-center gap-1">
-            <TerminalIcon className="h-3 w-3 shrink-0" />
-            $ {config.command} {(config.args ?? []).join(" ")}
-          </p>
+          <>
+            <TerminalIcon className="size-3" />
+            <span className="truncate">$ {config.command} {(config.args ?? []).join(" ")}</span>
+          </>
         )}
         {(transportType === "sse" || transportType === "http") && config.url && (
-          <p className="text-muted-foreground/50 truncate font-mono text-xs flex items-center gap-1">
-            <LinkIcon className="h-3 w-3 shrink-0" />
-            {config.url}
-          </p>
+          <>
+            <LinkIcon className="size-3" />
+            <span className="truncate">{config.url}</span>
+          </>
         )}
-      </CardContent>
-      <CardFooter className="flex justify-end gap-1 border-t pt-3">
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="hover:bg-amber-500/10 hover:text-amber-500"
+                className="size-8 hover:bg-amber-500/10 hover:text-amber-500"
                 onClick={() => onEdit(name)}
               >
-                <Edit2Icon className="h-4 w-4" />
+                <Edit2Icon className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t.mcp.editServer}</TooltipContent>
@@ -139,16 +113,16 @@ export function McpCard({ name, config, onEdit, onDelete }: McpCardProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="hover:bg-destructive/10 hover:text-destructive"
+                className="size-8 hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => onDelete(name)}
               >
-                <Trash2Icon className="h-4 w-4" />
+                <Trash2Icon className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t.mcp.deleteServer}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }

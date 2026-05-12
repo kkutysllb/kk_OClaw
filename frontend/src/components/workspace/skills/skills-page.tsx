@@ -381,65 +381,53 @@ function SkillCard({ skill }: { skill: Skill }) {
   return (
     <div
       className={cn(
-        "bg-card group relative flex flex-col gap-3 rounded-2xl border p-5 transition-all duration-300",
-        "hover:shadow-lg hover:-translate-y-0.5",
+        "group flex items-center gap-4 rounded-lg border bg-card px-4 py-3 transition-all duration-200",
+        "hover:bg-accent/50 hover:shadow-sm",
         !skill.enabled && "opacity-50 grayscale-[30%]",
       )}
     >
-      {/* Decorative top gradient bar */}
+      {/* Icon */}
       <div
         className={cn(
-          "absolute inset-x-0 top-0 h-1 rounded-t-2xl bg-gradient-to-r opacity-60",
-          theme.gradient.replace("/20", "/60").replace("/10", "/30"),
+          "flex size-9 shrink-0 items-center justify-center rounded-lg",
+          theme.iconBg,
+          theme.iconColor,
         )}
-      />
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 pt-1">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={cn(
-              "flex size-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset transition-transform duration-200 group-hover:scale-110",
-              theme.iconBg,
-              theme.iconColor.replace("text-", "ring-") + "/30",
-            )}
-          >
-            <Icon className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold tracking-tight truncate">
-              {skill.name}
-            </h3>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span
-                className={cn(
-                  "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                  theme.badgeBg,
-                  theme.badgeText,
-                )}
-              >
-                {getCategoryLabel(skill.category, t)}
-              </span>
-            </div>
-          </div>
-        </div>
-        <Switch
-          checked={skill.enabled}
-          disabled={env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true"}
-          onCheckedChange={(checked) =>
-            enableSkill({ skillName: skill.name, enabled: checked })
-          }
-          className={cn(
-            "data-[state=checked]:bg-gradient-to-r!",
-            theme.gradient,
-          )}
-        />
+      >
+        <Icon className="size-4.5" />
       </div>
 
-      {/* Description */}
-      <p className="text-muted-foreground line-clamp-3 text-[13px] leading-relaxed">
-        {description}
-      </p>
+      {/* Name + description */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold">{skill.name}</span>
+          <span
+            className={cn(
+              "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              theme.badgeBg,
+              theme.badgeText,
+            )}
+          >
+            {getCategoryLabel(skill.category, t)}
+          </span>
+        </div>
+        <p className="text-muted-foreground/70 mt-0.5 truncate text-xs">
+          {description}
+        </p>
+      </div>
+
+      {/* Switch */}
+      <Switch
+        checked={skill.enabled}
+        disabled={env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true"}
+        onCheckedChange={(checked) =>
+          enableSkill({ skillName: skill.name, enabled: checked })
+        }
+        className={cn(
+          "data-[state=checked]:bg-gradient-to-r!",
+          theme.gradient,
+        )}
+      />
     </div>
   );
 }
@@ -448,25 +436,12 @@ function SkillCard({ skill }: { skill: Skill }) {
 
 function SkillsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 9 }).map((_, i) => (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="bg-card animate-pulse rounded-2xl border p-5 space-y-3"
-        >
-          <div className="flex items-center gap-3">
-            <div className="size-11 rounded-xl bg-muted" />
-            <div className="space-y-2 flex-1">
-              <div className="h-3.5 w-24 rounded bg-muted" />
-              <div className="h-2.5 w-16 rounded bg-muted" />
-            </div>
-            <div className="h-5 w-9 rounded-full bg-muted" />
-          </div>
-          <div className="space-y-2">
-            <div className="h-2.5 w-full rounded bg-muted" />
-            <div className="h-2.5 w-3/4 rounded bg-muted" />
-          </div>
-        </div>
+          className="h-14 animate-pulse rounded-lg border bg-muted/30"
+        />
       ))}
     </div>
   );
@@ -615,7 +590,7 @@ export function SkillsPage() {
           )
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="flex flex-col gap-2">
               {filteredSkills.map((skill) => (
                 <SkillCard key={skill.name} skill={skill} />
               ))}
