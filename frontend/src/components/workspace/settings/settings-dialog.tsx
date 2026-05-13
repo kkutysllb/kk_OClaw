@@ -3,7 +3,6 @@
 import {
   BellIcon,
   BrainIcon,
-  CoinsIcon,
   PaletteIcon,
   SettingsIcon,
   UserIcon,
@@ -22,7 +21,6 @@ import { AccountSettingsPage } from "@/components/workspace/settings/account-set
 import { AppearanceSettingsPage } from "@/components/workspace/settings/appearance-settings-page";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
-import { TokenUsageSettingsPage } from "@/components/workspace/settings/token-usage-settings-page";
 import { ToolSettingsPage } from "@/components/workspace/settings/tool-settings-page";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -32,8 +30,7 @@ type SettingsSection =
   | "appearance"
   | "memory"
   | "tools"
-  | "notification"
-  | "tokenUsage";
+  | "notification";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -70,12 +67,6 @@ const SECTION_COLORS: Record<string, { iconActive: string; iconInactive: string;
     iconInactive: "text-rose-500",
     bar: "from-rose-400 to-pink-500",
     bg: "bg-rose-500/10",
-  },
-  tokenUsage: {
-    iconActive: "text-amber-400",
-    iconInactive: "text-amber-500",
-    bar: "from-amber-400 to-yellow-500",
-    bg: "bg-amber-500/10",
   },
 };
 
@@ -116,11 +107,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BrainIcon,
       },
       { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
-      {
-        id: "tokenUsage",
-        label: t.settings.sections.tokenUsage,
-        icon: CoinsIcon,
-      },
     ],
     [
       t.settings.sections.account,
@@ -128,7 +114,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.memory,
       t.settings.sections.tools,
       t.settings.sections.notification,
-      t.settings.sections.tokenUsage,
     ],
   );
   return (
@@ -199,7 +184,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "tools" && <ToolSettingsPage />}
               {activeSection === "notification" && <NotificationSettingsPage />}
-              {activeSection === "tokenUsage" && <TokenUsageSettingsPage />}
             </div>
           </ScrollArea>
         </div>

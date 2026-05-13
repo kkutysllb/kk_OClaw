@@ -1,6 +1,6 @@
 "use client";
 
-import { BotIcon, ClockIcon, CpuIcon, MessageCircleIcon, MessagesSquare, SparklesIcon, TerminalIcon } from "lucide-react";
+import { BotIcon, ClockIcon, CoinsIcon, CpuIcon, MessageCircleIcon, MessagesSquare, SparklesIcon, TerminalIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -89,6 +89,17 @@ export function WorkspaceNavChatList() {
             <Link className="text-muted-foreground" href="/workspace/crons">
               <ClockIcon className="text-orange-500" />
               <span>{t.sidebar.crons}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname.startsWith("/workspace/token-usage")}
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/token-usage">
+              <CoinsIcon className="text-emerald-500" />
+              <span>{t.sidebar.tokenUsage}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

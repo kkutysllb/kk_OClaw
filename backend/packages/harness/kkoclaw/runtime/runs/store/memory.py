@@ -137,14 +137,26 @@ class MemoryRunStore(RunStore):
         *,
         user_id: str | None = None,
         days: int = 30,
+        year: int | None = None,
+        month: int | None = None,
     ) -> list[dict[str, Any]]:
         """Return daily token usage breakdown grouped by date and model.
 
         Dates are converted to the server's local timezone before grouping
         so that the chart reflects the user's actual calendar days.
         """
+        from calendar import monthrange
+
         tz_offset = get_local_tz_offset_hours()
-        cutoff = datetime.now(UTC) - timedelta(days=days)
+        if year is not None and month is not None:
+            last_day = monthrange(year, month)[1]
+            start_str = f"{year:04d}-{month:02d}-01"
+            end_str = f"{year:04d}-{month:02d}-{last_day:02d}"
+        else:
+            cutoff = datetime.now(UTC) - timedelta(days=days)
+            start_str = cutoff.strftime("%Y-%m-%d")
+            end_str = None
+
         completed = [
             r for r in self._runs.values()
             if r.get("status") in ("success", "error")
@@ -155,7 +167,6 @@ class MemoryRunStore(RunStore):
         for r in completed:
             created = r.get("created_at", "")
             if created:
-                # Convert UTC datetime string to local date
                 try:
                     utc_dt = datetime.fromisoformat(created)
                     from datetime import timezone
@@ -168,10 +179,14 @@ class MemoryRunStore(RunStore):
             model = r.get("model_name") or "unknown"
             key = f"{date_key}|{model}"
             if key not in groups:
-                groups[key] = {"date": date_key, "model_name": model, "run_count": 0, "total_tokens": 0}
+                groups[key] = {"date": date_key, "model_name": model, "run_count": 0, "total_tokens": 0, "input_tokens": 0, "output_tokens": 0}
             groups[key]["run_count"] += 1
             groups[key]["total_tokens"] += r.get("total_tokens", 0)
+            groups[key]["input_tokens"] += r.get("total_input_tokens", 0)
+            groups[key]["output_tokens"] += r.get("total_output_tokens", 0)
 
         result = sorted(groups.values(), key=lambda x: x["date"])
-        cutoff_str = cutoff.strftime("%Y-%m-%d")
-        return [g for g in result if g["date"] >= cutoff_str]
+        filtered = [g for g in result if g["date"] >= start_str]
+        if end_str is not None:
+            filtered = [g for g in filtered if g["date"] <= end_str]
+        return filtered

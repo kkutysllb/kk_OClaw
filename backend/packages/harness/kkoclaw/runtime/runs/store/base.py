@@ -119,6 +119,8 @@ class RunStore(abc.ABC):
         *,
         user_id: str | None = None,
         days: int = 30,
+        year: int | None = None,
+        month: int | None = None,
     ) -> list[dict[str, Any]]:
         """Return daily token usage breakdown grouped by date and model.
 

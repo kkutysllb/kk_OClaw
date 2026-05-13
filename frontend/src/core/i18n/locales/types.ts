@@ -125,6 +125,7 @@ export interface Translations {
     channels: string;
     mcp: string;
     crons: string;
+    tokenUsage: string;
   };
 
   // Agents

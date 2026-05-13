@@ -12,7 +12,6 @@ import {
 import { RecentChatList } from "./recent-chat-list";
 import { WorkspaceHeader } from "./workspace-header";
 import { WorkspaceNavChatList } from "./workspace-nav-chat-list";
-import { WorkspaceNavMenu } from "./workspace-nav-menu";
 import { WorkspaceUserInfo } from "./workspace-user-info";
 
 export function WorkspaceSidebar({
@@ -30,7 +29,6 @@ export function WorkspaceSidebar({
           {isSidebarOpen && <RecentChatList />}
         </SidebarContent>
         <SidebarFooter>
-          <WorkspaceNavMenu />
           <WorkspaceUserInfo />
         </SidebarFooter>
         <SidebarRail />

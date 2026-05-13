@@ -338,12 +338,24 @@ export function findToolCallResult(toolCallId: string, messages: Message[]) {
   return undefined;
 }
 
+const AGENT_ARTIFACT_HEADER_RE =
+  /^(?:#\s*)?(?:SESSION INTENT|SUMMARY|ARTIFACTS?)[\s\n]/i;
+
 export function isHiddenFromUIMessage(message: Message) {
-  return (
+  if (
     message.additional_kwargs?.hide_from_ui === true ||
     message.name === "summary" ||
     message.name === "loop_warning"
-  );
+  ) {
+    return true;
+  }
+  if (message.type === "ai" && !message.tool_calls?.length) {
+    const content = extractContentFromMessage(message);
+    if (content && AGENT_ARTIFACT_HEADER_RE.test(content)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

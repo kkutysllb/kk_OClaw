@@ -404,11 +404,15 @@ async def list_run_events(
 
 
 @router.get("/token-usage/stats")
-async def global_token_usage_stats(request: Request) -> dict:
+async def global_token_usage_stats(
+    request: Request,
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+) -> dict:
     """Global token usage statistics across all threads for the current user."""
     run_store = get_run_store(request)
     user_id = await get_current_user(request)
-    agg = await run_store.aggregate_tokens_global(user_id=user_id)
+    agg = await run_store.aggregate_tokens_global(user_id=user_id, year=year, month=month)
     return _resolve_unknown_models(agg, request)
 
 
@@ -416,11 +420,13 @@ async def global_token_usage_stats(request: Request) -> dict:
 async def token_usage_timeseries(
     request: Request,
     days: int = Query(default=30, ge=1, le=365),
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
 ) -> list[dict]:
     """Daily token usage breakdown by model, grouped by date."""
     run_store = get_run_store(request)
     user_id = await get_current_user(request)
-    items = await run_store.aggregate_tokens_timeseries(user_id=user_id, days=days)
+    items = await run_store.aggregate_tokens_timeseries(user_id=user_id, days=days, year=year, month=month)
     default_model = _get_default_model_name(request)
     if default_model:
         for item in items:

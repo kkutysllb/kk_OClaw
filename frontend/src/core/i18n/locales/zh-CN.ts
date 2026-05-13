@@ -177,6 +177,7 @@ export const zhCN: Translations = {
     channels: "渠道管理",
     mcp: "MCP 管理",
     crons: "定时任务",
+    tokenUsage: "Token 用量",
   },
 
   // Agents

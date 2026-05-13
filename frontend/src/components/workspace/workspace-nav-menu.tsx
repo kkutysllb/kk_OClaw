@@ -4,7 +4,6 @@ import {
   BellIcon,
   BrainIcon,
   ChevronsUpDown,
-  CoinsIcon,
   PaletteIcon,
   SettingsIcon,
   UserIcon,
@@ -33,19 +32,17 @@ type SettingsSection =
   | "appearance"
   | "memory"
   | "tools"
-  | "notification"
-  | "tokenUsage";
+  | "notification";
 
 const MENU_ITEMS: {
   id: SettingsSection;
   icon: typeof UserIcon;
   color: string;
-  labelKey: "account" | "appearance" | "memory" | "tools" | "notification" | "tokenUsage";
+  labelKey: "account" | "appearance" | "memory" | "tools" | "notification";
 }[] = [
   { id: "account", icon: UserIcon, color: "text-sky-500", labelKey: "account" },
   { id: "appearance", icon: PaletteIcon, color: "text-violet-500", labelKey: "appearance" },
   { id: "memory", icon: BrainIcon, color: "text-amber-500", labelKey: "memory" },
-  { id: "tokenUsage", icon: CoinsIcon, color: "text-emerald-500", labelKey: "tokenUsage" },
   { id: "tools", icon: WrenchIcon, color: "text-orange-500", labelKey: "tools" },
   { id: "notification", icon: BellIcon, color: "text-cyan-500", labelKey: "notification" },
 ];

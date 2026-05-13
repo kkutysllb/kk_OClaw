@@ -279,7 +279,7 @@ class CronScheduler:
         cron_thread_id = str(uuid.uuid4())
         await client.threads.create(thread_id=cron_thread_id)
 
-        config: dict[str, Any] = {}
+        config: dict[str, Any] = {"recursion_limit": 100}
         if model:
             config.setdefault("configurable", {})["model_name"] = model
         # Pass workspace_thread_id and workspace_user_id so that

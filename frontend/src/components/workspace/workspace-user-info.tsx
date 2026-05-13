@@ -1,9 +1,16 @@
 "use client";
 
-import { LogOutIcon, ShieldCheckIcon, UserIcon } from "lucide-react";
+import {
+  BellIcon,
+  BrainIcon,
+  LogOutIcon,
+  PaletteIcon,
+  ShieldCheckIcon,
+  UserIcon,
+  WrenchIcon,
+} from "lucide-react";
+import { useState } from "react";
 
-import { useAuth } from "@/core/auth/AuthProvider";
-import { useI18n } from "@/core/i18n/hooks";
 import {
   Avatar,
   AvatarFallback,
@@ -18,6 +25,30 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useAuth } from "@/core/auth/AuthProvider";
+import { useI18n } from "@/core/i18n/hooks";
+
+import { SettingsDialog } from "./settings";
+
+type SettingsSection =
+  | "account"
+  | "appearance"
+  | "memory"
+  | "tools"
+  | "notification";
+
+const SETTINGS_ITEMS: {
+  id: SettingsSection;
+  icon: typeof UserIcon;
+  color: string;
+  labelKey: "account" | "appearance" | "memory" | "tools" | "notification";
+}[] = [
+  { id: "account", icon: UserIcon, color: "text-sky-500", labelKey: "account" },
+  { id: "appearance", icon: PaletteIcon, color: "text-violet-500", labelKey: "appearance" },
+  { id: "memory", icon: BrainIcon, color: "text-amber-500", labelKey: "memory" },
+  { id: "tools", icon: WrenchIcon, color: "text-orange-500", labelKey: "tools" },
+  { id: "notification", icon: BellIcon, color: "text-cyan-500", labelKey: "notification" },
+];
 
 function getRoleLabel(
   role: string,
@@ -34,6 +65,9 @@ export function WorkspaceUserInfo() {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDefaultSection, setSettingsDefaultSection] = useState<SettingsSection>("appearance");
+
   if (!user) return null;
 
   const avatar = (
@@ -44,50 +78,76 @@ export function WorkspaceUserInfo() {
     </Avatar>
   );
 
-  const collapsedDropdown = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className="outline-none">
-          {avatar}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="end" className="min-w-52">
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col gap-1">
-            <p className="truncate text-sm font-medium">{user.email}</p>
-            <div className="flex items-center gap-1.5">
-              <ShieldCheckIcon className={user.system_role === "admin" ? "size-3.5 text-amber-500" : "size-3.5 text-slate-400"} />
-              <span className="text-muted-foreground text-xs">
-                {getRoleLabel(user.system_role, t)}
-              </span>
-            </div>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout}>
-          <LogOutIcon className="size-4 text-rose-500" />
-          {t.workspace.logout}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+  const settingsDialog = (
+    <SettingsDialog
+      open={settingsOpen}
+      onOpenChange={setSettingsOpen}
+      defaultSection={settingsDefaultSection}
+    />
   );
 
-  // Collapsed: avatar with logout dropdown
+  const settingsMenuItems = SETTINGS_ITEMS.map((item) => {
+    const Icon = item.icon;
+    return (
+      <DropdownMenuItem
+        key={item.id}
+        onClick={() => {
+          setSettingsDefaultSection(item.id);
+          setSettingsOpen(true);
+        }}
+      >
+        <Icon className={`size-4 ${item.color}`} />
+        {t.settings.sections[item.labelKey]}
+      </DropdownMenuItem>
+    );
+  });
+
+  const userInfoLabel = (
+    <DropdownMenuLabel className="font-normal">
+      <div className="flex flex-col gap-1">
+        <p className="truncate text-sm font-medium">{user.email}</p>
+        <div className="flex items-center gap-1.5">
+          <ShieldCheckIcon className={user.system_role === "admin" ? "size-3.5 text-amber-500" : "size-3.5 text-slate-400"} />
+          <span className="text-muted-foreground text-xs">
+            {getRoleLabel(user.system_role, t)}
+          </span>
+        </div>
+      </div>
+    </DropdownMenuLabel>
+  );
+
   if (isCollapsed) {
     return (
       <div className="px-2 pt-2">
         <Separator className="mb-2" />
         <div className="flex justify-center">
-          {collapsedDropdown}
+          {settingsDialog}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="outline-none">
+                {avatar}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="min-w-52">
+              {userInfoLabel}
+              <DropdownMenuSeparator />
+              {settingsMenuItems}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout}>
+                <LogOutIcon className="size-4 text-rose-500" />
+                {t.workspace.logout}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     );
   }
 
-  // Expanded: avatar + email + role with logout dropdown
   return (
     <div className="px-2 pt-2">
       <Separator className="mb-3" />
+      {settingsDialog}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
@@ -103,17 +163,9 @@ export function WorkspaceUserInfo() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="end" className="min-w-52">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col gap-1">
-              <p className="truncate text-sm font-medium">{user.email}</p>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheckIcon className={user.system_role === "admin" ? "size-3.5 text-amber-500" : "size-3.5 text-slate-400"} />
-                <span className="text-muted-foreground text-xs">
-                  {getRoleLabel(user.system_role, t)}
-                </span>
-              </div>
-            </div>
-          </DropdownMenuLabel>
+          {userInfoLabel}
+          <DropdownMenuSeparator />
+          {settingsMenuItems}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout}>
             <LogOutIcon className="size-4 text-rose-500" />

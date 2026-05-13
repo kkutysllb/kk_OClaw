@@ -20,16 +20,30 @@ export interface TokenUsageTimeseriesItem {
   model_name: string;
   run_count: number;
   total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface MonthFilter {
+  year: number;
+  month: number;
 }
 
 /**
  * Fetch global token usage statistics across all threads for the current user.
+ * Optionally filter by calendar month.
  */
-export async function fetchTokenUsageStats(): Promise<TokenUsageStats> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/threads/token-usage/stats`,
-    { method: "GET" },
-  );
+export async function fetchTokenUsageStats(
+  filter?: MonthFilter,
+): Promise<TokenUsageStats> {
+  const params = new URLSearchParams();
+  if (filter) {
+    params.set("year", String(filter.year));
+    params.set("month", String(filter.month));
+  }
+  const qs = params.toString();
+  const url = `${getBackendBaseURL()}/api/threads/token-usage/stats${qs ? `?${qs}` : ""}`;
+  const res = await fetch(url, { method: "GET" });
   if (!res.ok) {
     throw new Error(`Failed to fetch token usage stats: ${res.status}`);
   }
@@ -38,12 +52,19 @@ export async function fetchTokenUsageStats(): Promise<TokenUsageStats> {
 
 /**
  * Fetch daily token usage timeseries, grouped by date and model.
+ * Optionally filter by calendar month instead of rolling days window.
  */
 export async function fetchTokenUsageTimeseries(
   days = 30,
+  filter?: MonthFilter,
 ): Promise<TokenUsageTimeseriesItem[]> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (filter) {
+    params.set("year", String(filter.year));
+    params.set("month", String(filter.month));
+  }
   const res = await fetch(
-    `${getBackendBaseURL()}/api/threads/token-usage/timeseries?days=${days}`,
+    `${getBackendBaseURL()}/api/threads/token-usage/timeseries?${params}`,
     { method: "GET" },
   );
   if (!res.ok) {

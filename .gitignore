@@ -122,8 +122,13 @@ docker-compose.override.yaml
 # Database
 # ═══════════════════════════════════════
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
+
+# User memory data
+**/memory.json
 
 # ═══════════════════════════════════════
 # Temporary

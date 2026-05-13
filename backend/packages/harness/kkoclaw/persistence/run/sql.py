@@ -8,7 +8,7 @@ minutes -- we don't hold connections across long execution.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select, text, update
@@ -288,6 +288,8 @@ class RunRepository(RunStore):
         *,
         user_id: str | None = None,
         days: int = 30,
+        year: int | None = None,
+        month: int | None = None,
     ) -> list[dict[str, Any]]:
         """Return daily token usage breakdown grouped by date and model.
     
@@ -303,9 +305,19 @@ class RunRepository(RunStore):
         conditions = [_completed]
         if user_id is not None:
             conditions.append(RunRow.user_id == user_id)
-    
-        cutoff = datetime.now(UTC) - timedelta(days=days)
-        conditions.append(RunRow.created_at >= cutoff)
+
+        if year is not None and month is not None:
+            from calendar import monthrange
+            last_day = monthrange(year, month)[1]
+            start_local = datetime(year, month, 1)
+            end_local = datetime(year, month, last_day, 23, 59, 59)
+            start_utc = start_local - timedelta(hours=tz_offset)
+            end_utc = end_local - timedelta(hours=tz_offset)
+            conditions.append(RunRow.created_at >= start_utc)
+            conditions.append(RunRow.created_at <= end_utc)
+        else:
+            cutoff = datetime.now(UTC) - timedelta(days=days)
+            conditions.append(RunRow.created_at >= cutoff)
     
         # Convert UTC created_at to local timezone before extracting date.
         # SQLite: datetime(col, '+N hours'); PostgreSQL would use date_trunc.
@@ -320,6 +332,8 @@ class RunRepository(RunStore):
                 model_col,
                 func.count().label("run_count"),
                 func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
+                func.coalesce(func.sum(RunRow.total_input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(RunRow.total_output_tokens), 0).label("output_tokens"),
             )
             .where(*conditions)
             .group_by(date_col, model_col)
@@ -335,6 +349,8 @@ class RunRepository(RunStore):
                 "model_name": r.model,
                 "run_count": r.run_count,
                 "total_tokens": r.total_tokens,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
             }
             for r in rows
         ]
@@ -343,6 +359,8 @@ class RunRepository(RunStore):
         self,
         *,
         user_id: str | None = None,
+        year: int | None = None,
+        month: int | None = None,
     ) -> dict[str, Any]:
         """Aggregate token usage across all threads.
 
@@ -352,6 +370,16 @@ class RunRepository(RunStore):
         conditions = [_completed]
         if user_id is not None:
             conditions.append(RunRow.user_id == user_id)
+        if year is not None and month is not None:
+            from calendar import monthrange
+            last_day = monthrange(year, month)[1]
+            start_local = datetime(year, month, 1)
+            end_local = datetime(year, month, last_day, 23, 59, 59)
+            tz_offset = get_local_tz_offset_hours()
+            start_utc = start_local - timedelta(hours=tz_offset)
+            end_utc = end_local - timedelta(hours=tz_offset)
+            conditions.append(RunRow.created_at >= start_utc)
+            conditions.append(RunRow.created_at <= end_utc)
 
         stmt = (
             select(

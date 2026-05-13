@@ -183,6 +183,7 @@ export const enUS: Translations = {
     channels: "Channels",
         mcp: "MCP",
     crons: "Cron Jobs",
+    tokenUsage: "Token Usage",
   },
 
   // Agents
