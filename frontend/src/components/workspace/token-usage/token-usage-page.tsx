@@ -213,17 +213,17 @@ function ModelSection({
 
       {/* Charts grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Tokens area chart */}
+        {/* API calls area chart */}
         <div>
-          <div className="text-xs text-muted-foreground mb-1">Tokens 用量</div>
+          <div className="text-xs text-muted-foreground mb-1">API 请求次数</div>
           {tsData.length > 0 ? (
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                   <defs>
-                    <linearGradient id={`area-tokens-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0} />
+                    <linearGradient id={`area-calls-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -236,27 +236,26 @@ function ModelSection({
                     tickFormatter={formatShortDate}
                   />
                   <YAxis
-                    tick={{ ...chartTickStyle, fontSize: 10 }}
+                    tick={chartTickStyle}
                     axisLine={false}
                     tickLine={false}
                     width={36}
-                    tickFormatter={(v: number) => fmtNum(v)}
                   />
                   <Tooltip
                     cursor={{ fill: "transparent" }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: "var(--foreground)" }}
                     labelFormatter={formatShortDate}
-                    formatter={(value) => [formatTokenCount(Number(value)), "Tokens"]}
+                    formatter={(value) => [String(value), "请求次数"]}
                   />
                   <Area
                     type="monotone"
-                    dataKey="total_tokens"
-                    stroke={color}
+                    dataKey="run_count"
+                    stroke="#f59e0b"
                     strokeWidth={2}
-                    fill={`url(#area-tokens-${colorIdx})`}
+                    fill={`url(#area-calls-${colorIdx})`}
                     dot={false}
-                    activeDot={{ r: 4, fill: color }}
+                    activeDot={{ r: 4, fill: "#f59e0b" }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -306,58 +305,6 @@ function ModelSection({
             </div>
           ) : (
             <div className="flex items-center justify-center h-[200px] text-muted-foreground text-xs">暂无数据</div>
-          )}
-        </div>
-
-        {/* API calls area chart (full width) */}
-        <div className="lg:col-span-2">
-          <div className="text-xs text-muted-foreground mb-1">API 请求次数</div>
-          {tsData.length > 0 ? (
-            <div className="h-[180px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                  <defs>
-                    <linearGradient id={`area-calls-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={chartTickStyle}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={labelInterval ?? "preserveStartEnd"}
-                    tickFormatter={formatShortDate}
-                  />
-                  <YAxis
-                    tick={chartTickStyle}
-                    axisLine={false}
-                    tickLine={false}
-                    width={36}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "transparent" }}
-                    contentStyle={tooltipStyle}
-                    labelStyle={{ color: "var(--foreground)" }}
-                    labelFormatter={formatShortDate}
-                    formatter={(value) => [String(value), "请求次数"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="run_count"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    fill={`url(#area-calls-${colorIdx})`}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#f59e0b" }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-[180px] text-muted-foreground text-xs">暂无数据</div>
           )}
         </div>
       </div>

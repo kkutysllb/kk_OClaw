@@ -159,3 +159,6 @@ skills/public/analysis-report/
 # Crontab Configure
 # ═══════════════════════════════════════
 cron_config.json
+
+# ═══════════════════════════════════════
+.sisyphus/
