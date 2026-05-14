@@ -349,6 +349,10 @@ export function isHiddenFromUIMessage(message: Message) {
   ) {
     return true;
   }
+  // Filter out middleware messages from real-time stream
+  if ((message as Record<string, unknown>)?.metadata?.caller?.startsWith("middleware:")) {
+    return true;
+  }
   if (message.type === "ai" && !message.tool_calls?.length) {
     const content = extractContentFromMessage(message);
     if (content && AGENT_ARTIFACT_HEADER_RE.test(content)) {

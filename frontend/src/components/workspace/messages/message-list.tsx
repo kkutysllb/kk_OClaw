@@ -166,7 +166,11 @@ export function MessageList({
   const { t } = useI18n();
   const rehypePlugins = useRehypeSplitWordsIntoSpans(thread.isLoading);
   const updateSubtask = useUpdateSubtask();
-  const messages = thread.messages;
+  // Filter out middleware messages from real-time stream
+  const messages = thread.messages.filter((msg) => {
+    const metadata = (msg as Record<string, unknown>)?.metadata;
+    return !metadata?.caller?.startsWith("middleware:");
+  });
 
   if (thread.isThreadLoading && messages.length === 0) {
     return <MessageListSkeleton />;

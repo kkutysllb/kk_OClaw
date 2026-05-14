@@ -502,9 +502,14 @@ export function useThreadStream({
     messagesRef.current = thread.messages;
   }
 
+  // Filter out middleware messages from thread.messages before merging
+  const filteredThreadMessages = thread.messages.filter(
+    (msg) => !(msg as Record<string, unknown>)?.metadata?.caller?.startsWith("middleware:")
+  );
+
   const mergedMessages = mergeMessages(
     history,
-    thread.messages,
+    filteredThreadMessages,
     optimisticMessages,
   );
 

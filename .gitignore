@@ -162,3 +162,4 @@ cron_config.json
 
 # ═══════════════════════════════════════
 .sisyphus/
+.claude/
