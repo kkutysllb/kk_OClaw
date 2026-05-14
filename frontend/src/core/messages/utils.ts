@@ -350,7 +350,8 @@ export function isHiddenFromUIMessage(message: Message) {
     return true;
   }
   // Filter out middleware messages from real-time stream
-  if ((message as Record<string, unknown>)?.metadata?.caller?.startsWith("middleware:")) {
+  const meta = (message as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
+  if (typeof meta?.caller === "string" && meta.caller.startsWith("middleware:")) {
     return true;
   }
   if (message.type === "ai" && !message.tool_calls?.length) {

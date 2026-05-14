@@ -168,8 +168,8 @@ export function MessageList({
   const updateSubtask = useUpdateSubtask();
   // Filter out middleware messages from real-time stream
   const messages = thread.messages.filter((msg) => {
-    const metadata = (msg as Record<string, unknown>)?.metadata;
-    return !metadata?.caller?.startsWith("middleware:");
+    const metadata = (msg as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
+    return !(typeof metadata?.caller === "string" && metadata.caller.startsWith("middleware:"));
   });
 
   if (thread.isThreadLoading && messages.length === 0) {
