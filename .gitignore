@@ -107,6 +107,9 @@ extensions_config.json
 # Custom skills (user-created, not tracked)
 skills/custom/
 
+# Third-party skill packages (installed locally)
+skills/iwencai-skillhub/
+
 # ═══════════════════════════════════════
 # Claude / Qoder local settings
 # ═══════════════════════════════════════
