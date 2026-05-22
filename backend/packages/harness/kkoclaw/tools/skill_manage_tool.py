@@ -78,7 +78,7 @@ async def _skill_manage_impl(
 
     Args:
         action: One of create, patch, edit, delete, write_file, remove_file.
-        name: Skill name in hyphen-case.
+        name: Skill name. Auto-normalised to hyphen-case (lowercase, hyphens).
         content: New file content for create, edit, or write_file.
         path: Supporting file path for write_file or remove_file.
         find: Existing text to replace for patch.
@@ -217,7 +217,7 @@ async def skill_manage_tool(
 
     Args:
         action: One of create, patch, edit, delete, write_file, remove_file.
-        name: Skill name in hyphen-case.
+        name: Skill name. Will be auto-normalised to hyphen-case (lowercase, hyphens instead of underscores/spaces). Examples: "my-skill", "data_analyzer" -> "data-analyzer".
         content: New file content for create, edit, or write_file.
         path: Supporting file path for write_file or remove_file.
         find: Existing text to replace for patch.

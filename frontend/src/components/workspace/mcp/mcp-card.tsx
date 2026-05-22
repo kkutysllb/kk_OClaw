@@ -17,12 +17,14 @@ const TYPE_ICONS: Record<string, string> = {
   stdio: "bg-emerald-500/10 text-emerald-500",
   sse: "bg-blue-500/10 text-blue-500",
   http: "bg-purple-500/10 text-purple-500",
+  "streamable-http": "bg-purple-500/10 text-purple-500",
 };
 
 const TYPE_LABELS: Record<string, string> = {
   stdio: "STDIO",
   sse: "SSE",
   http: "HTTP",
+  "streamable-http": "HTTP",
 };
 
 interface McpCardProps {
@@ -82,7 +84,7 @@ export function McpCard({ name, config, onEdit, onDelete }: McpCardProps) {
             <span className="truncate">$ {config.command} {(config.args ?? []).join(" ")}</span>
           </>
         )}
-        {(transportType === "sse" || transportType === "http") && config.url && (
+        {(transportType === "sse" || transportType === "http" || transportType === "streamable-http") && config.url && (
           <>
             <LinkIcon className="size-3" />
             <span className="truncate">{config.url}</span>

@@ -37,12 +37,14 @@ const TYPE_GRADIENTS: Record<string, string> = {
   stdio: "from-emerald-400 to-teal-400",
   sse: "from-blue-400 to-cyan-400",
   http: "from-purple-400 to-fuchsia-400",
+  "streamable-http": "from-purple-400 to-fuchsia-400",
 };
 
 const TYPE_ICONS: Record<string, string> = {
   stdio: "bg-emerald-500/10 text-emerald-500",
   sse: "bg-blue-500/10 text-blue-500",
   http: "bg-purple-500/10 text-purple-500",
+  "streamable-http": "bg-purple-500/10 text-purple-500",
 };
 
 const labelCls =
@@ -170,7 +172,7 @@ export function McpDialog({
     }
   }, [open, isEdit, name, config]);
 
-  const isHttpTransport = transportType === "sse" || transportType === "http";
+  const isHttpTransport = transportType === "sse" || transportType === "http" || transportType === "streamable-http";
 
   // Detect if env/headers contain backend-masked values (for security hint)
   const envHasMasked = isEdit && hasMaskedValues(config?.env);

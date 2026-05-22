@@ -29,9 +29,12 @@ def build_server_params(server_name: str, config: McpServerConfig) -> dict[str, 
         # Add environment variables if present
         if config.env:
             params["env"] = config.env
-    elif transport_type in ("sse", "http"):
+    elif transport_type in ("sse", "http", "streamable-http", "streamable_http"):
         if not config.url:
             raise ValueError(f"MCP server '{server_name}' with {transport_type} transport requires 'url' field")
+        # Normalise "streamable-http" / "streamable_http" to "http" for langchain-mcp-adapters
+        if transport_type in ("streamable-http", "streamable_http"):
+            params["transport"] = "http"
         params["url"] = config.url
         # Add headers if present
         if config.headers:

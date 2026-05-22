@@ -81,9 +81,11 @@ def _build_acp_mcp_servers() -> list[dict[str, Any]]:
             payload["command"] = server_config.command
             payload["args"] = server_config.args
             payload["env"] = [{"name": key, "value": value} for key, value in server_config.env.items()]
-        elif transport_type in ("http", "sse"):
+        elif transport_type in ("http", "sse", "streamable-http", "streamable_http"):
             if not server_config.url:
                 raise ValueError(f"MCP server '{name}' with {transport_type} transport requires 'url' field")
+            if transport_type in ("streamable-http", "streamable_http"):
+                payload["type"] = "http"
             payload["url"] = server_config.url
             payload["headers"] = [{"name": key, "value": value} for key, value in server_config.headers.items()]
         else:

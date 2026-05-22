@@ -33,10 +33,25 @@ class SkillStorage(ABC):
 
     @staticmethod
     def validate_skill_name(name: str) -> str:
-        """Validate and normalise a skill name; return the normalised form."""
+        """Validate and normalise a skill name; return the normalised form.
+
+        Applies automatic normalisation before validation:
+        - Strips leading/trailing whitespace
+        - Converts uppercase letters to lowercase
+        - Replaces underscores and spaces with hyphens
+        - Collapses consecutive hyphens into a single hyphen
+        """
         normalized = name.strip()
+        # Auto-normalise common non-hyphen-case patterns
+        normalized = normalized.lower()
+        normalized = re.sub(r"[\s_]+", "-", normalized)  # spaces & underscores → hyphens
+        normalized = re.sub(r"-{2,}", "-", normalized)   # collapse consecutive hyphens
+        normalized = normalized.strip("-")                 # remove leading/trailing hyphens
         if not _SKILL_NAME_PATTERN.fullmatch(normalized):
-            raise ValueError("Skill name must be hyphen-case using lowercase letters, digits, and hyphens only.")
+            raise ValueError(
+                "Skill name must be hyphen-case using lowercase letters, digits, and hyphens only. "
+                f"Received: '{name}'"
+            )
         if len(normalized) > 64:
             raise ValueError("Skill name must be 64 characters or fewer.")
         return normalized
