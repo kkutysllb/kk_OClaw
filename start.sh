@@ -8,6 +8,7 @@
 #   ./start.sh restart [服务] [模式] 重启服务（默认: all dev）
 #   ./start.sh status               查看服务运行状态
 #   ./start.sh logs [service]       查看服务日志
+#   ./start.sh clean [级别]         清理构建物和缓存资源
 #
 # 服务:
 #   all        所有服务（默认）
@@ -158,6 +159,7 @@ show_help() {
     echo "  restart [服务] [模式] 重启服务（默认: all dev）"
     echo "  status               查看服务运行状态"
     echo "  logs [service]       查看服务日志"
+    echo "  clean [级别]         清理构建物和缓存资源 (cache|build|all)"
     echo ""
     echo "服务:"
     echo "  all        所有服务（默认）"
@@ -183,6 +185,17 @@ show_help() {
     echo "  ./start.sh status                   # 查看状态"
     echo "  ./start.sh logs                     # 查看所有日志"
     echo "  ./start.sh logs gateway             # 仅查看 Gateway 日志"
+    echo ""
+    echo "清理级别:"
+    echo "  cache       清理缓存文件（Python缓存、前端缓存、日志）"
+    echo "  build       清理构建产物（前端.next、后端构建缓存）+ cache"
+    echo "  all         深度清理（含node_modules/.cache、.kkoclaw运行数据）+ build"
+    echo "  (默认)      等同于 cache"
+    echo ""
+    echo "清理示例:"
+    echo "  ./start.sh clean               # 清理缓存"
+    echo "  ./start.sh clean build         # 清理构建产物"
+    echo "  ./start.sh clean all           # 深度清理"
 }
 
 # ── 单独停止服务 ──────────────────────────────────────────────────────────
@@ -433,6 +446,115 @@ show_logs() {
     esac
 }
 
+# ── 清理资源 ─────────────────────────────────────────────────────────────────
+
+clean_resources() {
+    local level="${1:-cache}"
+
+    _banner
+    echo -e "  ${BOLD}清理级别:${NC} $level"
+    echo ""
+
+    # ── 共通: 先停止所有服务 ────────────────────────────────────────────────
+    _info "停止所有服务..."
+    stop_all >/dev/null 2>&1 || true
+
+    local total_freed=0
+
+    # ── 辅助: 计算目录大小(MB) ─────────────────────────────────────────────
+    _dir_size_mb() {
+        if [ -d "$1" ]; then
+            du -sm "$1" 2>/dev/null | cut -f1
+        else
+            echo 0
+        fi
+    }
+
+    # ── 辅助: 删除并报告 ─────────────────────────────────────────────────
+    _rm_report() {
+        local target="$1" label="$2"
+        local size
+        size=$(_dir_size_mb "$target")
+        if [ -e "$target" ]; then
+            rm -rf "$target"
+            _ok "已清理 ${label} (${size}MB)"
+            total_freed=$((total_freed + size))
+        else
+            _info "跳过 ${label} (不存在)"
+        fi
+    }
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Level 1: cache — Python/前端缓存 + 日志 + 临时文件
+    # ═══════════════════════════════════════════════════════════════════════
+    _info "[cache] 清理缓存文件..."
+
+    # Python 缓存
+    find backend -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+    find backend -type f -name '*.pyc' -delete 2>/dev/null || true
+    _rm_report "backend/.pytest_cache" "Python pytest 缓存"
+
+    # 前端 ESLint/Prettier 缓存
+    _rm_report "frontend/.eslintcache" "ESLint 缓存"
+
+    # 日志文件（清空而非删除，保留文件）
+    for log in "$LOG_DIR"/*.log; do
+        if [ -f "$log" ]; then
+            local log_size
+            log_size=$(du -sm "$log" 2>/dev/null | cut -f1)
+            :> "$log"
+            total_freed=$((total_freed + log_size))
+        fi
+    done
+    _ok "已清空日志文件"
+
+    # Nginx 临时文件
+    _rm_report "$REPO_ROOT/temp" "Nginx 临时文件"
+
+    # PID 文件
+    _rm_report "$PID_DIR" "PID 文件"
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Level 2: build — 前端构建产物 + TypeScript 构建信息 (包含 cache)
+    # ═══════════════════════════════════════════════════════════════════════
+    if [ "$level" = "build" ] || [ "$level" = "all" ]; then
+        _info "[build] 清理构建产物..."
+
+        # 前端 .next 构建缓存
+        _rm_report "frontend/.next" "前端 .next 构建缓存"
+        _rm_report "frontend/tsconfig.tsbuildinfo" "TypeScript 构建信息"
+
+        # 前端输出目录
+        _rm_report "frontend/out" "前端静态导出"
+    fi
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Level 3: all — 深度清理 (包含 build + cache)
+    # ═══════════════════════════════════════════════════════════════════════
+    if [ "$level" = "all" ]; then
+        _info "[all] 深度清理..."
+
+        # 前端 node_modules 缓存
+        _rm_report "frontend/node_modules/.cache" "node_modules 缓存"
+
+        # 运行时用户数据（线程、内存等）
+        _rm_report ".kkoclaw" "KKOCLAW 运行时数据"
+
+        # 沙箱容器清理
+        _info "清理沙箱容器..."
+        "$REPO_ROOT/scripts/cleanup-containers.sh" kkoclaw-sandbox 2>/dev/null || true
+    fi
+
+    # ── 汇总 ────────────────────────────────────────────────────────────────
+    echo ""
+    echo -e "${GREEN}${BOLD}=========================================="
+    echo -e "  \u2713 清理完成!  共释放约 ${total_freed}MB"
+    echo -e "==========================================${NC}"
+    echo ""
+    echo "  提示: 运行 './start.sh start' 重新启动服务"
+    echo ""
+}
+
 # ── 生成 Nginx 配置 ──────────────────────────────────────────────────────────
 
 generate_nginx_config() {
@@ -576,6 +698,20 @@ case "$COMMAND" in
 
     logs)
         show_logs "${2:-all}"
+        ;;
+
+    clean)
+        case "${2:-cache}" in
+            cache|build|all)
+                clean_resources "${2:-cache}"
+                ;;
+            *)
+                _err "未知清理级别: ${2} (可选: cache, build, all)"
+                echo ""
+                echo "用法: ./start.sh clean [cache|build|all]"
+                exit 1
+                ;;
+        esac
         ;;
 
     -h|--help|help)
