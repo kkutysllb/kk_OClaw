@@ -27,6 +27,7 @@
 #   ./start.sh stop                     # 停止所有服务
 #   ./start.sh stop gateway             # 仅停止 Gateway
 #   ./start.sh restart frontend         # 重启 Frontend
+#   ./start.sh restart gateway          # 重启 Gateway
 #   ./start.sh status                   # 查看状态
 #   ./start.sh logs                     # 查看所有日志
 #   ./start.sh logs gateway             # 仅查看 Gateway 日志
