@@ -245,3 +245,104 @@ def test_subagent_runtime_middlewares_skip_view_image_for_text_model(monkeypatch
     middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name="test-model")
 
     assert not any(isinstance(middleware, ViewImageMiddleware) for middleware in middlewares)
+
+
+class TestUnrecoverableErrorMessages:
+    """Tests for unrecoverable error detection in ToolErrorHandlingMiddleware."""
+
+    middleware: ToolErrorHandlingMiddleware
+
+    def setup_method(self):
+        self.middleware = ToolErrorHandlingMiddleware()
+
+    def test_unrecoverable_skill_already_exists(self):
+        """Skill already exists errors should produce UNRECOVERABLE message."""
+        req = _request(name="skill_manage", tool_call_id="tc-u1")
+
+        def _boom(_req):
+            raise ValueError("Custom skill 'kk-industry-analysis' already exists.")
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" in result.text
+        assert "Do NOT call this tool again" in result.text
+
+    def test_unrecoverable_frontmatter_keys(self):
+        """Frontmatter validation errors should produce UNRECOVERABLE message."""
+        req = _request(name="skill_manage", tool_call_id="tc-u2")
+
+        def _boom(_req):
+            raise ValueError(
+                "Unexpected key(s) in SKILL.md frontmatter: capabilities, inputs, tags"
+            )
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" in result.text
+
+    def test_unrecoverable_security_scan_blocked(self):
+        """Security scan block should produce UNRECOVERABLE message."""
+        req = _request(name="skill_manage", tool_call_id="tc-u3")
+
+        def _boom(_req):
+            raise ValueError("Security scan blocked the write: dangerous content")
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" in result.text
+
+    def test_unrecoverable_support_path(self):
+        """Support path errors should produce UNRECOVERABLE message."""
+        req = _request(name="skill_manage", tool_call_id="tc-u4")
+
+        def _boom(_req):
+            raise ValueError(
+                "Supporting files must live under one of: assets, references, scripts, templates"
+            )
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" in result.text
+
+    def test_normal_error_standard_message(self):
+        """Normal (recoverable) errors should use the standard message."""
+        req = _request(name="web_search", tool_call_id="tc-normal")
+
+        def _boom(_req):
+            raise RuntimeError("network timeout")
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" not in result.text
+        assert "Continue with available context" in result.text
+
+    def test_normal_error_not_misclassified(self):
+        """Generic errors should NOT be flagged as unrecoverable."""
+        req = _request(name="bash", tool_call_id="tc-n2")
+
+        def _boom(_req):
+            raise OSError("command not found")
+
+        result = self.middleware.wrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert "UNRECOVERABLE ERROR" not in result.text
+
+    @pytest.mark.anyio
+    async def test_async_unrecoverable_error(self):
+        """Async path also produces UNRECOVERABLE messages."""
+        req = _request(name="skill_manage", tool_call_id="tc-async-u")
+
+        async def _boom(_req):
+            raise ValueError(
+                "Security scan rejected executable content: dangerous script"
+            )
+
+        result = await self.middleware.awrap_tool_call(req, _boom)
+        assert isinstance(result, ToolMessage)
+        assert result.status == "error"
+        assert "UNRECOVERABLE ERROR" in result.text

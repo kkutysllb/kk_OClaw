@@ -11,6 +11,7 @@ from kkoclaw.agents.middlewares.sandbox_audit_middleware import (
     SandboxAuditMiddleware,
     _classify_command,
     _split_compound_command,
+    _strip_heredoc_bodies,
 )
 
 # ---------------------------------------------------------------------------
@@ -291,6 +292,154 @@ class TestValidateInput:
 
     def test_null_byte_at_end_rejected(self):
         assert self.mw._validate_input("ls\x00") == "null byte detected"
+
+
+# ---------------------------------------------------------------------------
+# _strip_heredoc_bodies unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestStripHeredocBodies:
+    """Unit tests for _strip_heredoc_bodies()."""
+
+    def test_no_heredoc_passthrough(self):
+        cmd = "ls -la /tmp"
+        assert _strip_heredoc_bodies(cmd) == cmd
+
+    def test_herestring_not_stripped(self):
+        """Here-strings (<<<) are inherently short and should not be stripped."""
+        cmd = 'grep pattern <<< "some short text"'
+        assert _strip_heredoc_bodies(cmd) == cmd
+
+    def test_basic_heredoc_unquoted_delim(self):
+        cmd = "cat << EOF\nline1\nline2\nEOF"
+        result = _strip_heredoc_bodies(cmd)
+        assert "<< EOF" in result
+        assert "<" in result and "bytes of heredoc content" in result
+        assert "line1" not in result
+        assert "EOF" in result  # closing delimiter preserved
+
+    def test_heredoc_single_quoted_delim(self):
+        cmd = "cat << 'EOF'\nline1\nline2\nEOF"
+        result = _strip_heredoc_bodies(cmd)
+        assert "<< 'EOF'" in result
+        assert "line1" not in result
+
+    def test_heredoc_double_quoted_delim(self):
+        cmd = 'cat << "EOF"\nline1\nline2\nEOF'
+        result = _strip_heredoc_bodies(cmd)
+        assert '<< "EOF"' in result
+        assert "line1" not in result
+
+    def test_heredoc_tab_stripping(self):
+        cmd = "cat <<-EOF\n\tbody\n\tEOF"
+        result = _strip_heredoc_bodies(cmd)
+        assert "<<-EOF" in result
+        assert "body" not in result
+        assert "EOF" in result
+
+    def test_multiple_heredocs(self):
+        cmd = "cat << EOF1\nbody1\nEOF1\ncat << EOF2\nbody2\nEOF2"
+        result = _strip_heredoc_bodies(cmd)
+        assert "body1" not in result
+        assert "body2" not in result
+        assert "EOF1" in result
+        assert "EOF2" in result
+
+    def test_long_heredoc_body_reduced(self):
+        """A 20K heredoc body should be replaced with a short placeholder."""
+        body = "x" * 20_000
+        cmd = f"cat << EOF\n{body}\nEOF"
+        result = _strip_heredoc_bodies(cmd)
+        assert len(result) < 200  # drastically smaller
+        assert "cat << EOF" in result
+        assert f"{len(body) + 2} bytes of heredoc content" in result
+
+    def test_unclosed_heredoc_kept_intact(self):
+        """Unclosed heredoc should be kept as-is (fail-safe)."""
+        cmd = "cat << EOF\nline1\nline2"
+        result = _strip_heredoc_bodies(cmd)
+        # With no closing delimiter, the function keeps the marker and everything after
+        assert "line1" in result
+
+    def test_heredoc_with_delimiter_like_lines(self):
+        """Lines that look like the delimiter inside the body should not confuse."""
+        cmd = "cat << EOF\nnot the end\nEOF\nEOF"
+        result = _strip_heredoc_bodies(cmd)
+        # Only the body is stripped; the closing EOF on its own line is preserved
+        assert "not the end" not in result
+        # The closing EOF line should be in the result
+        assert result.count("EOF") >= 1  # closing delimiter still present
+
+
+# ---------------------------------------------------------------------------
+# _validate_input with heredoc integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateInputWithHeredoc:
+    """Verify that _validate_input correctly handles heredoc commands."""
+
+    def setup_method(self):
+        self.mw = SandboxAuditMiddleware()
+
+    def test_long_heredoc_accepted(self):
+        """Heredoc command with body exceeding 10K should be accepted."""
+        body = "x" * 15_000
+        cmd = f"cat << 'EOF'\n{body}\nEOF"
+        assert self.mw._validate_input(cmd) is None
+
+    def test_non_heredoc_long_still_rejected(self):
+        """Non-heredoc commands exceeding 10K should still be rejected."""
+        cmd = "echo " + "a" * 10_001
+        assert self.mw._validate_input(cmd) == "command too long"
+
+    def test_heredoc_with_real_world_script(self):
+        """Simulate writing a large Python file via heredoc."""
+        script_body = "\n".join(
+            f"# Line {i}: print('hello world')  # padding to make line longer"
+            for i in range(400)
+        )
+        cmd = f"cat << 'PYEOF' > /mnt/user-data/workspace/script.py\n{script_body}\nPYEOF"
+        assert len(cmd) > 10_000, "Test precondition: command should exceed 10K"
+        assert self.mw._validate_input(cmd) is None
+
+
+# ---------------------------------------------------------------------------
+# wrap_tool_call heredoc integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestWrapToolCallWithHeredoc:
+    """Verify wrap_tool_call handles long heredoc commands correctly."""
+
+    def setup_method(self):
+        self.mw = SandboxAuditMiddleware()
+
+    def test_long_heredoc_passes_to_handler(self):
+        """A long heredoc command should pass through to the handler."""
+        body = "x" * 15_000
+        cmd = f"cat << 'EOF' > /tmp/test.txt\n{body}\nEOF"
+        request = _make_request(cmd)
+        handler = _make_handler()
+        result = self.mw.wrap_tool_call(request, handler)
+        assert handler.called, "Handler should be called for long heredoc"
+        assert result.content == "ok"
+
+    def test_long_heredoc_audit_log_stripped(self):
+        """Audit log for heredoc commands should use stripped version."""
+        body = "x" * 15_000
+        cmd = f"cat << 'EOF' > /tmp/test.txt\n{body}\nEOF"
+        request = _make_request(cmd)
+        handler = _make_handler()
+        with unittest.mock.patch.object(self.mw, "_write_audit", wraps=self.mw._write_audit) as spy:
+            self.mw.wrap_tool_call(request, handler)
+            spy.assert_called_once()
+            args, _ = spy.call_args
+            audited_cmd = args[1]
+            # The audited command should be the stripped version
+            assert "bytes of heredoc content" in audited_cmd
+            assert "xxxxx" not in audited_cmd  # body data stripped
 
 
 class TestInputSanitisationBlocksInWrapToolCall:

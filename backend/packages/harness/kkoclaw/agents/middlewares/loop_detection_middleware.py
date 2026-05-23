@@ -3,18 +3,22 @@
 P0 safety: prevents the agent from calling the same tool with the same
 arguments indefinitely until the recursion limit kills the run.
 
-Detection strategy:
-  1. After each model response, hash the tool calls (name + args).
-  2. Track recent hashes in a sliding window.
-  3. If the same hash appears >= warn_threshold times, inject a
-     "you are repeating yourself — wrap up" system message (once per hash).
-  4. If it appears >= hard_limit times, strip all tool_calls from the
-     response so the agent is forced to produce a final text answer.
+Detection strategy (three layers):
+  1. **Hash-based**: After each model response, hash the tool calls
+     (name + args).  If the same hash appears >= warn_threshold times,
+     inject a warning; if >= hard_limit, strip all tool_calls.
+  2. **Frequency-based**: Track per-tool-type cumulative call counts.
+     Catches cross-file read loops that hash-based detection misses.
+  3. **Error-based convergence** (NEW): Scan recent tool results for
+     persistent *unrecoverable* error patterns.  When the agent keeps
+     hitting the same unfixable error, trigger forced stop earlier
+     than the frequency-based limit would.
 """
 
 import hashlib
 import json
 import logging
+import re
 import threading
 from collections import OrderedDict, defaultdict
 from copy import deepcopy
@@ -33,6 +37,22 @@ _DEFAULT_WINDOW_SIZE = 20  # track last N tool calls
 _DEFAULT_MAX_TRACKED_THREADS = 100  # LRU eviction limit
 _DEFAULT_TOOL_FREQ_WARN = 80  # warn after 80 calls to the same tool type
 _DEFAULT_TOOL_FREQ_HARD_LIMIT = 150  # force-stop after 150 calls to the same tool type
+
+# Layer 3: error-based early convergence defaults
+_DEFAULT_ERROR_ROUND_THRESHOLD = 8  # force-stop after N error rounds
+_DEFAULT_ERROR_ROUND_WINDOW = 15  # look back N rounds for error patterns
+
+# Patterns that indicate a tool error cannot be recovered by retrying
+# (mirrored from tool_error_handling_middleware for Layer 3 detection)
+_UNRECOVERABLE_ERROR_PATTERNS: list[re.Pattern] = [
+    re.compile(r"Custom skill '.+' already exists"),
+    re.compile(r"Unexpected key.*in SKILL\.md frontmatter"),
+    re.compile(r"Access denied.*outside allowed"),
+    re.compile(r"Security scan rejected"),
+    re.compile(r"Security scan blocked"),
+    re.compile(r"Supporting files must live under one of"),
+    re.compile(r"Supporting file path must"),
+]
 
 
 def _normalize_tool_call_args(raw_args: object) -> tuple[dict, str | None]:
@@ -135,9 +155,18 @@ _HARD_STOP_MSG = "[FORCED STOP] Repeated tool calls exceeded the safety limit. P
 
 _TOOL_FREQ_HARD_STOP_MSG = "[FORCED STOP] Tool {tool_name} called {count} times — exceeded the per-tool safety limit. Producing final answer with results collected so far."
 
+_ERROR_CONVERGENCE_HARD_STOP_MSG = "[FORCED STOP] Persistent unrecoverable errors detected ({count} error rounds in the last {window} rounds). This approach cannot succeed — produce a final summary now."
+
 
 class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
     """Detects and breaks repetitive tool call loops.
+
+    Three detection layers (checked in order):
+
+    1. **Hash-based**: identical tool call sets.
+    2. **Frequency-based**: same tool type called too many times.
+    3. **Error-based convergence**: persistent unrecoverable
+       tool errors in recent rounds → early forced stop.
 
     Args:
         warn_threshold: Number of identical tool call sets before injecting
@@ -151,9 +180,14 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         tool_freq_warn: Number of calls to the same tool *type* (regardless
             of arguments) before injecting a frequency warning. Catches
             cross-file read loops that hash-based detection misses.
-            Default: 30.
+            Default: 80.
         tool_freq_hard_limit: Number of calls to the same tool type before
-            forcing a stop. Default: 50.
+            forcing a stop. Default: 150.
+        error_round_threshold: Number of error rounds with unrecoverable
+            patterns before triggering early forced stop via Layer 3.
+            Default: 8.
+        error_round_window: Number of recent tool result rounds to scan
+            for persistent error patterns. Default: 15.
     """
 
     def __init__(
@@ -164,6 +198,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         max_tracked_threads: int = _DEFAULT_MAX_TRACKED_THREADS,
         tool_freq_warn: int = _DEFAULT_TOOL_FREQ_WARN,
         tool_freq_hard_limit: int = _DEFAULT_TOOL_FREQ_HARD_LIMIT,
+        error_round_threshold: int = _DEFAULT_ERROR_ROUND_THRESHOLD,
+        error_round_window: int = _DEFAULT_ERROR_ROUND_WINDOW,
     ):
         super().__init__()
         self.warn_threshold = warn_threshold
@@ -172,6 +208,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         self.max_tracked_threads = max_tracked_threads
         self.tool_freq_warn = tool_freq_warn
         self.tool_freq_hard_limit = tool_freq_hard_limit
+        self.error_round_threshold = error_round_threshold
+        self.error_round_window = error_round_window
         self._lock = threading.Lock()
         # Per-thread tracking using OrderedDict for LRU eviction
         self._history: OrderedDict[str, list[str]] = OrderedDict()
@@ -179,6 +217,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         # Per-thread, per-tool-type cumulative call counts
         self._tool_freq: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._tool_freq_warned: dict[str, set[str]] = defaultdict(set)
+        # Per-thread error convergence tracking (Layer 3)
+        self._error_rounds: dict[str, int] = defaultdict(int)
 
     def _get_thread_id(self, runtime: Runtime) -> str:
         """Extract thread_id from runtime context for per-thread tracking."""
@@ -197,16 +237,20 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             self._warned.pop(evicted_id, None)
             self._tool_freq.pop(evicted_id, None)
             self._tool_freq_warned.pop(evicted_id, None)
+            self._error_rounds.pop(evicted_id, None)
             logger.debug("Evicted loop tracking for thread %s (LRU)", evicted_id)
 
     def _track_and_check(self, state: AgentState, runtime: Runtime) -> tuple[str | None, bool]:
         """Track tool calls and check for loops.
 
-        Two detection layers:
-          1. **Hash-based** (existing): catches identical tool call sets.
-          2. **Frequency-based** (new): catches the same *tool type* being
+        Three detection layers (checked in order):
+          1. **Hash-based**: catches identical tool call sets.
+          2. **Frequency-based**: catches the same *tool type* being
              called many times with varying arguments (e.g. ``read_file``
              on 40 different files).
+          3. **Error-based convergence**: scans recent tool results for
+             persistent unrecoverable error patterns and triggers early
+             forced stop when the agent is stuck on unfixable failures.
 
         Returns:
             (warning_message_or_none, should_hard_stop)
@@ -304,7 +348,56 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                         )
                         return _TOOL_FREQ_WARNING_MSG.format(tool_name=name, count=tc_count), False
 
+            # --- Layer 3: error-based early convergence ---
+            error_rounds = self._count_unrecoverable_error_rounds(messages)
+            self._error_rounds[thread_id] = error_rounds
+            if error_rounds >= self.error_round_threshold:
+                logger.error(
+                    "Error convergence hard stop — persistent unrecoverable errors",
+                    extra={
+                        "thread_id": thread_id,
+                        "error_rounds": error_rounds,
+                        "threshold": self.error_round_threshold,
+                    },
+                )
+                return (
+                    _ERROR_CONVERGENCE_HARD_STOP_MSG.format(
+                        count=error_rounds, window=self.error_round_window
+                    ),
+                    True,
+                )
+
         return None, False
+
+    def _count_unrecoverable_error_rounds(self, messages: list) -> int:
+        """Count recent tool result rounds that contain unrecoverable errors.
+
+        Scans the last ``error_round_window`` ToolMessages in the message
+        history and returns how many of them contain text matching any
+        unrecoverable error pattern.
+
+        A "round" here is one ToolMessage — each tool result that shows
+        an unfixable error counts as one error round.
+        """
+        # Collect ToolMessages from the end, limited to window size
+        tool_msgs: list = []
+        for msg in reversed(messages):
+            if getattr(msg, "type", None) == "tool" and getattr(msg, "status", None) == "error":
+                tool_msgs.append(msg)
+                if len(tool_msgs) >= self.error_round_window:
+                    break
+
+        # Count how many contain unrecoverable error patterns
+        error_count = 0
+        for msg in tool_msgs:
+            content = getattr(msg, "content", "") or ""
+            if isinstance(content, list):
+                # Handle list content (rare for ToolMessage but be safe)
+                content = " ".join(str(block) for block in content)
+            if any(p.search(str(content)) for p in _UNRECOVERABLE_ERROR_PATTERNS):
+                error_count += 1
+
+        return error_count
 
     @staticmethod
     def _append_text(content: str | list | None, text: str) -> str | list:
@@ -347,6 +440,14 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         warning, hard_stop = self._track_and_check(state, runtime)
 
         if hard_stop:
+            # Clear all tracking state for this thread so the model gets a
+            # clean slate after the forced stop.  Without this, the hash
+            # history retains the repeated patterns that triggered the first
+            # hard stop, causing an immediate second hard stop on the very
+            # next model response ("double kill").
+            thread_id = self._get_thread_id(runtime)
+            self.reset(thread_id)
+
             # Strip tool_calls from the last AIMessage to force text output
             messages = state.get("messages", [])
             last_msg = messages[-1]
@@ -385,8 +486,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                 self._warned.pop(thread_id, None)
                 self._tool_freq.pop(thread_id, None)
                 self._tool_freq_warned.pop(thread_id, None)
+                self._error_rounds.pop(thread_id, None)
             else:
                 self._history.clear()
                 self._warned.clear()
                 self._tool_freq.clear()
                 self._tool_freq_warned.clear()
+                self._error_rounds.clear()

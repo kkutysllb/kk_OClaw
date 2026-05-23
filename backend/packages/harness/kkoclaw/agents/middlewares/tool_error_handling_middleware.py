@@ -1,6 +1,7 @@
 """Tool error handling middleware and shared runtime middleware builders."""
 
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import override
 
@@ -17,6 +18,20 @@ logger = logging.getLogger(__name__)
 
 _MISSING_TOOL_CALL_ID = "missing_tool_call_id"
 
+# Patterns that indicate a tool error cannot be recovered by retrying
+# the same tool with different parameters.  When detected, the error
+# message includes stronger "do not retry" semantics so the model
+# stops looping on unfixable failures.
+_UNRECOVERABLE_ERROR_PATTERNS: list[re.Pattern] = [
+    re.compile(r"Custom skill '.+' already exists"),
+    re.compile(r"Unexpected key.*in SKILL\.md frontmatter"),
+    re.compile(r"Access denied.*outside allowed"),
+    re.compile(r"Security scan rejected"),
+    re.compile(r"Security scan blocked"),
+    re.compile(r"Supporting files must live under one of"),
+    re.compile(r"Supporting file path must"),
+]
+
 
 class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     """Convert tool exceptions into error ToolMessages so the run can continue."""
@@ -28,7 +43,25 @@ class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         if len(detail) > 500:
             detail = detail[:497] + "..."
 
-        content = f"Error: Tool '{tool_name}' failed with {exc.__class__.__name__}: {detail}. Continue with available context, or choose an alternative tool."
+        # Check if the error is unrecoverable — if so, use stronger stop semantics
+        is_unrecoverable = any(p.search(detail) for p in _UNRECOVERABLE_ERROR_PATTERNS)
+
+        if is_unrecoverable:
+            content = (
+                f"UNRECOVERABLE ERROR: Tool '{tool_name}' failed with "
+                f"{exc.__class__.__name__}: {detail}. "
+                f"This error cannot be fixed by retrying the same approach. "
+                f"Do NOT call this tool again with similar parameters. "
+                f"Explain the issue to the user or summarize what was accomplished, "
+                f"then produce your final answer WITHOUT further tool calls."
+            )
+        else:
+            content = (
+                f"Error: Tool '{tool_name}' failed with "
+                f"{exc.__class__.__name__}: {detail}. "
+                f"Continue with available context, or choose an alternative tool."
+            )
+
         return ToolMessage(
             content=content,
             tool_call_id=tool_call_id,

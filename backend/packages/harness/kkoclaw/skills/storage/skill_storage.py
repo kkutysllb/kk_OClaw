@@ -93,7 +93,7 @@ class SkillStorage(ABC):
 
     def ensure_safe_support_path(self, name: str, relative_path: str) -> Path:
         """Validate and return the resolved absolute path for a support file."""
-        _ALLOWED_SUPPORT_SUBDIRS = {"references", "templates", "scripts", "assets"}
+        _ALLOWED_SUPPORT_SUBDIRS = {"references", "templates", "scripts", "assets", "models", "adapters"}
         skill_dir = self.get_custom_skill_dir(self.validate_skill_name(name)).resolve()
         if not relative_path or relative_path.endswith("/"):
             raise ValueError("Supporting file path must include a filename.")
@@ -265,5 +265,5 @@ class SkillStorage(ABC):
         if self.custom_skill_exists(name):
             return
         if self.public_skill_exists(name):
-            raise ValueError(f"'{name}' is a built-in skill. To customise it, create a new skill with the same name under skills/custom/.")
-        raise FileNotFoundError(f"Custom skill '{name}' not found.")
+            raise ValueError(f"'{name}' is a built-in skill and cannot be edited directly. To customise it, create a new custom skill with the same name via action='create'.")
+        raise ValueError(f"Custom skill '{name}' not found. Use action='create' to create it first.")

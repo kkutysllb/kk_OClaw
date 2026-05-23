@@ -18,6 +18,73 @@ from kkoclaw.agents.thread_state import ThreadState
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Heredoc stripping (for command-length validation)
+# ---------------------------------------------------------------------------
+
+# Matches heredoc start markers:  <<DELIM  <<-DELIM  <<'DELIM'  <<"DELIM"
+# Does NOT match here-strings (<<<).
+_HEREDOC_START_RE: re.Pattern[str] = re.compile(
+    r'<<-?\s*'  # << or <<-
+    r'(?:'
+    r"'([^']+)'|"  # 'DELIM'
+    r'"([^"]+)"|'  # "DELIM"
+    r'(\w+)'  # DELIM (bare word)
+    r')'
+)
+
+
+def _strip_heredoc_bodies(command: str) -> str:
+    """Replace heredoc bodies with short placeholders for length-check purposes.
+
+    Heredoc bodies are *file data*, not executable commands.  Excluding them
+    from the length check prevents false-positives when the agent writes
+    large files via ``cat << 'EOF' > large_file.py``.
+
+    Returns:
+        The command string with each heredoc body replaced by a compact
+        placeholder such as ``<12345 bytes of heredoc content>``.
+        Here-strings (``<<<``) are left untouched — they are inherently short.
+    """
+    result: list[str] = []
+    pos = 0
+
+    for m in _HEREDOC_START_RE.finditer(command):
+        # Copy everything before this heredoc
+        result.append(command[pos:m.start()])
+
+        delimiter: str = m.group(1) or m.group(2) or m.group(3)  # type: ignore[assignment]
+        allow_tabs = "<<-" in m.group(0)
+
+        # Body starts after the heredoc marker.  Typically the shell expects
+        # a newline immediately after the marker, but we scan from m.end()
+        # to be lenient.
+        body_start = m.end()
+
+        # The closing delimiter must appear on a line by itself.
+        # For <<-DELIM the line may be indented with tabs.
+        indent = r"\t*" if allow_tabs else ""
+        close_re = re.compile(
+            rf"^{indent}{re.escape(delimiter)}\s*$",
+            re.MULTILINE,
+        )
+        close_match = close_re.search(command, body_start)
+
+        if close_match:
+            body_len = close_match.start() - body_start
+            result.append(f"{m.group(0)}<{body_len} bytes of heredoc content>")
+            # Preserve the closing delimiter + trailing newline
+            result.append(command[close_match.start():close_match.end()])
+            pos = close_match.end()
+        else:
+            # Unclosed heredoc — keep the original text (fail-safe)
+            result.append(m.group(0))
+            pos = m.end()
+
+    result.append(command[pos:])
+    return "".join(result)
+
+
+# ---------------------------------------------------------------------------
 # Command classification rules
 # ---------------------------------------------------------------------------
 
@@ -271,17 +338,25 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
     # Input sanitisation
     # ------------------------------------------------------------------
 
-    # Normal bash commands rarely exceed a few hundred characters.  10 000 is
+    # Maximum command length for input sanitisation.
+    #
+    # Normal bash commands rarely exceed a few hundred characters; 10 000 is
     # well above any legitimate use case yet a tiny fraction of Linux ARG_MAX.
     # Anything longer is almost certainly a payload injection or base64-encoded
     # attack string.
+    #
+    # Heredoc bodies (``cat << 'EOF' > file``) are excluded from the length
+    # check — they contain file data, not executable commands.
     _MAX_COMMAND_LENGTH = 10_000
 
     def _validate_input(self, command: str) -> str | None:
         """Return ``None`` if *command* is acceptable, else a rejection reason."""
         if not command.strip():
             return "empty command"
-        if len(command) > self._MAX_COMMAND_LENGTH:
+        # Strip heredoc bodies before checking length — heredoc content is
+        # file data, not executable command payload.
+        check_cmd = _strip_heredoc_bodies(command) if "<<" in command else command
+        if len(check_cmd) > self._MAX_COMMAND_LENGTH:
             return "command too long"
         if "\x00" in command:
             return "null byte detected"
@@ -305,15 +380,19 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         # ① input sanitisation — reject malformed input before regex analysis
         reject_reason = self._validate_input(command)
         if reject_reason:
-            self._write_audit(thread_id, command, "block", truncate=True)
+            # For audit, strip heredoc bodies so the log stays compact even
+            # for oversized heredoc commands.
+            audit_cmd = _strip_heredoc_bodies(command) if "<<" in command else command
+            self._write_audit(thread_id, audit_cmd, "block", truncate=True)
             logger.warning("[SandboxAudit] INVALID INPUT thread=%s reason=%s", thread_id, reject_reason)
             return command, thread_id, "block", reject_reason
 
         # ② classify command
         verdict = _classify_command(command)
 
-        # ③ audit log
-        self._write_audit(thread_id, command, verdict)
+        # ③ audit log — strip heredoc bodies for readability
+        audit_cmd = _strip_heredoc_bodies(command) if "<<" in command else command
+        self._write_audit(thread_id, audit_cmd, verdict)
 
         if verdict == "block":
             logger.warning("[SandboxAudit] BLOCKED thread=%s cmd=%r", thread_id, command)

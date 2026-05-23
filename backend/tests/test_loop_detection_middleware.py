@@ -302,6 +302,38 @@ class TestLoopDetection:
         mw._apply(_make_state(tool_calls=call), runtime)
         assert "default" in mw._history
 
+    def test_no_double_kill_after_hard_stop(self):
+        """After a hard stop, tracking state is cleared so the next response
+        does NOT immediately trigger another hard stop (regression for double
+        hard stop in 2 seconds seen in production logs)."""
+        mw = LoopDetectionMiddleware(warn_threshold=2, hard_limit=3)
+        runtime = _make_runtime()
+        call = [_bash_call("python3 gen_report.py")]
+
+        # Build up to hard stop
+        for _ in range(2):
+            mw._apply(_make_state(tool_calls=call), runtime)
+        result = mw._apply(_make_state(tool_calls=call), runtime)
+        assert result is not None
+        assert "FORCED STOP" in result["messages"][0].content
+        assert result["messages"][0].tool_calls == []
+
+        # Verify tracking state was cleared by the hard stop
+        thread_id = "test-thread"
+        assert thread_id not in mw._history
+        assert thread_id not in mw._warned
+        assert thread_id not in mw._tool_freq
+        assert thread_id not in mw._error_rounds
+
+        # Simulate the model responding with a new call after hard stop.
+        # Without the state clear, this would immediately trigger another
+        # hard stop because the hash history still contained the old pattern.
+        result = mw._apply(_make_state(tool_calls=call), runtime)
+        assert result is None, (
+            "Expected no hard stop after state clear — the model should get "
+            "a clean slate"
+        )
+
 
 class TestAppendText:
     """Unit tests for LoopDetectionMiddleware._append_text."""
@@ -636,3 +668,275 @@ class TestToolFrequencyDetection:
         msg = result["messages"][0]
         assert isinstance(msg, AIMessage)
         assert _HARD_STOP_MSG in msg.content
+
+
+class TestErrorConvergenceDetection:
+    """Tests for Layer 3: error-based early convergence detection.
+
+    When an agent persistently hits unrecoverable tool errors across
+    multiple rounds, Layer 3 triggers forced stop before the general
+    frequency limit would be reached.
+    """
+
+    def _skill_mgr_call(self):
+        return {"name": "skill_manage", "id": "call_sm", "args": {"action": "create", "name": "test-skill", "content": "---\nname: test-skill\ndescription: test\n---"}}
+
+    def _read_call(self, path):
+        return {"name": "read_file", "id": f"call_{path}", "args": {"path": path}}
+
+    def _error_state(self, tool_calls, error_content, prev_messages=None):
+        """Build a state with error ToolMessages in history and an AIMessage with tool_calls."""
+        msgs = list(prev_messages) if prev_messages else []
+        from langchain_core.messages import ToolMessage
+
+        msgs.append(
+            ToolMessage(
+                content=error_content,
+                tool_call_id="prev-call",
+                name="skill_manage",
+                status="error",
+            )
+        )
+        msgs.append(AIMessage(content="retrying...", tool_calls=tool_calls or []))
+        return {"messages": msgs}
+
+    def test_below_error_threshold_no_stop(self):
+        """When error count is below threshold, no forced stop should occur."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=15,
+            tool_freq_hard_limit=200,  # ensure Layer 2 doesn't fire first
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        # Build state with 3 unrecoverable errors (below threshold of 8)
+        from langchain_core.messages import ToolMessage
+
+        prev = []
+        for _ in range(3):
+            prev.append(
+                ToolMessage(
+                    content="Custom skill 'test-skill' already exists.",
+                    tool_call_id="prev",
+                    name="skill_manage",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        result = mw._apply(state, runtime)
+        assert result is None
+
+    def test_error_threshold_triggers_forced_stop(self):
+        """When unrecoverable errors reach threshold, forced stop triggers."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=15,
+            tool_freq_hard_limit=200,
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        # Build state with 8 unrecoverable errors (reaches threshold)
+        from langchain_core.messages import ToolMessage
+
+        prev = []
+        for _ in range(8):
+            prev.append(
+                ToolMessage(
+                    content="Custom skill 'test-skill' already exists.",
+                    tool_call_id="prev",
+                    name="skill_manage",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        result = mw._apply(state, runtime)
+        assert result is not None
+        msg = result["messages"][0]
+        assert isinstance(msg, AIMessage)
+        assert msg.tool_calls == []
+        assert "FORCED STOP" in msg.content
+        assert "Persistent unrecoverable errors" in msg.content
+
+    def test_normal_errors_not_counted(self):
+        """Normal (recoverable) errors should NOT count toward Layer 3 threshold."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=15,
+            tool_freq_hard_limit=200,
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        from langchain_core.messages import ToolMessage
+
+        # Build state with 10 normal errors (network timeout, etc.)
+        prev = []
+        for _ in range(10):
+            prev.append(
+                ToolMessage(
+                    content="Error: Tool 'web_search' failed with ConnectTimeout: network down",
+                    tool_call_id="prev",
+                    name="web_search",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        result = mw._apply(state, runtime)
+        assert result is None  # Should NOT trigger — errors are recoverable
+
+    def test_mixed_errors_only_count_unrecoverable(self):
+        """Only unrecoverable errors count; normal errors are ignored."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=15,
+            tool_freq_hard_limit=200,
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        from langchain_core.messages import ToolMessage
+
+        prev = []
+        # 7 unrecoverable errors + 3 normal errors = 10 total, but only 7 count
+        for _ in range(7):
+            prev.append(
+                ToolMessage(
+                    content="Security scan rejected executable content: unsafe",
+                    tool_call_id="prev",
+                    name="skill_manage",
+                    status="error",
+                )
+            )
+        for _ in range(3):
+            prev.append(
+                ToolMessage(
+                    content="Error: network timeout",
+                    tool_call_id="prev2",
+                    name="web_search",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        # 7 < 8 → no forced stop
+        result = mw._apply(state, runtime)
+        assert result is None
+
+    def test_error_rounds_sliding_window(self):
+        """Only errors within the window count; older ones are ignored."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=5,  # small window
+            tool_freq_hard_limit=200,
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        from langchain_core.messages import ToolMessage
+
+        prev = []
+        # 10 unrecoverable errors, but only the last 5 are in the window
+        for _ in range(10):
+            prev.append(
+                ToolMessage(
+                    content="Supporting files must live under one of: assets, references",
+                    tool_call_id="prev",
+                    name="skill_manage",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        # Only 5 errors in window, threshold is 8 → no stop
+        result = mw._apply(state, runtime)
+        assert result is None
+
+    def test_error_convergence_reset(self):
+        """reset() should clear error round tracking."""
+        mw = LoopDetectionMiddleware(
+            error_round_threshold=8,
+            error_round_window=15,
+            tool_freq_hard_limit=200,
+        )
+        runtime = _make_runtime()
+        call = [self._skill_mgr_call()]
+
+        from langchain_core.messages import ToolMessage
+
+        # Build up 6 errors
+        prev = []
+        for _ in range(6):
+            prev.append(
+                ToolMessage(
+                    content="Custom skill 'test' already exists.",
+                    tool_call_id="prev",
+                    name="skill_manage",
+                    status="error",
+                )
+            )
+        prev.append(AIMessage(content="retrying...", tool_calls=call))
+        state = {"messages": prev}
+
+        mw._apply(state, runtime)
+        assert mw._error_rounds["test-thread"] == 6
+
+        # Reset
+        mw.reset()
+        assert "test-thread" not in mw._error_rounds
+
+    def test_error_convergence_per_thread_isolation(self):
+        """Error tracking should be per-thread, not shared."""
+        mw = LoopDetectionMiddleware(
+            warn_threshold=10,  # suppress hash-based detection
+            error_round_threshold=3,
+            error_round_window=10,
+            tool_freq_hard_limit=200,
+        )
+        runtime_a = _make_runtime("thread-A")
+        runtime_b = _make_runtime("thread-B")
+        call = [self._skill_mgr_call()]
+
+        from langchain_core.messages import ToolMessage
+
+        def _make_err_turn():
+            """Return one turn: ToolMessage (error) + AIMessage (retry)."""
+            return [
+                ToolMessage(
+                    content="Security scan blocked the write",
+                    tool_call_id=f"p{id(self)}",
+                    name="skill_manage",
+                    status="error",
+                ),
+                AIMessage(content="retrying...", tool_calls=call),
+            ]
+
+        # Accumulate messages across turns so _count_unrecoverable_error_rounds
+        # sees the full history (mirrors real LangGraph state accumulation).
+        messages_a: list = []
+
+        # 3 error rounds on thread-A → triggers forced stop on round 3
+        for turn_idx in range(3):
+            messages_a.extend(_make_err_turn())
+            state = {"messages": list(messages_a)}
+            result = mw._apply(state, runtime_a)
+            if turn_idx < 2:
+                assert result is None, f"Expected None at turn {turn_idx}, got hard stop too early"
+            else:
+                assert result is not None, "Expected forced stop on turn 3"
+                assert "FORCED STOP" in result["messages"][0].content
+
+        # Thread B starts fresh — one error round should NOT trigger
+        messages_b: list = []
+        messages_b.extend(_make_err_turn())
+        result_b = mw._apply({"messages": list(messages_b)}, runtime_b)
+        assert result_b is None

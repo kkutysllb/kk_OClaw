@@ -2,11 +2,19 @@
 
 Consolidates all _validate_skill_frontmatter tests (previously split across
 test_skills_router.py and this module) into a single dedicated module.
+
+Also tests frontmatter normalisation for cross-platform compatibility
+(_normalise_skill_frontmatter).
 """
 
 from pathlib import Path
 
-from kkoclaw.skills.validation import ALLOWED_FRONTMATTER_PROPERTIES, _validate_skill_frontmatter
+from kkoclaw.skills.validation import (
+    ALLOWED_FRONTMATTER_PROPERTIES,
+    _COMPAT_FRONTMATTER_KEYS,
+    _normalise_skill_frontmatter,
+    _validate_skill_frontmatter,
+)
 
 
 def _write_skill(tmp_path: Path, content: str) -> Path:
@@ -178,3 +186,130 @@ class TestValidateSkillFrontmatter:
         assert valid is True
         assert msg == "Skill is valid!"
         assert name == "demo-skill"
+
+
+class TestNormaliseSkillFrontmatter:
+    """Tests for _normalise_skill_frontmatter cross-platform compatibility."""
+
+    def test_compat_keys_normalised_into_metadata(self):
+        """Compatibility keys should be moved into metadata.compat."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "capabilities": "data analysis",
+            "tags": ["python", "analysis"],
+            "requires": ["pandas"],
+        }
+        result = _normalise_skill_frontmatter(fm)
+        assert "capabilities" not in result
+        assert "tags" not in result
+        assert "requires" not in result
+        assert "metadata" in result
+        assert result["metadata"]["compat"]["capabilities"] == "data analysis"
+        assert result["metadata"]["compat"]["tags"] == ["python", "analysis"]
+        assert result["metadata"]["compat"]["requires"] == ["pandas"]
+
+    def test_compat_keys_merge_with_existing_metadata(self):
+        """Compat keys should merge into existing metadata without clobbering."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "metadata": {"source": "community"},
+            "tags": ["ml"],
+            "inputs": {"file": "path"},
+        }
+        result = _normalise_skill_frontmatter(fm)
+        assert "tags" not in result
+        assert "inputs" not in result
+        assert result["metadata"]["source"] == "community"
+        assert result["metadata"]["compat"]["tags"] == ["ml"]
+        assert result["metadata"]["compat"]["inputs"] == {"file": "path"}
+
+    def test_non_dict_metadata_preserved(self):
+        """If metadata is not a dict, wrap it so compat data isn't lost."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "metadata": "some-string",
+            "tags": ["ref"],
+        }
+        result = _normalise_skill_frontmatter(fm)
+        assert result["metadata"]["_value"] == "some-string"
+        assert result["metadata"]["compat"]["tags"] == ["ref"]
+
+    def test_no_compat_keys_no_change(self):
+        """Frontmatter with only allowed keys should pass through unchanged."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "license": "MIT",
+        }
+        result = _normalise_skill_frontmatter(fm)
+        assert result == fm
+
+    def test_unknown_key_not_touched(self):
+        """Truly unknown keys are left in place (caller rejects them)."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "custom-field": "bad",
+        }
+        result = _normalise_skill_frontmatter(fm)
+        assert "custom-field" in result
+
+    def test_all_compat_keys_normalised(self):
+        """All five compat keys should be moved."""
+        fm = {
+            "name": "my-skill",
+            "description": "test",
+            "capabilities": "x",
+            "inputs": "y",
+            "permissions": "z",
+            "requires": "w",
+            "tags": ["a"],
+        }
+        result = _normalise_skill_frontmatter(fm)
+        for key in _COMPAT_FRONTMATTER_KEYS:
+            assert key not in result, f"{key} should have been moved"
+        compat = result["metadata"]["compat"]
+        assert compat["capabilities"] == "x"
+        assert compat["inputs"] == "y"
+        assert compat["permissions"] == "z"
+        assert compat["requires"] == "w"
+        assert compat["tags"] == ["a"]
+
+
+class TestValidateFrontmatterWithCompatNormalisation:
+    """Integration: validation passes when compat keys are present."""
+
+    def test_skill_with_compat_keys_valid(self, tmp_path):
+        """Skills with compat keys (tags, requires, etc.) should validate."""
+        skill_dir = _write_skill(
+            tmp_path,
+            "---\nname: my-skill\ndescription: A skill with compat fields\ntags: [python, analysis]\ncapabilities: data analysis\ninputs: {file: path}\npermissions: read\nrequires: [pandas]\n---\n\nBody\n",
+        )
+        valid, msg, name = _validate_skill_frontmatter(skill_dir)
+        assert valid is True
+        assert msg == "Skill is valid!"
+        assert name == "my-skill"
+
+    def test_skill_with_compat_and_allowed_keys_valid(self, tmp_path):
+        """Skills with both compat and standard allowed keys should validate."""
+        skill_dir = _write_skill(
+            tmp_path,
+            "---\nname: my-skill\ndescription: A skill\nlicense: MIT\nversion: '1.0'\nauthor: test\ntags: [ml]\nmetadata:\n  source: community\n  compat:\n    extra: info\ncompatibility: kkoclaw\n---\n\nBody\n",
+        )
+        valid, msg, name = _validate_skill_frontmatter(skill_dir)
+        assert valid is True
+        assert msg == "Skill is valid!"
+        assert name == "my-skill"
+
+    def test_unknown_key_still_rejected(self, tmp_path):
+        """Truly unknown keys should still cause validation failure."""
+        skill_dir = _write_skill(
+            tmp_path,
+            "---\nname: my-skill\ndescription: test\ncustom-field: bad\n---\n\nBody\n",
+        )
+        valid, msg, _ = _validate_skill_frontmatter(skill_dir)
+        assert valid is False
+        assert "custom-field" in msg

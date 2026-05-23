@@ -93,7 +93,12 @@ async def _skill_manage_impl(
     async with lock:
         if action == "create":
             if await _to_thread(skill_storage.custom_skill_exists, name):
-                raise ValueError(f"Custom skill '{name}' already exists.")
+                raise ValueError(
+                    f"Custom skill '{name}' already exists. "
+                    f"Use action='edit' to update its SKILL.md, "
+                    f"or action='patch' for targeted changes. "
+                    f"To create a different skill, pick a unique name."
+                )
             if content is None:
                 raise ValueError("content is required for create.")
             await _to_thread(skill_storage.validate_skill_markdown_content, name, content)

@@ -13,6 +13,37 @@ from kkoclaw.skills.types import SKILL_MD_FILE
 # Allowed properties in SKILL.md frontmatter
 ALLOWED_FRONTMATTER_PROPERTIES = {"name", "description", "license", "allowed-tools", "metadata", "compatibility", "version", "author"}
 
+# Cross-platform compatibility keys that are normalised into metadata.compat
+# rather than rejected outright.  These keys appear in skill templates from
+# other platforms (Claude Code, Qoder, etc.) and should degrade gracefully.
+_COMPAT_FRONTMATTER_KEYS = {"capabilities", "inputs", "permissions", "requires", "tags"}
+
+
+def _normalise_skill_frontmatter(frontmatter: dict) -> dict:
+    """Normalise frontmatter for cross-platform compatibility.
+
+    Moves recognised compatibility keys into ``metadata.compat`` so that
+    skills authored for other platforms are accepted without loss of
+    information.  Keys that are already in the allowed set or that are
+    unknown are left untouched — the caller is responsible for rejecting
+    truly unknown keys.
+    """
+    compat_values: dict[str, object] = {}
+    for key in _COMPAT_FRONTMATTER_KEYS:
+        if key in frontmatter:
+            compat_values[key] = frontmatter.pop(key)
+    if compat_values:
+        metadata = frontmatter.setdefault("metadata", {})
+        if not isinstance(metadata, dict):
+            # If metadata is present but not a dict, wrap it so we don't
+            # destroy existing data.
+            metadata = {"_value": metadata}
+            frontmatter["metadata"] = metadata
+        compat_ns = metadata.setdefault("compat", {})
+        if isinstance(compat_ns, dict):
+            compat_ns.update(compat_values)
+    return frontmatter
+
 
 def _validate_skill_frontmatter(skill_dir: Path) -> tuple[bool, str, str | None]:
     """Validate a skill directory's SKILL.md frontmatter.
@@ -45,6 +76,9 @@ def _validate_skill_frontmatter(skill_dir: Path) -> tuple[bool, str, str | None]
             return False, "Frontmatter must be a YAML dictionary", None
     except yaml.YAMLError as e:
         return False, f"Invalid YAML in frontmatter: {e}", None
+
+    # Normalise cross-platform compatibility keys into metadata.compat
+    frontmatter = _normalise_skill_frontmatter(frontmatter)
 
     # Check for unexpected properties
     unexpected_keys = set(frontmatter.keys()) - ALLOWED_FRONTMATTER_PROPERTIES
