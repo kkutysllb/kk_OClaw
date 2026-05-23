@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BrainIcon,
   DownloadIcon,
   PenLineIcon,
   PlusIcon,
@@ -536,6 +537,7 @@ export function MemorySettingsPage() {
       <SettingsSection
         title={t.settings.memory.title}
         description={t.settings.memory.description}
+        icon={<BrainIcon className="w-5 h-5 text-emerald-500" />}
       >
         {isLoading ? (
           <div className="text-muted-foreground text-sm">

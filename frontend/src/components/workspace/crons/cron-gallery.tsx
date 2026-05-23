@@ -90,7 +90,8 @@ export function CronGallery() {
 
         <div className="relative flex items-center justify-between px-6 py-5">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-extrabold tracking-tight">
+            <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2">
+              <ClockIcon className="w-6 h-6 text-orange-500" />
               <span className="bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-400 bg-clip-text text-transparent">
                 {t.crons.title}
               </span>

@@ -228,6 +228,7 @@ class RunRepository(RunStore):
             select(
                 func.coalesce(RunRow.model_name, "unknown").label("model"),
                 func.count().label("runs"),
+                func.coalesce(func.sum(RunRow.llm_call_count), 0).label("llm_call_count"),
                 func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(RunRow.total_input_tokens), 0).label("total_input_tokens"),
                 func.coalesce(func.sum(RunRow.total_output_tokens), 0).label("total_output_tokens"),
@@ -242,15 +243,16 @@ class RunRepository(RunStore):
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
 
-        total_tokens = total_input = total_output = total_runs = 0
+        total_tokens = total_input = total_output = total_runs = total_llm_calls = 0
         lead_agent = subagent = middleware = 0
         by_model: dict[str, dict] = {}
         for r in rows:
-            by_model[r.model] = {"tokens": r.total_tokens, "runs": r.runs}
+            by_model[r.model] = {"tokens": r.total_tokens, "runs": r.runs, "llm_call_count": r.llm_call_count}
             total_tokens += r.total_tokens
             total_input += r.total_input_tokens
             total_output += r.total_output_tokens
             total_runs += r.runs
+            total_llm_calls += r.llm_call_count
             lead_agent += r.lead_agent
             subagent += r.subagent
             middleware += r.middleware
@@ -260,6 +262,7 @@ class RunRepository(RunStore):
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_runs": total_runs,
+            "total_llm_call_count": total_llm_calls,
             "by_model": by_model,
             "by_caller": {
                 "lead_agent": lead_agent,
@@ -331,6 +334,7 @@ class RunRepository(RunStore):
                 date_col,
                 model_col,
                 func.count().label("run_count"),
+                func.coalesce(func.sum(RunRow.llm_call_count), 0).label("llm_call_count"),
                 func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(RunRow.total_input_tokens), 0).label("input_tokens"),
                 func.coalesce(func.sum(RunRow.total_output_tokens), 0).label("output_tokens"),
@@ -348,6 +352,7 @@ class RunRepository(RunStore):
                 "date": str(r.date),
                 "model_name": r.model,
                 "run_count": r.run_count,
+                "llm_call_count": r.llm_call_count,
                 "total_tokens": r.total_tokens,
                 "input_tokens": r.input_tokens,
                 "output_tokens": r.output_tokens,
@@ -385,6 +390,7 @@ class RunRepository(RunStore):
             select(
                 func.coalesce(RunRow.model_name, "unknown").label("model"),
                 func.count().label("runs"),
+                func.coalesce(func.sum(RunRow.llm_call_count), 0).label("llm_call_count"),
                 func.coalesce(func.sum(RunRow.total_tokens), 0).label("total_tokens"),
                 func.coalesce(func.sum(RunRow.total_input_tokens), 0).label("total_input_tokens"),
                 func.coalesce(func.sum(RunRow.total_output_tokens), 0).label("total_output_tokens"),
@@ -399,13 +405,14 @@ class RunRepository(RunStore):
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
 
-        total_tokens = total_input = total_output = total_runs = 0
+        total_tokens = total_input = total_output = total_runs = total_llm_calls = 0
         lead_agent = subagent = middleware = 0
         by_model: dict[str, dict] = {}
         for r in rows:
             by_model[r.model] = {
                 "tokens": r.total_tokens,
                 "runs": r.runs,
+                "llm_call_count": r.llm_call_count,
                 "input_tokens": r.total_input_tokens,
                 "output_tokens": r.total_output_tokens,
             }
@@ -413,6 +420,7 @@ class RunRepository(RunStore):
             total_input += r.total_input_tokens
             total_output += r.total_output_tokens
             total_runs += r.runs
+            total_llm_calls += r.llm_call_count
             lead_agent += r.lead_agent
             subagent += r.subagent
             middleware += r.middleware
@@ -422,6 +430,7 @@ class RunRepository(RunStore):
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
             "total_runs": total_runs,
+            "total_llm_call_count": total_llm_calls,
             "by_model": by_model,
             "by_caller": {
                 "lead_agent": lead_agent,

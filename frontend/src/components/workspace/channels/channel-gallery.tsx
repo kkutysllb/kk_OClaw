@@ -97,7 +97,8 @@ export function ChannelGallery() {
 
         <div className="relative flex items-center justify-between px-6 py-5">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-extrabold tracking-tight">
+            <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2">
+              <MessageCircleIcon className="w-6 h-6 text-blue-500" />
               <span className="bg-gradient-to-r from-blue-500 via-cyan-400 to-sky-400 bg-clip-text text-transparent">
                 {t.channels.title}
               </span>

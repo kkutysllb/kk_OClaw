@@ -36,6 +36,7 @@ export function SkillSettingsPage({ onClose }: { onClose?: () => void } = {}) {
     <SettingsSection
       title={t.settings.skills.title}
       description={t.settings.skills.description}
+      icon={<SparklesIcon className="w-5 h-5 text-violet-500" />}
     >
       {isLoading ? (
         <div className="text-muted-foreground text-sm">{t.common.loading}</div>

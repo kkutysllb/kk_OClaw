@@ -141,10 +141,24 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         error_code = _extract_error_code(exc)
         status_code = _extract_status_code(exc)
 
-        if _matches_any(lowered, _QUOTA_PATTERNS) or _matches_any(str(error_code).lower(), _QUOTA_PATTERNS):
-            return False, "quota"
+        # Auth errors are never retriable
         if _matches_any(lowered, _AUTH_PATTERNS):
             return False, "auth"
+
+        # 429 rate-limit is retriable — *unless* the error code explicitly
+        # signals a hard quota exhaustion (e.g. OpenAI "insufficient_quota").
+        # Google Gemini 429s say "quota exceeded for metric: ..._free_tier_requests"
+        # with a retryDelay — those are transient and should be retried.
+        # OpenAI "insufficient_quota" on 429 means the account has no billing.
+        if status_code == 429:
+            hard_quota_codes = {"insufficient_quota", "billing_not_active", "account_deactivated"}
+            if str(error_code).lower() in hard_quota_codes:
+                return False, "quota"
+            return True, "busy"
+
+        # Non-429 quota/billing errors — genuinely exhausted, do NOT retry
+        if _matches_any(lowered, _QUOTA_PATTERNS) or _matches_any(str(error_code).lower(), _QUOTA_PATTERNS):
+            return False, "quota"
 
         exc_name = exc.__class__.__name__
         if exc_name in {
@@ -330,6 +344,12 @@ def _extract_status_code(exc: BaseException) -> int | None:
 
 
 def _extract_retry_after_ms(exc: BaseException) -> int | None:
+    # 1. Try Google-style JSON body: {"error":{"details":[{"retryDelay":"10s"}]}}
+    google_delay = _extract_google_retry_delay(exc)
+    if google_delay is not None:
+        return google_delay
+
+    # 2. Try HTTP response headers
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if headers is None:
@@ -356,6 +376,28 @@ def _extract_retry_after_ms(exc: BaseException) -> int | None:
             return max(0, int(delta * 1000))
         except (TypeError, ValueError, OverflowError):
             return None
+
+
+def _extract_google_retry_delay(exc: BaseException) -> int | None:
+    """Extract retryDelay from Google-style JSON error body.
+
+    Google Gemini 429 responses include a retryDelay in the details array::
+
+        {"error": {"details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "10s"}]}}
+    """
+    import json
+    import re
+
+    detail = str(exc).strip()
+
+    # Find retryDelay in the raw error string
+    m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)(s|ms)"', detail)
+    if m:
+        value = float(m.group(1))
+        unit = m.group(2)
+        return max(0, int(value * 1000) if unit == "s" else int(value))
+
+    return None
 
 
 def _extract_error_detail(exc: BaseException) -> str:

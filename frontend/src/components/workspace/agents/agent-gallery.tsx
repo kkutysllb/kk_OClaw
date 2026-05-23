@@ -30,7 +30,8 @@ export function AgentGallery() {
 
         <div className="relative flex items-center justify-between px-6 py-5">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-extrabold tracking-tight">
+            <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2">
+              <BotIcon className="w-6 h-6 text-violet-500" />
               <span className="bg-gradient-to-r from-violet-500 via-purple-400 to-fuchsia-400 bg-clip-text text-transparent">
                 {t.agents.title}
               </span>

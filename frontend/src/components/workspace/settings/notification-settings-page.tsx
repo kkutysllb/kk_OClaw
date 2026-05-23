@@ -38,6 +38,7 @@ export function NotificationSettingsPage() {
       <SettingsSection
         title={t.settings.notification.title}
         description={t.settings.notification.description}
+        icon={<BellIcon className="w-5 h-5 text-amber-500" />}
       >
         <p className="text-muted-foreground text-sm">
           {t.settings.notification.notSupported}
@@ -63,6 +64,7 @@ export function NotificationSettingsPage() {
           </div>
         </div>
       }
+      icon={<BellIcon className="w-5 h-5 text-amber-500" />}
     >
       <div className="flex flex-col gap-4">
         {permission === "default" && (

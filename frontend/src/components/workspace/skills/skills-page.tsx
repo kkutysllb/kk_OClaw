@@ -500,7 +500,8 @@ export function SkillsPage() {
         <div className="relative px-6 pt-7 pb-5">
           <div className="flex items-center justify-between">
             <div className="space-y-1.5">
-              <h1 className="text-2xl font-extrabold tracking-tight">
+              <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2">
+                <SparklesIcon className="w-6 h-6 text-violet-500" />
                 <span className="bg-gradient-to-r from-violet-500 via-cyan-400 to-amber-400 bg-clip-text text-transparent">
                   {t.sidebar.skills}
                 </span>

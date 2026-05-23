@@ -1,5 +1,7 @@
 "use client";
 
+import { WrenchIcon } from "lucide-react";
+
 import {
   Item,
   ItemActions,
@@ -22,6 +24,7 @@ export function ToolSettingsPage() {
     <SettingsSection
       title={t.settings.tools.title}
       description={t.settings.tools.description}
+      icon={<WrenchIcon className="w-5 h-5 text-rose-500" />}
     >
       {isLoading ? (
         <div className="text-muted-foreground text-sm">{t.common.loading}</div>

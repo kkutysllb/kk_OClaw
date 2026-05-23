@@ -12,7 +12,7 @@ import {
   WrenchIcon,
   Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -57,6 +57,7 @@ type LoadState =
 interface TsDataRow {
   date: string;
   run_count: number;
+  llm_call_count: number;
   total_tokens: number;
   input_tokens: number;
   output_tokens: number;
@@ -109,6 +110,7 @@ function fillDateRange(items: TokenUsageTimeseriesItem[]): TsDataRow[] {
     result.push({
       date: `${cur.getMonth() + 1}-${cur.getDate()}`,
       run_count: existing?.run_count ?? 0,
+      llm_call_count: existing?.llm_call_count ?? 0,
       total_tokens: existing?.total_tokens ?? 0,
       input_tokens: existing?.input_tokens ?? 0,
       output_tokens: existing?.output_tokens ?? 0,
@@ -164,6 +166,7 @@ function ModelSection({
   outputTokens,
   totalTokens,
   totalCalls,
+  totalLlmCalls,
 }: {
   model: string;
   colorIdx: number;
@@ -172,6 +175,7 @@ function ModelSection({
   outputTokens: number;
   totalTokens: number;
   totalCalls: number;
+  totalLlmCalls: number;
 }) {
   const color = MODEL_COLORS[colorIdx % MODEL_COLORS.length];
 
@@ -201,7 +205,8 @@ function ModelSection({
         </div>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span>Tokens: <span className="font-mono font-medium text-foreground">{fmtNum(totalTokens)}</span></span>
-          <span>请求: <span className="font-mono font-medium text-foreground">{fmtNum(totalCalls)}</span></span>
+          <span>任务: <span className="font-mono font-medium text-foreground">{fmtNum(totalCalls)}</span></span>
+          <span>API 调用: <span className="font-mono font-medium text-foreground">{fmtNum(totalLlmCalls)}</span></span>
           <span className="hidden sm:inline">
             输入: <span className="font-mono font-medium text-foreground">{fmtNum(inputTokens)}</span>
           </span>
@@ -215,11 +220,11 @@ function ModelSection({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* API calls area chart */}
         <div>
-          <div className="text-xs text-muted-foreground mb-1">API 请求次数</div>
+          <div className="text-xs text-muted-foreground mb-1">API 调用次数</div>
           {tsData.length > 0 ? (
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                <AreaChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id={`area-calls-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
@@ -236,21 +241,22 @@ function ModelSection({
                     tickFormatter={formatShortDate}
                   />
                   <YAxis
-                    tick={chartTickStyle}
+                    tick={{ ...chartTickStyle, fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
-                    width={36}
+                    width={40}
+                    tickFormatter={(v: number) => fmtNum(v)}
                   />
                   <Tooltip
                     cursor={{ fill: "transparent" }}
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: "var(--foreground)" }}
                     labelFormatter={formatShortDate}
-                    formatter={(value) => [String(value), "请求次数"]}
+                    formatter={(value) => [String(value), "API 调用次数"]}
                   />
                   <Area
                     type="monotone"
-                    dataKey="run_count"
+                    dataKey="llm_call_count"
                     stroke="#f59e0b"
                     strokeWidth={2}
                     fill={`url(#area-calls-${colorIdx})`}
@@ -271,7 +277,7 @@ function ModelSection({
           {tsData.length > 0 ? (
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                <BarChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -285,7 +291,7 @@ function ModelSection({
                     tick={{ ...chartTickStyle, fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
-                    width={36}
+                    width={40}
                     tickFormatter={(v: number) => fmtNum(v)}
                   />
                   <Tooltip
@@ -322,6 +328,7 @@ export function TokenUsagePage() {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [models, setModels] = useState<Model[]>([]);
   const [monthsOpen, setMonthsOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const monthOptions = useMemo(() => {
     const opts: { y: number; m: number; label: string }[] = [];
@@ -358,8 +365,9 @@ export function TokenUsagePage() {
     [modelDisplayNameMap],
   );
 
-  const load = useCallback(async () => {
-    setLoadState({ status: "loading" });
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoadState({ status: "loading" });
+    else setRefreshing(true);
     try {
       const [stats, timeseries, modelsData] = await Promise.all([
         fetchTokenUsageStats(filter),
@@ -373,15 +381,27 @@ export function TokenUsagePage() {
         setLoadState({ status: "data", stats, timeseries });
       }
     } catch (err) {
-      setLoadState({
-        status: "error",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
+      if (!silent) {
+        setLoadState({
+          status: "error",
+          message: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    } finally {
+      setRefreshing(false);
     }
   }, [filter]);
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Auto-refresh every 5 minutes (silent)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void load(true);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const modelEntries = useMemo(() => {
@@ -447,7 +467,7 @@ export function TokenUsagePage() {
           <p className="text-sm text-muted-foreground">{loadState.message}</p>
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load()}
             className="mt-4 inline-flex items-center gap-2 rounded-lg bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-400 transition-colors hover:bg-rose-500/20"
           >
             <RefreshCwIcon className="h-4 w-4" />
@@ -540,10 +560,11 @@ export function TokenUsagePage() {
 
           <button
             type="button"
-            onClick={load}
+            onClick={() => void load()}
             className="p-1.5 rounded-md hover:bg-muted/50 text-muted-foreground transition-colors"
+            title="刷新数据"
           >
-            <RefreshCwIcon className="w-4 h-4" />
+            <RefreshCwIcon className={cn("w-4 h-4", refreshing && "animate-spin")} />
           </button>
         </div>
       </header>
@@ -558,11 +579,18 @@ export function TokenUsagePage() {
         {/* Summary cards */}
         <div className="flex flex-wrap gap-3">
           <SummaryCard
-            label="API 请求次数"
+            label="任务次数"
             value={fmtNum(stats.total_runs)}
             sub={filterLabel}
             icon={<Zap className="w-5 h-5 text-indigo-400" />}
             accent="bg-indigo-500/10"
+          />
+          <SummaryCard
+            label="API 调用次数"
+            value={fmtNum(stats.total_llm_call_count)}
+            sub={filterLabel}
+            icon={<Zap className="w-5 h-5 text-violet-400" />}
+            accent="bg-violet-500/10"
           />
           <SummaryCard
             label="输入 Tokens"
@@ -597,6 +625,7 @@ export function TokenUsagePage() {
                 outputTokens={data.output_tokens}
                 totalTokens={data.tokens}
                 totalCalls={data.runs}
+                totalLlmCalls={data.llm_call_count}
               />
             ))}
           </div>

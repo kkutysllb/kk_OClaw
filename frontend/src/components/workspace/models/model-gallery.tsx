@@ -102,7 +102,8 @@ export function ModelGallery() {
 
         <div className="relative flex items-center justify-between px-6 py-5">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-extrabold tracking-tight">
+            <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-2">
+              <CpuIcon className="w-6 h-6 text-emerald-500" />
               <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
                 {t.models.title}
               </span>

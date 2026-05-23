@@ -7,7 +7,8 @@ export interface TokenUsageStats {
   total_input_tokens: number;
   total_output_tokens: number;
   total_runs: number;
-  by_model: Record<string, { tokens: number; runs: number; input_tokens: number; output_tokens: number }>;
+  total_llm_call_count: number;
+  by_model: Record<string, { tokens: number; runs: number; llm_call_count: number; input_tokens: number; output_tokens: number }>;
   by_caller: {
     lead_agent: number;
     subagent: number;
@@ -19,6 +20,7 @@ export interface TokenUsageTimeseriesItem {
   date: string;
   model_name: string;
   run_count: number;
+  llm_call_count: number;
   total_tokens: number;
   input_tokens: number;
   output_tokens: number;

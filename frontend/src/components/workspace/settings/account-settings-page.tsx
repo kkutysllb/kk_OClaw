@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOutIcon } from "lucide-react";
+import { KeyRoundIcon, LogOutIcon, UserIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ export function AccountSettingsPage() {
 
   return (
     <div className="space-y-8">
-      <SettingsSection title="个人资料">
+      <SettingsSection title="个人资料" icon={<UserIcon className="w-5 h-5 text-sky-500" />}>
         <div className="space-y-2">
           <div className="grid grid-cols-[max-content_max-content] items-center gap-4">
             <span className="text-muted-foreground text-sm">邮箱</span>
@@ -84,6 +84,7 @@ export function AccountSettingsPage() {
       <SettingsSection
         title="修改密码"
         description="更新您的账户密码。"
+        icon={<KeyRoundIcon className="w-5 h-5 text-amber-500" />}
       >
         <form onSubmit={handleChangePassword} className="max-w-sm space-y-3">
           <Input

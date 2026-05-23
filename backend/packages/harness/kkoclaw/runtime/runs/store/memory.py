@@ -85,14 +85,16 @@ class MemoryRunStore(RunStore):
         by_model: dict[str, dict] = {}
         for r in completed:
             model = r.get("model_name") or "unknown"
-            entry = by_model.setdefault(model, {"tokens": 0, "runs": 0})
+            entry = by_model.setdefault(model, {"tokens": 0, "runs": 0, "llm_call_count": 0})
             entry["tokens"] += r.get("total_tokens", 0)
+            entry["llm_call_count"] += r.get("llm_call_count", 0)
             entry["runs"] += 1
         return {
             "total_tokens": sum(r.get("total_tokens", 0) for r in completed),
             "total_input_tokens": sum(r.get("total_input_tokens", 0) for r in completed),
             "total_output_tokens": sum(r.get("total_output_tokens", 0) for r in completed),
             "total_runs": len(completed),
+            "total_llm_call_count": sum(r.get("llm_call_count", 0) for r in completed),
             "by_model": by_model,
             "by_caller": {
                 "lead_agent": sum(r.get("lead_agent_tokens", 0) for r in completed),
@@ -114,8 +116,9 @@ class MemoryRunStore(RunStore):
         by_model: dict[str, dict] = {}
         for r in completed:
             model = r.get("model_name") or "unknown"
-            entry = by_model.setdefault(model, {"tokens": 0, "runs": 0, "input_tokens": 0, "output_tokens": 0})
+            entry = by_model.setdefault(model, {"tokens": 0, "runs": 0, "llm_call_count": 0, "input_tokens": 0, "output_tokens": 0})
             entry["tokens"] += r.get("total_tokens", 0)
+            entry["llm_call_count"] += r.get("llm_call_count", 0)
             entry["input_tokens"] += r.get("total_input_tokens", 0)
             entry["output_tokens"] += r.get("total_output_tokens", 0)
             entry["runs"] += 1
@@ -124,6 +127,7 @@ class MemoryRunStore(RunStore):
             "total_input_tokens": sum(r.get("total_input_tokens", 0) for r in completed),
             "total_output_tokens": sum(r.get("total_output_tokens", 0) for r in completed),
             "total_runs": len(completed),
+            "total_llm_call_count": sum(r.get("llm_call_count", 0) for r in completed),
             "by_model": by_model,
             "by_caller": {
                 "lead_agent": sum(r.get("lead_agent_tokens", 0) for r in completed),
@@ -179,8 +183,9 @@ class MemoryRunStore(RunStore):
             model = r.get("model_name") or "unknown"
             key = f"{date_key}|{model}"
             if key not in groups:
-                groups[key] = {"date": date_key, "model_name": model, "run_count": 0, "total_tokens": 0, "input_tokens": 0, "output_tokens": 0}
+                groups[key] = {"date": date_key, "model_name": model, "run_count": 0, "llm_call_count": 0, "total_tokens": 0, "input_tokens": 0, "output_tokens": 0}
             groups[key]["run_count"] += 1
+            groups[key]["llm_call_count"] += r.get("llm_call_count", 0)
             groups[key]["total_tokens"] += r.get("total_tokens", 0)
             groups[key]["input_tokens"] += r.get("total_input_tokens", 0)
             groups[key]["output_tokens"] += r.get("total_output_tokens", 0)
