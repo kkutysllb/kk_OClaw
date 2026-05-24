@@ -59,12 +59,14 @@ def _make_result(
     ai_messages: list[dict] | None = None,
     result: str | None = None,
     error: str | None = None,
+    total_tokens: int = 0,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         status=status,
         ai_messages=ai_messages or [],
         result=result,
         error=error,
+        total_tokens=total_tokens,
     )
 
 
@@ -229,7 +231,7 @@ def test_task_tool_emits_running_and_completed_events(monkeypatch):
     assert captured["task_id"] == "tc-123"
     assert captured["executor_kwargs"]["thread_id"] == "thread-1"
     assert captured["executor_kwargs"]["parent_model"] == "ark-model"
-    assert captured["executor_kwargs"]["config"].max_turns == 7
+    assert captured["executor_kwargs"]["config"].max_turns == 25  # min_floor=max(25, 7)=25
     # Skills are no longer appended to system_prompt; they are loaded per-session
     # by SubagentExecutor and injected as conversation items (Codex pattern).
     assert captured["executor_kwargs"]["config"].system_prompt == "Base system prompt"

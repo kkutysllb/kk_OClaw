@@ -31,7 +31,7 @@ class SubagentConfig:
     disallowed_tools: list[str] | None = field(default_factory=lambda: ["task"])
     skills: list[str] | None = None
     model: str = "inherit"
-    max_turns: int = 50
+    max_turns: int = 25
     timeout_seconds: int = 900
 
 

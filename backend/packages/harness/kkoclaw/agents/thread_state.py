@@ -1,4 +1,4 @@
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain.agents import AgentState
 
@@ -53,3 +53,21 @@ class ThreadState(AgentState):
     todos: NotRequired[list | None]
     uploaded_files: NotRequired[list[dict] | None]
     viewed_images: Annotated[dict[str, ViewedImageData], merge_viewed_images]  # image_path -> {base64, mime_type}
+
+
+class RuntimeContext(TypedDict, total=False):
+    """Schema for ``Runtime.context`` — declared as ``context_schema`` so
+    Pydantic knows the actual type and stops emitting::
+
+        PydanticSerializationUnexpectedValue(Expected `none` ... field_name='context')
+
+    Fields are ``total=False`` because different call sites populate different
+    subsets.  The dict is built by ``_build_runtime_context`` in the worker and
+    then enriched by middlewares / tools at runtime.
+    """
+
+    thread_id: str
+    run_id: str
+    sandbox_id: str
+    agent_name: str
+    app_config: Any

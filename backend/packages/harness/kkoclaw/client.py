@@ -34,7 +34,7 @@ from langchain_core.runnables import RunnableConfig
 
 from kkoclaw.agents.lead_agent.agent import _build_middlewares
 from kkoclaw.agents.lead_agent.prompt import apply_prompt_template
-from kkoclaw.agents.thread_state import ThreadState
+from kkoclaw.agents.thread_state import RuntimeContext, ThreadState
 from kkoclaw.config.agents_config import AGENT_NAME_PATTERN
 from kkoclaw.config.app_config import get_app_config, reload_app_config
 from kkoclaw.config.extensions_config import ExtensionsConfig, SkillStateConfig, get_extensions_config, reload_extensions_config
@@ -245,6 +245,7 @@ class KKOCLAWClient:
                 available_skills=self._available_skills,
             ),
             "state_schema": ThreadState,
+            "context_schema": RuntimeContext,
         }
         checkpointer = self._checkpointer
         if checkpointer is None:

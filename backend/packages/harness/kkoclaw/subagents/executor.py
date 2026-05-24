@@ -19,7 +19,7 @@ from langchain.tools import BaseTool
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
-from kkoclaw.agents.thread_state import SandboxState, ThreadDataState, ThreadState
+from kkoclaw.agents.thread_state import RuntimeContext, SandboxState, ThreadDataState, ThreadState
 from kkoclaw.config import get_app_config
 from kkoclaw.config.app_config import AppConfig
 from kkoclaw.models import create_chat_model
@@ -290,7 +290,7 @@ class SubagentExecutor:
         middlewares = build_subagent_runtime_middlewares(app_config=app_config, model_name=self.model_name, lazy_init=True)
 
         # Dynamic LoopDetectionMiddleware: scale tool frequency limits based on max_turns.
-        # A subagent with max_turns=50 may legitimately call the same tool many times
+        # A subagent with max_turns=25 may legitimately call the same tool many times
         # across dozens of turns.  Use a 3x multiplier (each turn can call 1 tool)
         # with a floor of 80 so short tasks are still protected.
         from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
@@ -305,6 +305,7 @@ class SubagentExecutor:
             middleware=middlewares,
             system_prompt=self.config.system_prompt,
             state_schema=ThreadState,
+            context_schema=RuntimeContext,
         )
 
     async def _load_skill_messages(self) -> list[SystemMessage]:
@@ -428,12 +429,11 @@ class SubagentExecutor:
 
             # Build config with thread_id for sandbox access and recursion limit
             # Include "subagent:{name}" tag so RunJournal classifies token usage correctly.
-            # NOTE: recursion_limit is fixed at 100 (same as the gateway default) so that
-            # long-running subagent tasks always have enough graph steps.  We do NOT tie it
-            # to max_turns because each agent "turn" may consume multiple graph nodes
-            # (agent node + tool node), causing premature GraphRecursionError.
+            # NOTE: recursion_limit scales with max_turns because each agent "turn"
+            # consumes ~2 graph steps (agent node + tool node).  Formula: max_turns * 2 + 10
+            # provides enough headroom while preventing unbounded graph recursion.
             run_config: RunnableConfig = {
-                "recursion_limit": 100,
+                "recursion_limit": self.config.max_turns * 2 + 10,
                 "tags": [f"subagent:{self.config.name}"],
             }
             context: dict[str, Any] = {}

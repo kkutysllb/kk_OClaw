@@ -16,7 +16,7 @@ from kkoclaw.agents.middlewares.todo_middleware import TodoMiddleware
 from kkoclaw.agents.middlewares.token_usage_middleware import TokenUsageMiddleware
 from kkoclaw.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
 from kkoclaw.agents.middlewares.view_image_middleware import ViewImageMiddleware
-from kkoclaw.agents.thread_state import ThreadState
+from kkoclaw.agents.thread_state import RuntimeContext, ThreadState
 from kkoclaw.config.agents_config import load_agent_config, validate_agent_name
 from kkoclaw.config.app_config import AppConfig, get_app_config
 from kkoclaw.models import create_chat_model
@@ -391,6 +391,7 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
                 app_config=resolved_app_config,
             ),
             state_schema=ThreadState,
+            context_schema=RuntimeContext,
         )
 
     # Default lead agent (unchanged behavior)
@@ -412,4 +413,5 @@ def _make_lead_agent(config: RunnableConfig, *, app_config: AppConfig):
             app_config=resolved_app_config,
         ),
         state_schema=ThreadState,
+        context_schema=RuntimeContext,
     )

@@ -57,7 +57,7 @@ class CustomSubagentConfig(BaseModel):
         description="Model to use - 'inherit' uses parent's model",
     )
     max_turns: int = Field(
-        default=50,
+        default=25,
         ge=1,
         description="Maximum number of agent turns before stopping",
     )

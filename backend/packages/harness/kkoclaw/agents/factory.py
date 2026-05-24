@@ -22,7 +22,7 @@ from kkoclaw.agents.features import RuntimeFeatures
 from kkoclaw.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from kkoclaw.agents.middlewares.dangling_tool_call_middleware import DanglingToolCallMiddleware
 from kkoclaw.agents.middlewares.tool_error_handling_middleware import ToolErrorHandlingMiddleware
-from kkoclaw.agents.thread_state import ThreadState
+from kkoclaw.agents.thread_state import RuntimeContext, ThreadState
 from kkoclaw.tools.builtins import ask_clarification_tool
 
 if TYPE_CHECKING:
@@ -142,6 +142,7 @@ def create_kkoclaw_agent(
         middleware=effective_middleware,
         system_prompt=system_prompt,
         state_schema=effective_state,
+        context_schema=RuntimeContext,
         checkpointer=checkpointer,
         name=name,
     )
