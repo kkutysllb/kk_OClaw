@@ -5,11 +5,15 @@ from typing import TYPE_CHECKING, override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import HumanMessage
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
 from kkoclaw.agents.memory.message_processing import detect_correction, detect_reinforcement, filter_messages_for_memory
+from kkoclaw.agents.memory.prompt import format_memory_for_injection
 from kkoclaw.agents.memory.queue import get_memory_queue
+from kkoclaw.agents.memory.retrieval import extract_current_context, rank_memory_facts
+from kkoclaw.agents.memory.updater import get_memory_data
 from kkoclaw.config.memory_config import get_memory_config
 from kkoclaw.runtime.user_context import get_effective_user_id
 
@@ -48,6 +52,58 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         super().__init__()
         self._agent_name = agent_name
         self._memory_config = memory_config
+
+    def _build_retrieval_injection(self, messages: list, config: "MemoryConfig") -> dict | None:
+        retrieval_config = getattr(config, "retrieval", None)
+        if not (config.enabled and config.injection_enabled and retrieval_config and retrieval_config.enabled):
+            return None
+
+        current_context = extract_current_context(
+            messages,
+            max_turns=retrieval_config.context_max_turns,
+            max_chars=retrieval_config.context_max_chars,
+        )
+        memory_data = get_memory_data(self._agent_name, user_id=get_effective_user_id())
+        ranked_facts = rank_memory_facts(
+            memory_data.get("facts", []),
+            current_context=current_context,
+            similarity_weight=retrieval_config.similarity_weight,
+            confidence_weight=retrieval_config.confidence_weight,
+            min_similarity=retrieval_config.min_similarity,
+        )
+        memory_content = format_memory_for_injection(
+            {"facts": memory_data.get("facts", [])},
+            max_tokens=config.max_injection_tokens,
+            ranked_facts=ranked_facts,
+        )
+        if not memory_content.strip():
+            return None
+
+        reminder = HumanMessage(
+            name="memory_context",
+            content=f"<memory>\n{memory_content}\n</memory>",
+            additional_kwargs={"hide_from_ui": True},
+        )
+        return {"messages": [reminder]}
+
+    @override
+    def before_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
+        """Inject context-aware memory facts before each agent execution."""
+        config = self._memory_config or get_memory_config()
+        messages = list(state.get("messages", []))
+        if not messages:
+            return None
+
+        try:
+            return self._build_retrieval_injection(messages, config)
+        except Exception:
+            logger.exception("Failed to inject context-aware memory facts")
+            return None
+
+    @override
+    async def abefore_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
+        """Async version of before_agent."""
+        return self.before_agent(state, runtime)
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:

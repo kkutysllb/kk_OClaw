@@ -5,7 +5,7 @@ import logging
 import threading
 from datetime import datetime
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from kkoclaw.config.agents_config import load_agent_soul
 from kkoclaw.skills.storage import get_or_new_skill_storage
@@ -533,7 +533,12 @@ combined with a FastAPI gateway for REST API access [citation:FastAPI](https://f
 """
 
 
-def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig | None = None) -> str:
+def _get_memory_context(
+    agent_name: str | None = None,
+    *,
+    app_config: AppConfig | None = None,
+    messages: list[Any] | None = None,
+) -> str:
     """Get memory context for injection into system prompt.
 
     Args:
@@ -545,7 +550,12 @@ def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig 
         Formatted memory context string wrapped in XML tags, or empty string if disabled.
     """
     try:
-        from kkoclaw.agents.memory import format_memory_for_injection, get_memory_data
+        from kkoclaw.agents.memory import (
+            extract_current_context,
+            format_memory_for_injection,
+            get_memory_data,
+            rank_memory_facts,
+        )
         from kkoclaw.runtime.user_context import get_effective_user_id
 
         if app_config is None:
@@ -559,7 +569,35 @@ def _get_memory_context(agent_name: str | None = None, *, app_config: AppConfig 
             return ""
 
         memory_data = get_memory_data(agent_name, user_id=get_effective_user_id())
-        memory_content = format_memory_for_injection(memory_data, max_tokens=config.max_injection_tokens)
+        ranked_facts = None
+        retrieval_config = getattr(config, "retrieval", None)
+        if retrieval_config and retrieval_config.enabled:
+            if messages:
+                try:
+                    current_context = extract_current_context(
+                        messages,
+                        max_turns=retrieval_config.context_max_turns,
+                        max_chars=retrieval_config.context_max_chars,
+                    )
+                    ranked_facts = rank_memory_facts(
+                        memory_data.get("facts", []),
+                        current_context=current_context,
+                        similarity_weight=retrieval_config.similarity_weight,
+                        confidence_weight=retrieval_config.confidence_weight,
+                        min_similarity=retrieval_config.min_similarity,
+                    )
+                except Exception:
+                    logger.exception("Failed to rank memory facts for prompt injection")
+            else:
+                # When context-aware retrieval is enabled, facts are injected at
+                # runtime by middleware where the live conversation state exists.
+                ranked_facts = []
+
+        memory_content = format_memory_for_injection(
+            memory_data,
+            max_tokens=config.max_injection_tokens,
+            ranked_facts=ranked_facts,
+        )
 
         if not memory_content.strip():
             return ""

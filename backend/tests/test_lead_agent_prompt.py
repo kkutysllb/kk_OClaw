@@ -188,9 +188,10 @@ def test_get_memory_context_uses_explicit_app_config_without_global_config(monke
         captured["user_id"] = user_id
         return {"facts": []}
 
-    def fake_format_memory_for_injection(memory_data, *, max_tokens):
+    def fake_format_memory_for_injection(memory_data, *, max_tokens, ranked_facts=None):
         captured["memory_data"] = memory_data
         captured["max_tokens"] = max_tokens
+        captured["ranked_facts"] = ranked_facts
         return "remember this"
 
     monkeypatch.setattr("kkoclaw.config.memory_config.get_memory_config", fail_get_memory_config)
@@ -207,7 +208,65 @@ def test_get_memory_context_uses_explicit_app_config_without_global_config(monke
         "user_id": "user-1",
         "memory_data": {"facts": []},
         "max_tokens": 1234,
+        "ranked_facts": None,
     }
+
+
+def test_get_memory_context_uses_ranked_facts_when_retrieval_enabled(monkeypatch):
+    explicit_config = SimpleNamespace(
+        memory=SimpleNamespace(
+            enabled=True,
+            injection_enabled=True,
+            max_injection_tokens=1234,
+            retrieval=SimpleNamespace(
+                enabled=True,
+                context_max_turns=4,
+                context_max_chars=4000,
+                similarity_weight=0.6,
+                confidence_weight=0.4,
+                min_similarity=0.0,
+            ),
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_get_memory_data(agent_name=None, *, user_id=None):
+        captured["agent_name"] = agent_name
+        captured["user_id"] = user_id
+        return {"facts": [{"content": "raw", "category": "goal", "confidence": 0.3}]}
+
+    def fake_extract_current_context(messages, *, max_turns, max_chars):
+        captured["messages"] = messages
+        captured["max_turns"] = max_turns
+        captured["max_chars"] = max_chars
+        return "current context"
+
+    def fake_rank_memory_facts(facts, **kwargs):
+        captured["facts"] = facts
+        captured["rank_kwargs"] = kwargs
+        return [{"content": "ranked", "category": "goal", "confidence": 0.3}]
+
+    def fake_format_memory_for_injection(memory_data, *, max_tokens, ranked_facts=None):
+        captured["memory_data"] = memory_data
+        captured["max_tokens"] = max_tokens
+        captured["ranked_facts"] = ranked_facts
+        return "remember ranked"
+
+    monkeypatch.setattr("kkoclaw.runtime.user_context.get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr("kkoclaw.agents.memory.get_memory_data", fake_get_memory_data)
+    monkeypatch.setattr("kkoclaw.agents.memory.extract_current_context", fake_extract_current_context)
+    monkeypatch.setattr("kkoclaw.agents.memory.rank_memory_facts", fake_rank_memory_facts)
+    monkeypatch.setattr("kkoclaw.agents.memory.format_memory_for_injection", fake_format_memory_for_injection)
+
+    context = prompt_module._get_memory_context(
+        "agent-a",
+        app_config=explicit_config,
+        messages=["message-1"],
+    )
+
+    assert "<memory>" in context
+    assert "remember ranked" in context
+    assert captured["ranked_facts"] == [{"content": "ranked", "category": "goal", "confidence": 0.3}]
 
 
 def test_refresh_skills_system_prompt_cache_async_reloads_immediately(monkeypatch, tmp_path):
