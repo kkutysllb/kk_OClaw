@@ -52,42 +52,68 @@ _SHUTDOWN_HOOK_TIMEOUT_SECONDS = 5.0
 
 
 def _setup_langgraph_logger() -> None:
-    """Add a dedicated rotating file handler for kkoclaw/LangGraph runtime logs.
+    """Add dedicated rotating file handlers for gateway and kkoclaw runtime logs.
 
-    Writes agent execution traces, persistence operations, and other runtime
-    logs to ``logs/langgraph.log``, separate from the gateway REST API log.
+    Creates two log files in the configured log directory:
 
-    The log file is truncated on each service restart so that old entries
-    do not accumulate across restarts. The rotating file handler then appends
+    - ``gateway.log`` — REST API / router / middleware logs (root logger)
+    - ``langgraph.log`` — agent execution traces and runtime logs (``kkoclaw`` logger)
+
+    Both files are truncated on each service restart so that old entries
+    do not accumulate across restarts.  Rotating file handlers then append
     new entries, with rotation at 10 MB and 3 backup generations.
 
-    The handler inherits the log level set by ``apply_logging_level()`` so
-    it respects ``log_level`` in config.yaml.
+    The handlers inherit the log level set by ``apply_logging_level()`` so
+    they respect ``log_level`` in config.yaml.
     """
+    _log_dir = os.environ.get(
+        "KKOCLAW_LOG_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs"),
+    )
+    os.makedirs(_log_dir, exist_ok=True)
+
+    _formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # ── Gateway root logger → gateway.log ──────────────────────────────────
+    root_logger = logging.getLogger()
+    if not any(
+        isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "").endswith("gateway.log")
+        for h in root_logger.handlers
+    ):
+        _gw_path = os.path.join(_log_dir, "gateway.log")
+        with open(_gw_path, "w", encoding="utf-8") as _:
+            pass
+        _gw_handler = RotatingFileHandler(
+            _gw_path,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        _gw_handler.setFormatter(_formatter)
+        root_logger.addHandler(_gw_handler)
+
+    # ── kkoclaw logger → langgraph.log ──────────────────────────────────────
     langgraph_logger = logging.getLogger("kkoclaw")
-    # Avoid adding duplicate handlers across uvicorn reloads
     if any(
         isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", "").endswith("langgraph.log")
         for h in langgraph_logger.handlers
     ):
         return
 
-    # Truncate the log file on each service restart so old entries from a
-    # previous run do not persist. Must be done BEFORE creating the handler
-    # because RotatingFileHandler opens the file immediately in append mode.
-    with open("../logs/langgraph.log", "w", encoding="utf-8") as _:
+    _lg_path = os.path.join(_log_dir, "langgraph.log")
+    with open(_lg_path, "w", encoding="utf-8") as _:
         pass
 
     handler = RotatingFileHandler(
-        "../logs/langgraph.log",
-        maxBytes=10 * 1024 * 1024,  # 10 MB
+        _lg_path,
+        maxBytes=10 * 1024 * 1024,
         backupCount=3,
         encoding="utf-8",
     )
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    handler.setFormatter(_formatter)
     langgraph_logger.addHandler(handler)
 
 

@@ -42,6 +42,13 @@ esac
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# ── 加载项目 .env 配置（端口、API Key 等）──────────────────────────────────
+if [ -f "$REPO_ROOT/.env" ]; then
+    set -a
+    source "$REPO_ROOT/.env"
+    set +a
+fi
+
 DOCKER_DIR="$REPO_ROOT/docker"
 COMPOSE_CMD=(docker compose -p kkoclaw -f "$DOCKER_DIR/docker-compose.yaml")
 

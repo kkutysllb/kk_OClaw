@@ -65,7 +65,7 @@ services:
     image: nginx:alpine
     container_name: kkoclaw-nginx
     ports:
-      - "9191:9191"
+      - "${NGINX_PORT:-9191}:9191"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf.template:ro
     command:
@@ -164,6 +164,8 @@ services:
       - KKOCLAW_HOST_BASE_DIR=${KKOCLAW_ROOT}/backend/.kkoclaw
       - KKOCLAW_HOST_SKILLS_PATH=${KKOCLAW_ROOT}/skills
       - KKOCLAW_SANDBOX_HOST=host.docker.internal
+      # MongoDB: 容器内 127.0.0.1 指向容器自身，需改为宿主机地址
+      - LOCAL_MONGO_URI=mongodb://root:example@host.docker.internal:27017/quant_analysis?authSource=admin
     env_file:
       - ../.env
     extra_hosts:

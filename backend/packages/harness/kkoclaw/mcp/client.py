@@ -1,11 +1,16 @@
 """MCP client using langchain-mcp-adapters."""
 
 import logging
+import os
 from typing import Any
 
 from kkoclaw.config.extensions_config import ExtensionsConfig, McpServerConfig
 
 logger = logging.getLogger(__name__)
+
+# When running inside Docker (CI=true), stdio-based MCP servers cannot spawn
+# local processes (npx/uvx).  Only remote (HTTP/SSE) servers are allowed.
+_DOCKER_MODE = os.environ.get("CI") == "true" and os.path.exists("/.dockerenv")
 
 
 def build_server_params(server_name: str, config: McpServerConfig) -> dict[str, Any]:
@@ -62,6 +67,11 @@ def build_servers_config(extensions_config: ExtensionsConfig) -> dict[str, dict[
 
     servers_config = {}
     for server_name, server_config in enabled_servers.items():
+        # In Docker containers, skip stdio-based MCP servers (npx/uvx not available)
+        transport_type = (server_config.type or "stdio").lower()
+        if _DOCKER_MODE and transport_type == "stdio":
+            logger.info(f"Skipping stdio MCP server '{server_name}' in Docker mode (command: {server_config.command})")
+            continue
         try:
             servers_config[server_name] = build_server_params(server_name, server_config)
             logger.info(f"Configured MCP server: {server_name}")

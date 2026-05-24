@@ -1,0 +1,49 @@
+# ── Version Control ───────────────────────────────────────────────────────
+.git
+.gitignore
+.claude
+
+# ── IDE & Editor ─────────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── Python ───────────────────────────────────────────────────────────────
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/**/*.pyc
+backend/.pytest_cache
+backend/*.egg-info
+
+# ── Node.js ──────────────────────────────────────────────────────────────
+frontend/node_modules
+frontend/.next
+frontend/.eslintcache
+**/node_modules
+
+# ── Docker ───────────────────────────────────────────────────────────────
+docker/provisioner/.venv
+
+# ── Runtime Data ─────────────────────────────────────────────────────────
+.kkoclaw
+backend/.kkoclaw
+.pids
+logs
+temp
+
+# ── Documentation ────────────────────────────────────────────────────────
+docs
+*.md
+!backend/README.md
+LICENSE
+
+# ── Build Artifacts ──────────────────────────────────────────────────────
+outputs
+skills/custom
+skills/.skills_store_lock.json
+
+# ── OS ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

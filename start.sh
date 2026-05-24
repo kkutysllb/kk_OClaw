@@ -17,18 +17,20 @@
 #   nginx      反向代理 (Nginx)
 #
 # 模式:
-#   dev    开发模式 — 热重载，适合日常开发（默认）
-#   prod   生产模式 — 预构建前端，优化运行
+#   dev     开发模式 — 热重载，适合日常开发（默认）
+#   prod    本地生产模式 — 预构建前端，优化运行
+#   docker  Docker生产模式 — 容器化部署
 #
 # 示例:
 #   ./start.sh start                    # 开发模式启动所有服务
+#   ./start.sh start docker             # Docker 生产模式启动
 #   ./start.sh start gateway            # 仅启动 Gateway
 #   ./start.sh start frontend prod      # 仅启动 Frontend（生产模式）
-#   ./start.sh stop                     # 停止所有服务
+#   ./start.sh stop                     # 停止所有服务（自动检测 docker/本地）
 #   ./start.sh stop gateway             # 仅停止 Gateway
+#   ./start.sh restart docker           # 重启 Docker 服务
 #   ./start.sh restart frontend         # 重启 Frontend
-#   ./start.sh restart gateway          # 重启 Gateway
-#   ./start.sh status                   # 查看状态
+#   ./start.sh status                   # 查看状态（自动检测 docker/本地）
 #   ./start.sh logs                     # 查看所有日志
 #   ./start.sh logs gateway             # 仅查看 Gateway 日志
 
@@ -117,14 +119,22 @@ _kill_by_pidfile() {
     fi
 }
 
-# 强制释放端口
+# 强制释放端口（安全：跳过所有 Docker 相关进程）
 _kill_port() {
     local port=$1
-    local pid
-    pid=$(lsof -ti ":$port" 2>/dev/null) || true
-    if [ -n "$pid" ]; then
-        kill -9 $pid 2>/dev/null || true
-    fi
+    local pids
+    pids=$(lsof -ti ":$port" 2>/dev/null) || true
+    [ -z "$pids" ] && return 0
+    for p in $pids; do
+        # 通过 lsof 获取进程名（比 ps -o comm= 更可靠，不受路径截断影响）
+        local cmd
+        cmd=$(lsof -p "$p" -FcN 2>/dev/null | grep "^c" | head -1 | cut -c2-) || true
+        # Docker 相关进程全部跳过（macOS: com.docker.backend/com.docker.vpnkit, Linux: docker-proxy）
+        case "$cmd" in
+            docker-proxy|com.docker.*|Docker*) continue ;;
+        esac
+        kill -9 "$p" 2>/dev/null || true
+    done
 }
 
 # 等待端口就绪
@@ -156,7 +166,7 @@ show_help() {
     echo ""
     echo "命令:"
     echo "  start [服务] [模式]   启动服务（默认: all dev）"
-    echo "  stop [服务]          停止服务（默认: all）"
+    echo "  stop <模式> [服务]    停止服务（模式必填: dev|prod|docker）"
     echo "  restart [服务] [模式] 重启服务（默认: all dev）"
     echo "  status               查看服务运行状态"
     echo "  logs [service]       查看服务日志"
@@ -170,20 +180,23 @@ show_help() {
     echo ""
     echo "模式:"
     echo "  dev        开发模式 — 热重载，适合日常开发"
-    echo "  prod       生产模式 — 预构建前端，优化运行"
+    echo "  prod       本地生产模式 — 预构建前端，优化运行"
+    echo "  docker     Docker生产模式 — 容器化部署"
     echo ""
     echo "日志服务名:"
     echo "  gateway  |  frontend  |  nginx  |  all（默认）"
     echo ""
     echo "示例:"
     echo "  ./start.sh start                    # 开发模式启动所有服务"
-    echo "  ./start.sh start prod               # 生产模式启动所有服务"
+    echo "  ./start.sh start docker             # Docker 生产模式启动"
+    echo "  ./start.sh start prod               # 本地生产模式启动"
     echo "  ./start.sh start gateway            # 仅启动 Gateway"
-    echo "  ./start.sh start frontend prod      # 仅启动 Frontend（生产模式）"
-    echo "  ./start.sh stop                     # 停止所有服务"
-    echo "  ./start.sh stop gateway             # 仅停止 Gateway"
-    echo "  ./start.sh restart frontend         # 重启 Frontend"
-    echo "  ./start.sh status                   # 查看状态"
+    echo "  ./start.sh stop docker           # 停止 Docker 容器服务"
+    echo "  ./start.sh stop dev              # 停止开发模式服务"
+    echo "  ./start.sh stop prod             # 停止本地生产模式服务"
+    echo "  ./start.sh stop docker gateway   # 仅停止 Docker 中的 Gateway 容器"
+    echo "  ./start.sh restart docker           # 重启 Docker 服务"
+    echo "  ./start.sh status                   # 查看状态（自动检测模式）"
     echo "  ./start.sh logs                     # 查看所有日志"
     echo "  ./start.sh logs gateway             # 仅查看 Gateway 日志"
     echo ""
@@ -340,21 +353,63 @@ start_nginx_svc() {
     fi
 }
 
-# ── 停止所有服务 ─────────────────────────────────────────────────────────────
+# ── Docker 辅助函数 ─────────────────────────────────────────────────────────
 
-stop_all() {
+# Docker Compose 命令（生产模式）
+DOCKER_COMPOSE_CMD="docker compose --env-file $REPO_ROOT/.env -p kkoclaw -f $REPO_ROOT/docker/docker-compose.yaml"
+
+# 检测 Docker 容器是否在运行
+_is_docker_running() {
+    _export_compose_env
+    $DOCKER_COMPOSE_CMD ps --status running -q 2>/dev/null | grep -q .
+}
+
+# 检测当前运行模式: docker / local / none
+_detect_mode() {
+    if docker info >/dev/null 2>&1 && _is_docker_running; then
+        echo "docker"
+    elif [ -f "$GATEWAY_PID_FILE" ] || [ -f "$FRONTEND_PID_FILE" ] || [ -f "$NGINX_PID_FILE" ]; then
+        echo "local"
+    else
+        echo "none"
+    fi
+}
+
+# 导出 Docker Compose 所需环境变量（与 start_docker 保持一致）
+_export_compose_env() {
+    export KKOCLAW_HOME="${KKOCLAW_HOME:-$REPO_ROOT/backend/.kkoclaw}"
+    export KKOCLAW_CONFIG_PATH="${KKOCLAW_CONFIG_PATH:-$REPO_ROOT/config.yaml}"
+    export KKOCLAW_EXTENSIONS_CONFIG_PATH="${KKOCLAW_EXTENSIONS_CONFIG_PATH:-$REPO_ROOT/extensions_config.json}"
+    export KKOCLAW_DOCKER_SOCKET="${KKOCLAW_DOCKER_SOCKET:-/var/run/docker.sock}"
+    export KKOCLAW_REPO_ROOT="$REPO_ROOT"
+    export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-placeholder}"
+}
+
+# 停止 Docker 服务
+stop_docker() {
+    _info "停止 Docker 服务..."
+    _export_compose_env
+    if $DOCKER_COMPOSE_CMD down; then
+        _ok "Docker 服务已停止"
+    else
+        _warn "docker compose down 失败，尝试直接停止容器..."
+        docker stop kkoclaw-nginx kkoclaw-gateway kkoclaw-frontend 2>/dev/null || true
+        docker rm kkoclaw-nginx kkoclaw-gateway kkoclaw-frontend 2>/dev/null || true
+        _ok "容器已强制停止"
+    fi
+}
+
+# ── 停止所有服务（本地模式） ──────────────────────────────────────────────────
+
+stop_local_all() {
     echo ""
-    _info "正在停止所有服务..."
-
+    _info "正在停止所有本地服务..."
     stop_nginx_svc
     stop_gateway
     stop_frontend
-
-    # 清理临时文件
     rm -rf "$PID_DIR" 2>/dev/null || true
-    ./scripts/cleanup-containers.sh kkoclaw-sandbox 2>/dev/null || true
-
-    _ok "所有服务已停止"
+    "$REPO_ROOT/scripts/cleanup-containers.sh" kkoclaw-sandbox 2>/dev/null || true
+    _ok "所有本地服务已停止"
     echo ""
 }
 
@@ -365,6 +420,18 @@ show_status() {
     echo -e "${BOLD}服务运行状态${NC}"
     echo "──────────────────────────────────────────────"
     echo ""
+
+    # Docker 模式检测
+    if _is_docker_running; then
+        echo -e "  ${GREEN}●${NC} Docker     ${GREEN}运行中${NC}  (容器化部署)"
+        echo ""
+        echo "  Docker 容器:"
+        $DOCKER_COMPOSE_CMD ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | sed 's/^/    /'
+        echo ""
+        echo -e "  ${GREEN}🌐 访问地址: http://localhost:$NGINX_PORT${NC}"
+        echo ""
+        return
+    fi
 
     local all_ok=true
 
@@ -423,6 +490,24 @@ show_status() {
 show_logs() {
     local svc="$1"
 
+    # Docker 模式日志
+    if _is_docker_running; then
+        local docker_svc=""
+        case "$svc" in
+            gateway)  docker_svc="gateway" ;;
+            frontend) docker_svc="frontend" ;;
+            nginx)    docker_svc="nginx" ;;
+            all|"")  docker_svc="" ;;
+            *)
+                _err "未知服务: $svc (可选: gateway, frontend, nginx, all)"
+                exit 1
+                ;;
+        esac
+        _info "Docker 服务日志 (Ctrl+C 退出):"
+        $DOCKER_COMPOSE_CMD logs -f $docker_svc
+        return
+    fi
+
     case "$svc" in
         gateway)
             _info "Gateway 日志 ($GATEWAY_LOG):"
@@ -456,9 +541,9 @@ clean_resources() {
     echo -e "  ${BOLD}清理级别:${NC} $level"
     echo ""
 
-    # ── 共通: 先停止所有服务 ────────────────────────────────────────────────
-    _info "停止所有服务..."
-    stop_all >/dev/null 2>&1 || true
+    # ── 共通: 先停止所有本地服务 ────────────────────────────────────────────────
+    _info "停止所有本地服务..."
+    stop_local_all >/dev/null 2>&1 || true
 
     local total_freed=0
 
@@ -567,13 +652,75 @@ generate_nginx_config() {
         "$REPO_ROOT/docker/nginx/nginx.local.conf" > "$NGINX_TEMP_CONF"
 }
 
+# ── 启动 Docker 生产环境 ──────────────────────────────────────────────────
+
+start_docker() {
+    # 先停止已有 Docker 服务
+    stop_docker
+    sleep 1
+
+    # ── 检查 Docker 环境 ─────────────────────────────────────────────────
+    if ! command -v docker >/dev/null 2>&1; then
+        _err "未安装 Docker，请先安装: https://docs.docker.com/get-docker/"
+        return 1
+    fi
+    if ! docker info >/dev/null 2>&1; then
+        _err "Docker 守护进程未运行，请先启动 Docker"
+        return 1
+    fi
+
+    # ── Banner ────────────────────────────────────────────────────────────
+    _banner
+    echo -e "  ${BOLD}模式:${NC} DOCKER (生产容器化部署)"
+    echo ""
+    echo -e "    ${CYAN}Nginx${NC}       → localhost:${BOLD}$NGINX_PORT${NC}  (反向代理入口)"
+    echo ""
+
+    # ── 分步构建和启动（避免 OOM 搞挂 Docker daemon）────────────────────
+    local rebuild=false
+    [ "${2:-}" = "--rebuild" ] && rebuild=true
+
+    # 设置 compose 所需的环境变量
+    _export_compose_env
+
+    COMPOSE_CMD="docker compose --env-file $REPO_ROOT/.env -p kkoclaw -f $REPO_ROOT/docker/docker-compose.yaml"
+
+    # 检查是否需要构建
+    if $rebuild || ! docker image inspect kkoclaw-gateway >/dev/null 2>&1 || \
+       ! docker image inspect kkoclaw-frontend >/dev/null 2>&1; then
+        _info "构建镜像（单线程构建以降低内存峰值）..."
+        echo ""
+        DOCKER_BUILDKIT=1 $COMPOSE_CMD build --parallel 1 || {
+            _err "构建失败，请检查 Docker Desktop 内存设置（建议 ≥8GB）"
+            return 1
+        }
+    else
+        _ok "镜像已存在，跳过构建（如需强制重建: ./start.sh start docker --rebuild）"
+    fi
+
+    # 启动容器
+    _info "启动容器..."
+    echo ""
+    $COMPOSE_CMD up -d --remove-orphans frontend gateway nginx
+
+    echo ""
+    echo -e "  ${BOLD}🌐 http://localhost:$NGINX_PORT${NC}"
+    echo ""
+    echo -e "  ${CYAN}服务管理:${NC}"
+    echo "    ./start.sh stop      停止服务"
+    echo "    ./start.sh status    查看状态"
+    echo "    ./start.sh logs      查看日志"
+    echo "    ./start.sh restart   重启服务"
+    echo ""
+}
+
 # ── 启动所有服务 ────────────────────────────────────────────────────────────
 
 start_all() {
     local mode="$1"
 
-    # 先停止已有服务
-    stop_all
+    # 先停止已有本地服务
+    stop_local_all
     sleep 1
 
     # 创建必要目录
@@ -606,8 +753,8 @@ start_all() {
     fi
 
     # ── 逐个启动服务（失败时回滚）───────────────────────────────────────────
-    start_gateway "$mode"  || { _err "Gateway 启动失败，停止所有服务"; stop_all; return 1; }
-    start_frontend "$mode" || { _err "Frontend 启动失败，停止所有服务"; stop_all; return 1; }
+    start_gateway "$mode"  || { _err "Gateway 启动失败，停止所有本地服务"; stop_local_all; return 1; }
+    start_frontend "$mode" || { _err "Frontend 启动失败，停止所有本地服务"; stop_local_all; return 1; }
     start_nginx_svc        || { _warn "Nginx 启动失败，Gateway/Frontend 仍在运行"; }
 
     # ── 启动完成 ──────────────────────────────────────────────────────────
@@ -640,57 +787,118 @@ OPTION="${2:-}"
 
 # ── 参数解析辅助 ─────────────────────────────────────────────────────────────
 _is_service() { case "$1" in gateway|frontend|nginx|all) return 0;; *) return 1;; esac; }
-_is_mode()    { case "$1" in dev|prod) return 0;; *) return 1;; esac; }
+_is_mode()    { case "$1" in dev|prod|docker) return 0;; *) return 1;; esac; }
 
 case "$COMMAND" in
     start)
-        if _is_service "$OPTION"; then
+        # docker 模式特殊处理
+        if [ "$OPTION" = "docker" ]; then
+            start_docker || exit 1
+        elif _is_service "$OPTION"; then
             svc="$OPTION"; mode="${3:-dev}"
+            if [ "$mode" = "docker" ]; then
+                _err "Docker 模式不支持单独启动服务，请使用: ./start.sh start docker"
+                exit 1
+            fi
+            case "$svc" in
+                gateway)  start_gateway "$mode" || exit 1 ;;
+                frontend) start_frontend "$mode" || exit 1 ;;
+                nginx)    start_nginx_svc || exit 1 ;;
+            esac
         elif _is_mode "$OPTION" || [ -z "$OPTION" ]; then
-            svc="all"; mode="${2:-dev}"
+            mode="${2:-dev}"
+            if [ "$mode" = "docker" ]; then
+                start_docker || exit 1
+            else
+                start_all "$mode" || exit 1
+            fi
         else
             _err "未知参数: $OPTION"
-            echo "用法: ./start.sh start [gateway|frontend|nginx|all] [dev|prod]"
+            echo "用法: ./start.sh start [gateway|frontend|nginx|all] [dev|prod|docker]"
             exit 1
         fi
-        case "$svc" in
-            gateway)  start_gateway "$mode" || exit 1 ;;
-            frontend) start_frontend "$mode" || exit 1 ;;
-            nginx)    start_nginx_svc || exit 1 ;;
-            all)      start_all "$mode" || exit 1 ;;
-        esac
         ;;
 
     stop)
-        svc="${2:-all}"
-        case "$svc" in
-            gateway)  stop_gateway ;;
-            frontend) stop_frontend ;;
-            nginx)    stop_nginx_svc ;;
-            all)      stop_all ;;
+        # 模式参数必填
+        stop_mode="${2:-}"
+        if [ -z "$stop_mode" ]; then
+            echo ""
+            _err "stop 命令必须指定模式参数"
+            echo ""
+            echo "  用法: ./start.sh stop <dev|prod|docker> [gateway|frontend|nginx|all]"
+            echo ""
+            echo "  ./start.sh stop docker           # 停止 Docker 容器服务"
+            echo "  ./start.sh stop dev              # 停止开发模式服务"
+            echo "  ./start.sh stop prod             # 停止本地生产模式服务"
+            echo "  ./start.sh stop docker gateway   # 仅停止 Docker 中的 Gateway"
+            echo ""
+            exit 1
+        fi
+        stop_svc="${3:-all}"
+        case "$stop_mode" in
+            docker)
+                # Docker 模式：只通过 docker compose 操作，不碰本地进程
+                case "$stop_svc" in
+                    all)      stop_docker ;;
+                    gateway|frontend|nginx)
+                        _info "停止 Docker 容器: $stop_svc..."
+                        $DOCKER_COMPOSE_CMD stop "$stop_svc" 2>/dev/null || true
+                        _ok "$stop_svc 容器已停止"
+                        ;;
+                    *)
+                        _err "未知服务: $stop_svc (可选: gateway, frontend, nginx, all)"
+                        exit 1
+                        ;;
+                esac
+                ;;
+            dev|prod)
+                # 本地模式：通过 PID 文件 + 端口释放停止，不碰 Docker
+                case "$stop_svc" in
+                    all)      stop_local_all ;;
+                    gateway)  stop_gateway ;;
+                    frontend) stop_frontend ;;
+                    nginx)    stop_nginx_svc ;;
+                    *)
+                        _err "未知服务: $stop_svc (可选: gateway, frontend, nginx, all)"
+                        exit 1
+                        ;;
+                esac
+                ;;
             *)
-                _err "未知服务: $svc (可选: gateway, frontend, nginx, all)"
+                _err "未知模式: $stop_mode (可选: dev, prod, docker)"
+                echo "  用法: ./start.sh stop <dev|prod|docker> [服务]"
                 exit 1
                 ;;
         esac
         ;;
 
     restart)
-        if _is_service "$OPTION"; then
+        if [ "$OPTION" = "docker" ]; then
+            stop_docker; sleep 1; start_docker || exit 1
+        elif _is_service "$OPTION"; then
             svc="$OPTION"; mode="${3:-dev}"
+            if [ "$mode" = "docker" ]; then
+                _err "Docker 模式不支持单独重启服务，请使用: ./start.sh restart docker"
+                exit 1
+            fi
+            case "$svc" in
+                gateway)  stop_gateway; sleep 1; start_gateway "$mode" || exit 1 ;;
+                frontend) stop_frontend; sleep 1; start_frontend "$mode" || exit 1 ;;
+                nginx)    stop_nginx_svc; sleep 1; start_nginx_svc || exit 1 ;;
+            esac
         elif _is_mode "$OPTION" || [ -z "$OPTION" ]; then
-            svc="all"; mode="${2:-dev}"
+            mode="${2:-dev}"
+            if [ "$mode" = "docker" ]; then
+                stop_docker; sleep 1; start_docker || exit 1
+            else
+                stop_local_all; sleep 1; start_all "$mode" || exit 1
+            fi
         else
             _err "未知参数: $OPTION"
-            echo "用法: ./start.sh restart [gateway|frontend|nginx|all] [dev|prod]"
+            echo "用法: ./start.sh restart [gateway|frontend|nginx|all] [dev|prod|docker]"
             exit 1
         fi
-        case "$svc" in
-            gateway)  stop_gateway; sleep 1; start_gateway "$mode" || exit 1 ;;
-            frontend) stop_frontend; sleep 1; start_frontend "$mode" || exit 1 ;;
-            nginx)    stop_nginx_svc; sleep 1; start_nginx_svc || exit 1 ;;
-            all)      stop_all; sleep 1; start_all "$mode" || exit 1 ;;
-        esac
         ;;
 
     status)

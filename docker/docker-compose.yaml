@@ -28,9 +28,10 @@ services:
     image: nginx:alpine
     container_name: kkoclaw-nginx
     ports:
-      - "${PORT:-9191}:9191"
+      - "${NGINX_PORT:-9191}:9191"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf.template:ro
+      - ../logs:/var/log/nginx
     command: >
       sh -c "cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
@@ -71,12 +72,13 @@ services:
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
         UV_EXTRAS: ${UV_EXTRAS:-}
     container_name: kkoclaw-gateway
-    command: sh -c "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 9193 --workers ${GATEWAY_WORKERS:-4}"
+    command: sh -c "cd backend && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 9193 --workers ${GATEWAY_WORKERS:-1}"
     volumes:
       - ${KKOCLAW_CONFIG_PATH}:/app/backend/config.yaml:ro
       - ${KKOCLAW_EXTENSIONS_CONFIG_PATH}:/app/backend/extensions_config.json:ro
       - ../skills:/app/skills:ro
       - ${KKOCLAW_HOME}:/app/backend/.kkoclaw
+      - ../logs:/app/logs
       # DooD: AioSandboxProvider starts sandbox containers via host Docker daemon
       - ${KKOCLAW_DOCKER_SOCKET}:/var/run/docker.sock
       # CLI auth directories for auto-auth (Claude Code + Codex CLI)
@@ -95,6 +97,7 @@ services:
     working_dir: /app
     environment:
       - CI=true
+      - KKOCLAW_LOG_DIR=/app/logs
       - KKOCLAW_PROJECT_ROOT=/app
       - KKOCLAW_HOME=/app/backend/.kkoclaw
       - KKOCLAW_CONFIG_PATH=/app/backend/config.yaml
@@ -105,6 +108,8 @@ services:
       - KKOCLAW_HOST_BASE_DIR=${KKOCLAW_HOME}
       - KKOCLAW_HOST_SKILLS_PATH=${KKOCLAW_REPO_ROOT}/skills
       - KKOCLAW_SANDBOX_HOST=host.docker.internal
+      # MongoDB: 容器内 127.0.0.1 指向容器自身，需改为宿主机地址
+      - LOCAL_MONGO_URI=mongodb://root:example@host.docker.internal:27017/quant_analysis?authSource=admin
     env_file:
       - ../.env
     extra_hosts:

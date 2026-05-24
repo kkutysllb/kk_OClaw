@@ -25,11 +25,13 @@ COPY frontend ./frontend
 
 # ── Dev: install only, CMD is overridden by docker-compose ───────────────────
 FROM base AS dev
+ENV CI=true
 RUN cd /app/frontend && pnpm install --frozen-lockfile
 EXPOSE 3000
 
 # ── Builder: install + compile Next.js ───────────────────────────────────────
 FROM base AS builder
+ENV CI=true
 RUN cd /app/frontend && pnpm install --frozen-lockfile
 # Skip env validation — runtime vars are injected by nginx/container
 RUN cd /app/frontend && SKIP_ENV_VALIDATION=1 pnpm build

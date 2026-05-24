@@ -12,6 +12,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
+# ── 加载项目 .env 配置（端口、API Key 等）──────────────────────────────────
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
 # Docker Compose command with project name
 COMPOSE_CMD="docker compose -p kkoclaw-dev -f docker-compose-dev.yaml"
 

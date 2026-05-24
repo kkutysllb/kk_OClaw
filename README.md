@@ -21,9 +21,9 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
   - [配置](#配置)
   - [运行应用](#运行应用)
     - [部署建议与资源规划](#部署建议与资源规划)
-    - [方式一：Docker（推荐）](#方式一docker推荐)
-    - [方式二：本地开发](#方式二本地开发)
-    - [方式三：start.sh 一键脚本（本地开发推荐）](#方式三startsh-一键脚本本地开发推荐)
+    - [启动服务](#启动服务)
+    - [服务管理命令](#服务管理命令)
+    - [服务端口](#服务端口)
   - [进阶配置](#进阶配置)
     - [Sandbox 模式](#sandbox-模式)
     - [MCP Server](#mcp-server)
@@ -90,97 +90,84 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
 
 ### 运行应用
 
+所有部署模式统一通过 `start.sh` 管理，支持三种运行模式：
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| dev | `./start.sh start` | 本地开发，热重载 |
+| prod | `start.sh start prod` | 本地生产，预构建前端 |
+| docker | `start.sh start docker` | Docker 生产，容器化部署 |
+
 #### 部署建议与资源规划
 
 | 部署场景 | 起步配置 | 推荐配置 | 说明 |
 |---------|-----------|------------|-------|
-| 本地体验 / `make dev` | 4 vCPU、8 GB 内存、20 GB SSD | 8 vCPU、16 GB 内存 | 适合单个开发者或单个轻量会话 |
-| Docker 开发 / `make docker-start` | 4 vCPU、8 GB 内存、25 GB SSD | 8 vCPU、16 GB 内存 | 镜像构建和 sandbox 容器更吃资源 |
-| 长期运行服务 / `make up` | 8 vCPU、16 GB 内存、40 GB SSD | 16 vCPU、32 GB 内存 | 适合共享环境、多 agent 任务 |
+| 本地开发 / `./start.sh start` | 4 vCPU、8 GB 内存、20 GB SSD | 8 vCPU、16 GB 内存 | 适合单个开发者或单个轻量会话 |
+| 本地生产 / `./start.sh start prod` | 4 vCPU、8 GB 内存、20 GB SSD | 8 vCPU、16 GB 内存 | 适合稳定运行 |
+| Docker 生产 / `./start.sh start docker` | 8 vCPU、16 GB 内存、40 GB SSD | 16 vCPU、32 GB 内存 | 适合共享环境、多 agent 任务 |
 
 - 上面的配置只覆盖 KKOCLAW 本身；本地大模型需单独预留资源。
-- 持续运行的服务推荐 Linux + Docker。
+- 持续运行的服务推荐 Linux + Docker 模式。
 
-#### 方式一：Docker（推荐）
+#### 启动服务
 
-**开发模式**（支持热更新，挂载源码）：
-
-```bash
-make docker-init    # 拉取 sandbox 镜像
-make docker-start   # 启动服务
-```
-
-**生产模式**（本地构建镜像，挂载运行期配置与数据）：
+**首次使用前**，先完成「配置」步骤，然后安装依赖：
 
 ```bash
-make up     # 构建镜像并启动全部生产服务
-make down   # 停止并移除容器
+make check    # 校验 Node.js 22+、pnpm、uv、nginx
+make install  # 安装 backend + frontend 依赖
 ```
 
-访问地址：http://localhost:9191
+**本地开发模式**（默认，支持热重载）：
 
-#### 方式二：本地开发
+```bash
+./start.sh start
+```
 
-前提：先完成上面的"配置"步骤。
+**Docker 生产模式**（容器化部署，首次启动会自动构建镜像）：
 
-1. **检查依赖环境**：
-   ```bash
-   make check  # 校验 Node.js 22+、pnpm、uv、nginx
-   ```
+```bash
+./start.sh start docker
+```
 
-2. **安装依赖**：
-   ```bash
-   make install  # 安装 backend + frontend 依赖
-   ```
+访问地址：http://localhost:9191（可通过 `.env` 中的 `NGINX_PORT` 自定义）
 
-3. **（可选）预拉取 sandbox 镜像**：
-   ```bash
-   make setup-sandbox
-   ```
+> **提示**：Docker 模式需要先安装并启动 Docker。`stop`/`status`/`logs` 命令会自动检测当前运行模式（本地或 Docker），无需手动指定。
 
-4. **启动服务**：
-   ```bash
-   make dev
-   ```
-
-5. **访问地址**：http://localhost:9191
-
-#### 方式三：start.sh 一键脚本（本地开发推荐）
-
-`start.sh` 是一个自包含的服务管理脚本，统一管理 Gateway、Frontend、Nginx 三个服务。通过 PID 文件实现进程隔离——只管理自己的进程，不会误伤同机上其他项目。
-
-**常用命令**：
+#### 服务管理命令
 
 ```bash
 ./start.sh start              # 启动所有服务（开发模式，热重载）
-./start.sh start prod         # 生产模式启动（优化构建）
-./start.sh stop               # 停止所有服务
-./start.sh restart dev        # 重启（开发模式）
-./start.sh status             # 查看服务运行状态
+./start.sh start docker       # Docker 生产模式启动
+./start.sh start prod         # 本地生产模式启动
+./start.sh stop               # 停止所有服务（自动检测模式）
+./start.sh restart            # 重启所有服务
+./start.sh restart docker     # 重启 Docker 服务
+./start.sh status             # 查看服务运行状态（自动检测模式）
 ./start.sh logs               # 查看所有服务日志
 ./start.sh logs gateway       # 仅查看 Gateway 日志
+./start.sh clean              # 清理缓存文件
+./start.sh clean build        # 清理构建产物
+./start.sh clean all          # 深度清理
 ```
 
-**服务端口**（可通过 `.env` 自定义）：
-
-| 服务     | 默认端口 | 环境变量          |
-|----------|---------|-------------------|
-| Nginx    | 9191    | `LANGGRAPH_PORT`  |
-| Frontend | 9192    | `FRONTEND_PORT`   |
-| Gateway  | 9193    | `GATEWAY_PORT`    |
-
-**核心特性**：
-- **进程隔离**：每个服务有独立的 PID 文件（`.pids/`），`stop` 只精确终止自己的进程，不会影响同机其他项目。
-- **端口感知管理**：自动检测并清理残留的端口占用。
-- **健康检查**：启动时等待每个服务端口就绪后才启动下一个。
-- **彩色状态输出**：`./start.sh status` 用绿/黄/红三色显示状态、PID 和日志路径。
-- **环境变量配置**：所有端口和路径都可通过 `.env` 自定义。
-
-**跳过依赖同步**（已安装依赖时更快启动）：
+跳过依赖同步（已安装依赖时更快启动）：
 
 ```bash
 SKIP_INSTALL=true ./start.sh start
 ```
+
+#### 服务端口
+
+所有端口通过 `.env` 文件统一配置：
+
+| 服务     | 默认端口 | 环境变量          |
+|----------|---------|-------------------|
+| Nginx    | 9191    | `NGINX_PORT`      |
+| Frontend | 9192    | `FRONTEND_PORT`   |
+| Gateway  | 9193    | `GATEWAY_PORT`    |
+
+本地开发和 Docker 模式共享同一套端口配置，切换部署方式时访问地址不变。
 
 ### 进阶配置
 
