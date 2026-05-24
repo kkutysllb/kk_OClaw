@@ -12,6 +12,10 @@
 - [x] 添加视觉模型支持及 ViewImageMiddleware
 - [x] 技能系统及 SKILL.md 格式
 - [x] 将 `packages/harness/kkoclaw/tools/builtins/task_tool.py` 中的 `time.sleep(5)` 替换为 `asyncio.sleep()`（子智能体轮询）
+- [x] 实现基于 `current_context` 的 TF-IDF 相似度检索
+- [x] 实现按相似度 + 置信度的 memory facts 加权排序
+- [x] 为 memory retrieval 引入 facts 侧文档集签名缓存
+- [x] 增强 `tokenize_text()` 的中文/技术词切分能力
 
 ## 计划功能
 
