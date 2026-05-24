@@ -602,6 +602,18 @@ sandbox:
 #       max_turns: 80
 #       # skills: []            # No skills for bash agent
 #
+#   # Optional parent-model -> subagent-model routing.
+#   # All names here are user-configured examples and must match entries in `models:`.
+#   # `fallback: default` means "fall back to models[0]" when preferred_models are unavailable.
+#   # model_routing:
+#   #   enabled: true
+#   #   rules:
+#   #     - parent_models: ["deepseek-v4-flash", "deepseek-v4-pro"]
+#   #       include_subagent_types: ["general-purpose"]
+#   #       exclude_subagent_types: ["bash"]
+#   #       preferred_models: ["glm-5.1", "minimax-m2.5"]
+#   #       fallback: default
+#
 #   # Custom subagent types: define specialized agents with their own prompts,
 #   # tools, skills, and model configuration. Custom agents are available via
 #   # the `task` tool alongside built-in types (general-purpose, bash).

@@ -70,6 +70,8 @@ def resolve_subagent_model_name(
         return config.model
 
     if app_config is None:
+        if parent_model is not None:
+            return parent_model
         from kkoclaw.config import get_app_config
 
         app_config = get_app_config()

@@ -275,7 +275,7 @@ class SubagentExecutor:
         # Resolve eagerly only when it does not require loading config.yaml; otherwise defer
         # to _create_agent (which already loads app_config) so unit tests can construct
         # executors without a config file present.
-        if config.model != "inherit" or parent_model is not None or app_config is not None:
+        if config.model != "inherit" or app_config is not None:
             self.model_name: str | None = resolve_subagent_model_name(
                 config,
                 parent_model,

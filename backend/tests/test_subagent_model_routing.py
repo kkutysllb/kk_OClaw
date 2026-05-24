@@ -159,3 +159,31 @@ def test_resolve_subagent_model_name_skips_rule_for_excluded_subagent_type() -> 
         app_config=app_config,
     )
     assert resolved == "deepseek-v4-flash"
+
+
+def test_resolve_subagent_model_name_with_single_configured_model_still_runs() -> None:
+    config = SubagentConfig(name="general-purpose", description="gp", system_prompt="test")
+    app_config = SimpleNamespace(
+        models=[SimpleNamespace(name="only-model")],
+        subagents=SubagentsAppConfig(
+            model_routing={
+                "enabled": True,
+                "rules": [
+                    {
+                        "parent_models": ["only-model"],
+                        "include_subagent_types": ["general-purpose"],
+                        "preferred_models": ["glm-5.1", "custom-minimax"],
+                        "fallback": "default",
+                    }
+                ],
+            }
+        ),
+    )
+
+    resolved = resolve_subagent_model_name(
+        config,
+        "only-model",
+        subagent_type="general-purpose",
+        app_config=app_config,
+    )
+    assert resolved == "only-model"
