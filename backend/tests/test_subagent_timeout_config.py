@@ -325,7 +325,7 @@ class TestRegistryGetSubagentConfig:
         _reset_subagents_config(timeout_seconds=900)
         config = get_subagent_config("general-purpose")
         assert config.timeout_seconds == 900
-        assert config.max_turns == 100
+        assert config.max_turns == 25  # general-purpose default lowered from 100
 
     def test_global_timeout_override_applied(self):
         from kkoclaw.subagents.registry import get_subagent_config

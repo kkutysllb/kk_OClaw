@@ -216,10 +216,27 @@ def _filter_tools(
         allowed_set = set(allowed)
         filtered = [t for t in filtered if t.name in allowed_set]
 
+    # Build effective deny set from explicit config + automatic exclusions
+    effective_disallowed: set[str] = set(disallowed or [])
+
+    # Automatically exclude Filesystem MCP tools from subagents.
+    # Subagent system prompts reference sandbox virtual paths (/mnt/user-data/*)
+    # which are correctly handled by bash/sandbox tools via
+    # ``replace_virtual_paths_in_command``.  The Filesystem MCP server
+    # does NOT understand virtual paths — it only allows its configured
+    # host directories (e.g. /Users/libing).  Allowing subagents to call
+    # Filesystem tools with virtual paths always results in
+    # "Access denied - path outside allowed directories" errors, wasting
+    # tokens and time.
+    if allowed is None:
+        auto_exclude_prefixes = ("Filesystem_",)
+        effective_disallowed.update(
+            t.name for t in filtered if t.name.startswith(auto_exclude_prefixes)
+        )
+
     # Apply denylist
-    if disallowed is not None:
-        disallowed_set = set(disallowed)
-        filtered = [t for t in filtered if t.name not in disallowed_set]
+    if effective_disallowed:
+        filtered = [t for t in filtered if t.name not in effective_disallowed]
 
     return filtered
 
