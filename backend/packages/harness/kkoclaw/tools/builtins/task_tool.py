@@ -247,7 +247,12 @@ async def task_tool(
     resolved_app_config = runtime_app_config
     if config.model == "inherit" and parent_model is None and resolved_app_config is None:
         resolved_app_config = get_app_config()
-    effective_model = resolve_subagent_model_name(config, parent_model, app_config=resolved_app_config)
+    effective_model = resolve_subagent_model_name(
+        config,
+        parent_model,
+        subagent_type=subagent_type,
+        app_config=resolved_app_config,
+    )
 
     # Subagents should not have subagent tools enabled (prevent recursive nesting)
     available_tools_kwargs = {

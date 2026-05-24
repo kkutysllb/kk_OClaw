@@ -179,6 +179,55 @@ def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypat
     assert captured["executor_kwargs"]["tools"] == ["tool-a"]
 
 
+def test_task_tool_passes_subagent_type_to_model_resolution(monkeypatch):
+    config = _make_subagent_config()
+    runtime = _make_runtime()
+    captured = {}
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            captured["executor_kwargs"] = kwargs
+
+        def execute_async(self, prompt, task_id=None):
+            captured["prompt"] = prompt
+            return task_id or "generated-task-id"
+
+    def fake_resolve_subagent_model_name(config_arg, parent_model, *, subagent_type=None, app_config=None):
+        captured["resolve_call"] = {
+            "config": config_arg,
+            "parent_model": parent_model,
+            "subagent_type": subagent_type,
+            "app_config": app_config,
+        }
+        return "glm-5.1"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: config)
+    monkeypatch.setattr(task_tool_module, "resolve_subagent_model_name", fake_resolve_subagent_model_name)
+    monkeypatch.setattr(
+        task_tool_module,
+        "get_background_task_result",
+        lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="done"),
+    )
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: lambda event: None)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr("kkoclaw.tools.get_available_tools", lambda **kwargs: ["tool-a"])
+
+    output = _run_task_tool(
+        runtime=runtime,
+        description="运行子任务",
+        prompt="collect diagnostics",
+        subagent_type="general-purpose",
+        tool_call_id="tc-routing",
+    )
+
+    assert output == "Task Succeeded. Result: done"
+    assert captured["resolve_call"]["subagent_type"] == "general-purpose"
+    assert captured["executor_kwargs"]["parent_model"] == "ark-model"
+    assert captured["prompt"] == "collect diagnostics"
+
+
 def test_task_tool_emits_running_and_completed_events(monkeypatch):
     config = _make_subagent_config()
     runtime = _make_runtime()
