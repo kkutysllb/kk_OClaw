@@ -764,6 +764,14 @@ memory:
   fact_confidence_threshold: 0.7 # Minimum confidence for storing facts
   injection_enabled: true # Whether to inject memory into system prompt
   max_injection_tokens: 2000 # Maximum tokens for memory injection
+  retrieval:
+    enabled: false # Whether to rank facts using current conversation context
+    strategy: tfidf # Current supported retrieval strategy
+    context_max_turns: 4 # Number of recent user/final-assistant turns used as current context
+    context_max_chars: 4000 # Max characters retained when building current context
+    similarity_weight: 0.6 # Weight for TF-IDF similarity in final ranking
+    confidence_weight: 0.4 # Weight for stored fact confidence in final ranking
+    min_similarity: 0.0 # Lower similarity floor before weighted ranking
 
 # ============================================================================
 # 自定义 Agent 管理 API
