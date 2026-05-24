@@ -1,5 +1,10 @@
 from kkoclaw.agents.memory import retrieval as retrieval_module
-from kkoclaw.agents.memory.retrieval import rank_memory_facts, tokenize_text
+from kkoclaw.agents.memory.retrieval import (
+    get_retrieval_stats,
+    rank_memory_facts,
+    reset_retrieval_stats,
+    tokenize_text,
+)
 from kkoclaw.config.memory_config import MemoryConfig
 
 
@@ -45,6 +50,56 @@ def test_rank_memory_facts_falls_back_to_confidence_without_context() -> None:
     )
 
     assert [fact["content"] for fact in ranked] == ["High", "Low"]
+
+
+def test_rank_memory_facts_records_cache_hit_and_miss() -> None:
+    retrieval_module._prepare_fact_corpus_cached.cache_clear()
+    reset_retrieval_stats()
+
+    facts = [
+        {"content": "LangGraph memory retrieval cache", "confidence": 0.9},
+        {"content": "Summarization middleware trigger", "confidence": 0.8},
+    ]
+
+    rank_memory_facts(
+        facts,
+        current_context="memory retrieval cache",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+    first = get_retrieval_stats()
+    assert first["cache_misses"] == 1
+    assert first["cache_hits"] == 0
+
+    rank_memory_facts(
+        facts,
+        current_context="memory retrieval cache",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+    second = get_retrieval_stats()
+    assert second["cache_misses"] == 1
+    assert second["cache_hits"] == 1
+
+
+def test_rank_memory_facts_records_fallback_stats_without_context() -> None:
+    reset_retrieval_stats()
+
+    facts = [
+        {"content": "Memory facts ranking", "confidence": 0.75},
+    ]
+
+    ranked = rank_memory_facts(
+        facts,
+        current_context=None,
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    stats = get_retrieval_stats()
+    assert ranked[0]["content"] == "Memory facts ranking"
+    assert stats["calls_without_context"] == 1
+    assert stats["fallback_confidence_only_calls"] == 1
 
 
 def test_rank_memory_facts_reuses_prepared_corpus_for_same_facts(monkeypatch) -> None:

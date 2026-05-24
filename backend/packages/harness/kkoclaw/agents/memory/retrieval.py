@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from typing import Any
 
@@ -27,6 +27,46 @@ class PreparedFactCorpus:
     fact_tokens: tuple[tuple[str, ...], ...]
     idf_map: dict[str, float]
     fact_vectors: tuple[dict[str, float], ...]
+
+
+@dataclass
+class RetrievalStats:
+    """Process-local debug stats for retrieval behavior."""
+
+    rank_calls: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    calls_without_context: int = 0
+    calls_with_empty_query_tokens: int = 0
+    calls_with_empty_idf: int = 0
+    fallback_confidence_only_calls: int = 0
+    last_facts_count: int = 0
+    last_ranked_count: int = 0
+    last_context_chars: int = 0
+    last_query_tokens: int = 0
+    last_injection_tokens_budget: int = 0
+    last_injected_facts_count: int = 0
+    last_top_scores: list[dict[str, float | int]] = field(default_factory=list)
+
+
+_RETRIEVAL_STATS = RetrievalStats()
+
+
+def get_retrieval_stats() -> dict[str, Any]:
+    """Return a JSON-safe snapshot of current retrieval stats."""
+    return asdict(_RETRIEVAL_STATS)
+
+
+def reset_retrieval_stats() -> None:
+    """Reset process-local retrieval stats, mainly for tests."""
+    global _RETRIEVAL_STATS
+    _RETRIEVAL_STATS = RetrievalStats()
+
+
+def record_retrieval_injection_stats(*, budget: int, injected_facts_count: int) -> None:
+    """Track latest injection budget usage without storing raw content."""
+    _RETRIEVAL_STATS.last_injection_tokens_budget = max(0, int(budget))
+    _RETRIEVAL_STATS.last_injected_facts_count = max(0, int(injected_facts_count))
 
 
 def normalize_text(text: str) -> str:
@@ -237,8 +277,16 @@ def rank_memory_facts(
         for fact in facts
         if isinstance(fact, dict) and isinstance(fact.get("content"), str) and fact["content"].strip()
     ]
+    _RETRIEVAL_STATS.rank_calls += 1
+    _RETRIEVAL_STATS.last_facts_count = len(valid_facts)
+    _RETRIEVAL_STATS.last_context_chars = len(current_context or "")
+    _RETRIEVAL_STATS.last_query_tokens = 0
+    _RETRIEVAL_STATS.last_ranked_count = len(valid_facts)
+    _RETRIEVAL_STATS.last_top_scores = []
 
     if not current_context:
+        _RETRIEVAL_STATS.calls_without_context += 1
+        _RETRIEVAL_STATS.fallback_confidence_only_calls += 1
         return _sort_facts_by_confidence(valid_facts)
 
     total_weight = similarity_weight + confidence_weight
@@ -249,23 +297,51 @@ def rank_memory_facts(
         confidence_weight /= total_weight
 
     query_tokens = tokenize_text(current_context)
+    _RETRIEVAL_STATS.last_query_tokens = len(query_tokens)
     if not query_tokens:
+        _RETRIEVAL_STATS.calls_with_empty_query_tokens += 1
+        _RETRIEVAL_STATS.fallback_confidence_only_calls += 1
         return _sort_facts_by_confidence(valid_facts)
 
     facts_signature = build_facts_signature(valid_facts)
+    cache_before = _prepare_fact_corpus_cached.cache_info()
     prepared = _prepare_fact_corpus_cached(facts_signature)
+    cache_after = _prepare_fact_corpus_cached.cache_info()
+    if cache_after.hits > cache_before.hits:
+        _RETRIEVAL_STATS.cache_hits += 1
+    elif cache_after.misses > cache_before.misses:
+        _RETRIEVAL_STATS.cache_misses += 1
     if not prepared.idf_map:
+        _RETRIEVAL_STATS.calls_with_empty_idf += 1
+        _RETRIEVAL_STATS.fallback_confidence_only_calls += 1
         return _sort_facts_by_confidence(valid_facts)
 
     query_vector = _build_tfidf_vector(query_tokens, prepared.idf_map)
 
     scored_facts: list[tuple[float, float, int, dict[str, Any]]] = []
+    debug_rows: list[dict[str, float | int]] = []
     for index, fact in enumerate(valid_facts):
         similarity = _cosine_similarity(query_vector, prepared.fact_vectors[index])
         similarity = max(min_similarity, similarity)
         confidence = _coerce_confidence(fact.get("confidence"), default=0.0)
         final_score = (similarity * similarity_weight) + (confidence * confidence_weight)
         scored_facts.append((final_score, confidence, -index, fact))
+        debug_rows.append(
+            {
+                "index": index,
+                "similarity": round(similarity, 6),
+                "confidence": round(confidence, 6),
+                "final_score": round(final_score, 6),
+            }
+        )
 
     scored_facts.sort(reverse=True)
-    return [fact for _, _, _, fact in scored_facts]
+    ranked_facts = [fact for _, _, _, fact in scored_facts]
+    _RETRIEVAL_STATS.last_ranked_count = len(ranked_facts)
+    score_by_index = {int(row["index"]): row for row in debug_rows}
+    _RETRIEVAL_STATS.last_top_scores = [
+        score_by_index[index]
+        for _, _, neg_index, _ in scored_facts[:3]
+        if (index := -neg_index) in score_by_index
+    ]
+    return ranked_facts
