@@ -763,7 +763,7 @@ memory:
   max_facts: 100 # Maximum number of facts to store
   fact_confidence_threshold: 0.7 # Minimum confidence for storing facts
   injection_enabled: true # Whether to inject memory into system prompt
-  max_injection_tokens: 2000 # Maximum tokens for memory injection
+  max_injection_tokens: 2000 # Maximum tokens for memory injection; observe retrieval stats before raising to 2500-3000
   retrieval:
     enabled: false # Whether to rank facts using current conversation context
     strategy: tfidf # Current supported retrieval strategy
@@ -772,6 +772,7 @@ memory:
     similarity_weight: 0.6 # Weight for TF-IDF similarity in final ranking
     confidence_weight: 0.4 # Weight for stored fact confidence in final ranking
     min_similarity: 0.0 # Lower similarity floor before weighted ranking
+    # Debug retrieval behavior via `/api/memory/retrieval/stats` before tuning summarization.trigger or token budgets
 
 # ============================================================================
 # 自定义 Agent 管理 API

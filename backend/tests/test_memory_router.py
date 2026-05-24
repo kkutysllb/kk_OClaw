@@ -303,3 +303,76 @@ def test_update_memory_fact_route_returns_specific_error_for_invalid_confidence(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid confidence value; must be between 0 and 1."
+
+
+def test_memory_retrieval_stats_route_returns_runtime_stats() -> None:
+    app = FastAPI()
+    app.include_router(memory.router)
+    stats = {
+        "rank_calls": 2,
+        "cache_hits": 1,
+        "cache_misses": 1,
+        "calls_without_context": 0,
+        "calls_with_empty_query_tokens": 0,
+        "calls_with_empty_idf": 0,
+        "fallback_confidence_only_calls": 0,
+        "last_facts_count": 3,
+        "last_ranked_count": 3,
+        "last_context_chars": 42,
+        "last_query_tokens": 8,
+        "last_injection_tokens_budget": 2000,
+        "last_injected_facts_count": 2,
+        "last_top_scores": [
+            {
+                "index": 0,
+                "similarity": 0.9,
+                "confidence": 0.8,
+                "final_score": 0.86,
+            }
+        ],
+    }
+
+    with patch("app.gateway.routers.memory.get_retrieval_stats", return_value=stats):
+        with TestClient(app) as client:
+            response = client.get("/api/memory/retrieval/stats")
+
+    assert response.status_code == 200
+    assert response.json() == stats
+
+
+def test_memory_retrieval_stats_route_does_not_expose_raw_text_fields() -> None:
+    app = FastAPI()
+    app.include_router(memory.router)
+    stats = {
+        "rank_calls": 1,
+        "cache_hits": 0,
+        "cache_misses": 1,
+        "calls_without_context": 0,
+        "calls_with_empty_query_tokens": 0,
+        "calls_with_empty_idf": 0,
+        "fallback_confidence_only_calls": 0,
+        "last_facts_count": 2,
+        "last_ranked_count": 2,
+        "last_context_chars": 21,
+        "last_query_tokens": 4,
+        "last_injection_tokens_budget": 2000,
+        "last_injected_facts_count": 1,
+        "last_top_scores": [
+            {
+                "index": 1,
+                "similarity": 0.75,
+                "confidence": 0.7,
+                "final_score": 0.73,
+            }
+        ],
+    }
+
+    with patch("app.gateway.routers.memory.get_retrieval_stats", return_value=stats):
+        with TestClient(app) as client:
+            response = client.get("/api/memory/retrieval/stats")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "current_context" not in data
+    assert "facts" not in data
+    assert '"content"' not in str(data)

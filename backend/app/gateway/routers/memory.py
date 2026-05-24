@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from kkoclaw.agents.memory.retrieval import get_retrieval_stats
 from kkoclaw.agents.memory.updater import (
     clear_memory_data,
     create_memory_fact,
@@ -105,6 +106,34 @@ class MemoryStatusResponse(BaseModel):
 
     config: MemoryConfigResponse
     data: MemoryResponse
+
+
+class RetrievalScoreSummary(BaseModel):
+    """Compact score summary for the latest ranked facts."""
+
+    index: int = Field(..., description="Original index of the ranked fact")
+    similarity: float = Field(..., description="TF-IDF similarity score")
+    confidence: float = Field(..., description="Fact confidence score")
+    final_score: float = Field(..., description="Weighted final ranking score")
+
+
+class MemoryRetrievalStatsResponse(BaseModel):
+    """Response model for retrieval runtime stats."""
+
+    rank_calls: int = Field(..., description="How many times ranking has been called")
+    cache_hits: int = Field(..., description="How many times the fact corpus cache was hit")
+    cache_misses: int = Field(..., description="How many times the fact corpus cache was missed")
+    calls_without_context: int = Field(..., description="Calls that had no current context")
+    calls_with_empty_query_tokens: int = Field(..., description="Calls that produced no query tokens")
+    calls_with_empty_idf: int = Field(..., description="Calls whose prepared corpus had no IDF terms")
+    fallback_confidence_only_calls: int = Field(..., description="Calls that fell back to confidence-only sorting")
+    last_facts_count: int = Field(..., description="Fact count seen in the latest ranking call")
+    last_ranked_count: int = Field(..., description="Ranked fact count from the latest ranking call")
+    last_context_chars: int = Field(..., description="Character length of the latest context")
+    last_query_tokens: int = Field(..., description="Token count of the latest query")
+    last_injection_tokens_budget: int = Field(..., description="Configured injection token budget")
+    last_injected_facts_count: int = Field(..., description="How many facts were injected last time")
+    last_top_scores: list[RetrievalScoreSummary] = Field(default_factory=list, description="Top score summaries")
 
 
 @router.get(
@@ -324,6 +353,17 @@ async def get_memory_config_endpoint() -> MemoryConfigResponse:
         injection_enabled=config.injection_enabled,
         max_injection_tokens=config.max_injection_tokens,
     )
+
+
+@router.get(
+    "/memory/retrieval/stats",
+    response_model=MemoryRetrievalStatsResponse,
+    summary="Get Memory Retrieval Stats",
+    description="Retrieve process-local retrieval stats without exposing raw context or fact text.",
+)
+async def get_memory_retrieval_stats_endpoint() -> MemoryRetrievalStatsResponse:
+    """Get safe runtime stats for memory retrieval behavior."""
+    return MemoryRetrievalStatsResponse(**get_retrieval_stats())
 
 
 @router.get(

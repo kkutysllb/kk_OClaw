@@ -1,6 +1,7 @@
 """Middleware for memory mechanism."""
 
 import logging
+import re
 from typing import TYPE_CHECKING, override
 
 from langchain.agents import AgentState
@@ -12,7 +13,12 @@ from langgraph.runtime import Runtime
 from kkoclaw.agents.memory.message_processing import detect_correction, detect_reinforcement, filter_messages_for_memory
 from kkoclaw.agents.memory.prompt import format_memory_for_injection
 from kkoclaw.agents.memory.queue import get_memory_queue
-from kkoclaw.agents.memory.retrieval import extract_current_context, rank_memory_facts
+from kkoclaw.agents.memory.retrieval import (
+    extract_current_context,
+    get_retrieval_stats,
+    rank_memory_facts,
+    record_retrieval_injection_stats,
+)
 from kkoclaw.agents.memory.updater import get_memory_data
 from kkoclaw.config.memory_config import get_memory_config
 from kkoclaw.runtime.user_context import get_effective_user_id
@@ -53,11 +59,35 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         self._agent_name = agent_name
         self._memory_config = memory_config
 
+    @staticmethod
+    def _count_injected_fact_lines(memory_content: str) -> int:
+        """Count rendered fact rows from the formatted memory content."""
+        if not memory_content.strip():
+            return 0
+
+        in_facts_section = False
+        count = 0
+        for raw_line in memory_content.splitlines():
+            line = raw_line.strip()
+            if line == "Facts:":
+                in_facts_section = True
+                continue
+            if not in_facts_section:
+                continue
+            if not line:
+                continue
+            if re.match(r"^[A-Za-z][A-Za-z ]*:$", line):
+                break
+            if line.startswith("- ["):
+                count += 1
+        return count
+
     def _build_retrieval_injection(self, messages: list, config: "MemoryConfig") -> dict | None:
         retrieval_config = getattr(config, "retrieval", None)
         if not (config.enabled and config.injection_enabled and retrieval_config and retrieval_config.enabled):
             return None
 
+        stats_before = get_retrieval_stats()
         current_context = extract_current_context(
             messages,
             max_turns=retrieval_config.context_max_turns,
@@ -76,6 +106,29 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             max_tokens=config.max_injection_tokens,
             ranked_facts=ranked_facts,
         )
+        injected_facts_count = self._count_injected_fact_lines(memory_content)
+        record_retrieval_injection_stats(
+            budget=config.max_injection_tokens,
+            injected_facts_count=injected_facts_count,
+        )
+        stats_after = get_retrieval_stats()
+        cache_event = "hit"
+        if stats_after["cache_misses"] > stats_before["cache_misses"]:
+            cache_event = "miss"
+        elif stats_after["cache_hits"] == stats_before["cache_hits"]:
+            cache_event = "n/a"
+        fallback_used = stats_after["fallback_confidence_only_calls"] > stats_before["fallback_confidence_only_calls"]
+        logger.debug(
+            "memory.retrieval ranked facts=%s context_chars=%s query_tokens=%s cache=%s fallback=%s injected=%s budget=%s top_scores=%s",
+            stats_after["last_facts_count"],
+            stats_after["last_context_chars"],
+            stats_after["last_query_tokens"],
+            cache_event,
+            fallback_used,
+            stats_after["last_injected_facts_count"],
+            stats_after["last_injection_tokens_budget"],
+            stats_after["last_top_scores"],
+        )
         if not memory_content.strip():
             return None
 
@@ -87,7 +140,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         return {"messages": [reminder]}
 
     @override
-    def before_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
+    def before_agent(self, state: MemoryMiddlewareState, _runtime: Runtime) -> dict | None:
         """Inject context-aware memory facts before each agent execution."""
         config = self._memory_config or get_memory_config()
         messages = list(state.get("messages", []))
@@ -101,9 +154,9 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             return None
 
     @override
-    async def abefore_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
+    async def abefore_agent(self, state: MemoryMiddlewareState, _runtime: Runtime) -> dict | None:
         """Async version of before_agent."""
-        return self.before_agent(state, runtime)
+        return self.before_agent(state, _runtime)
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
