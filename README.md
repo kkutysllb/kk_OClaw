@@ -36,6 +36,9 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
   - [Context Engineering](#context-engineering)
   - [长期记忆](#长期记忆)
   - [Token 用量统计](#token-用量统计)
+- [项目 TODO](#项目-todo)
+  - [今日已完成](#今日已完成)
+  - [后续待完成](#后续待完成)
 - [推荐模型](#推荐模型)
 - [内嵌 Python Client](#内嵌-python-client)
 - [文档](#文档)
@@ -324,6 +327,27 @@ token_usage:
 - **按调用方统计**：区分 Lead Agent、Sub-Agent、Middleware 三类调用方各自的 Token 消耗占比
 
 统计数据按登录用户隔离——每个用户只能看到自己的用量。历史数据中模型名缺失的记录会在启动时自动回填为默认模型名。
+
+## 项目 TODO
+
+此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
+
+### 今日已完成
+
+- 完成基于 `current_context` 的 TF-IDF 相似度检索与 memory facts 加权排序
+- 为 memory retrieval 增加 facts 侧缓存、可查询统计与调试日志
+- 增强 `tokenize_text()` 的中文与技术词切分能力
+- 增加可配置的 subagent 父模型到子模型路由能力，支持候选模型与回退策略配置
+- 修复 `MemoryMiddleware` 的 `runtime` 注入问题，并补充异步回归测试
+
+### 后续待完成
+
+- 池化 sandbox 资源以减少 sandbox 容器数量
+- 添加认证 / 授权层
+- 实现速率限制
+- 添加指标和监控
+- 支持更多上传文档格式
+- 优化 IM 渠道多任务场景下 agent 热路径的异步并发
 
 ## 推荐模型
 
