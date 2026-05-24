@@ -12,6 +12,10 @@ from kkoclaw.agents.memory.prompt import (
     format_conversation_for_update,
     format_memory_for_injection,
 )
+from kkoclaw.agents.memory.retrieval import (
+    extract_current_context,
+    rank_memory_facts,
+)
 from kkoclaw.agents.memory.queue import (
     ConversationContext,
     MemoryUpdateQueue,
@@ -38,6 +42,8 @@ __all__ = [
     "FACT_EXTRACTION_PROMPT",
     "format_memory_for_injection",
     "format_conversation_for_update",
+    "extract_current_context",
+    "rank_memory_facts",
     # Queue
     "ConversationContext",
     "MemoryUpdateQueue",
