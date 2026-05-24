@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from unittest.mock import MagicMock
 
@@ -157,3 +158,48 @@ def test_before_agent_emits_debug_log_for_retrieval_injection(monkeypatch, caplo
     assert result is not None
     assert "memory.retrieval ranked" in caplog.text
     assert "budget=2000" in caplog.text
+
+
+def test_abefore_agent_accepts_runtime_keyword_and_reuses_sync_logic(monkeypatch) -> None:
+    config = MemoryConfig(
+        enabled=True,
+        injection_enabled=True,
+        retrieval=MemoryRetrievalConfig(enabled=True),
+    )
+    middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
+
+    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "get_memory_data",
+        lambda agent_name=None, *, user_id=None: {
+            "facts": [{"content": "raw fact", "category": "goal", "confidence": 0.3}]
+        },
+    )
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "extract_current_context",
+        lambda messages, *, max_turns, max_chars: "current context",
+    )
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "rank_memory_facts",
+        lambda facts, **kwargs: [{"content": "ranked fact", "category": "goal", "confidence": 0.9}],
+    )
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "format_memory_for_injection",
+        lambda memory_data, *, max_tokens, ranked_facts=None: "Facts:\n- ranked fact",
+    )
+
+    result = asyncio.run(
+        middleware.abefore_agent(
+            {"messages": [HumanMessage(content="继续实现 TF-IDF 检索")]},
+            runtime=_runtime(),
+        )
+    )
+
+    assert result is not None
+    injected = result["messages"][0]
+    assert injected.name == "memory_context"
+    assert "ranked fact" in injected.content

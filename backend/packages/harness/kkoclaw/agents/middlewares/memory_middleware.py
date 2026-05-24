@@ -140,8 +140,9 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         return {"messages": [reminder]}
 
     @override
-    def before_agent(self, state: MemoryMiddlewareState, _runtime: Runtime) -> dict | None:
+    def before_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
         """Inject context-aware memory facts before each agent execution."""
+        del runtime
         config = self._memory_config or get_memory_config()
         messages = list(state.get("messages", []))
         if not messages:
@@ -154,9 +155,9 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             return None
 
     @override
-    async def abefore_agent(self, state: MemoryMiddlewareState, _runtime: Runtime) -> dict | None:
+    async def abefore_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
         """Async version of before_agent."""
-        return self.before_agent(state, _runtime)
+        return self.before_agent(state, runtime)
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
