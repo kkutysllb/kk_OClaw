@@ -1,6 +1,7 @@
 """Configuration for the subagent system loaded from config.yaml."""
 
 import logging
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -68,6 +69,44 @@ class CustomSubagentConfig(BaseModel):
     )
 
 
+class SubagentModelRoutingRuleConfig(BaseModel):
+    """A single parent-model to subagent-model routing rule."""
+
+    parent_models: list[str] = Field(
+        default_factory=list,
+        description="Parent model names that trigger this rule",
+    )
+    include_subagent_types: list[str] | None = Field(
+        default=None,
+        description="Optional allowlist of subagent types",
+    )
+    exclude_subagent_types: list[str] | None = Field(
+        default=None,
+        description="Optional denylist of subagent types",
+    )
+    preferred_models: list[str] = Field(
+        default_factory=list,
+        description="Preferred target models in priority order",
+    )
+    fallback: Literal["default", "inherit"] = Field(
+        default="default",
+        description="Fallback behavior when no preferred model exists",
+    )
+
+
+class SubagentModelRoutingConfig(BaseModel):
+    """Configuration for subagent model routing."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Whether subagent model routing is enabled",
+    )
+    rules: list[SubagentModelRoutingRuleConfig] = Field(
+        default_factory=list,
+        description="Ordered routing rules; first match wins",
+    )
+
+
 class SubagentsAppConfig(BaseModel):
     """Configuration for the subagent system."""
 
@@ -88,6 +127,10 @@ class SubagentsAppConfig(BaseModel):
     custom_agents: dict[str, CustomSubagentConfig] = Field(
         default_factory=dict,
         description="User-defined subagent types keyed by agent name",
+    )
+    model_routing: SubagentModelRoutingConfig = Field(
+        default_factory=SubagentModelRoutingConfig,
+        description="Optional parent-model to subagent-model routing rules",
     )
 
     def get_timeout_for(self, agent_name: str) -> int:
@@ -170,18 +213,24 @@ def load_subagents_config_from_dict(config_dict: dict) -> None:
             overrides_summary[name] = ", ".join(parts)
 
     custom_agents_names = list(_subagents_config.custom_agents.keys())
+    routing_summary = (
+        f"enabled={_subagents_config.model_routing.enabled}, "
+        f"rules={len(_subagents_config.model_routing.rules)}"
+    )
 
     if overrides_summary or custom_agents_names:
         logger.info(
-            "Subagents config loaded: default timeout=%ss, default max_turns=%s, per-agent overrides=%s, custom_agents=%s",
+            "Subagents config loaded: default timeout=%ss, default max_turns=%s, per-agent overrides=%s, custom_agents=%s, model_routing=%s",
             _subagents_config.timeout_seconds,
             _subagents_config.max_turns,
             overrides_summary or "none",
             custom_agents_names or "none",
+            routing_summary,
         )
     else:
         logger.info(
-            "Subagents config loaded: default timeout=%ss, default max_turns=%s, no per-agent overrides",
+            "Subagents config loaded: default timeout=%ss, default max_turns=%s, no per-agent overrides, model_routing=%s",
             _subagents_config.timeout_seconds,
             _subagents_config.max_turns,
+            routing_summary,
         )
