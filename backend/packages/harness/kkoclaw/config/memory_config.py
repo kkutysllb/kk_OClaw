@@ -1,6 +1,51 @@
 """Configuration for memory mechanism."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class MemoryRetrievalConfig(BaseModel):
+    """Configuration for context-aware memory fact retrieval."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Whether to enable context-aware memory retrieval",
+    )
+    strategy: Literal["tfidf"] = Field(
+        default="tfidf",
+        description="Fact retrieval strategy",
+    )
+    context_max_turns: int = Field(
+        default=4,
+        ge=1,
+        le=12,
+        description="Recent user/final-assistant turns used to build current context",
+    )
+    context_max_chars: int = Field(
+        default=4000,
+        ge=200,
+        le=20000,
+        description="Maximum characters retained in the current context query",
+    )
+    similarity_weight: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Weight applied to similarity score",
+    )
+    confidence_weight: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Weight applied to fact confidence",
+    )
+    min_similarity: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity floor for ranking",
+    )
 
 
 class MemoryConfig(BaseModel):
@@ -59,6 +104,10 @@ class MemoryConfig(BaseModel):
         ge=100,
         le=8000,
         description="Maximum tokens to use for memory injection",
+    )
+    retrieval: MemoryRetrievalConfig = Field(
+        default_factory=MemoryRetrievalConfig,
+        description="Context-aware memory retrieval configuration",
     )
 
 
