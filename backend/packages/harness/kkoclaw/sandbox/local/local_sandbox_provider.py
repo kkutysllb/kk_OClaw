@@ -71,6 +71,16 @@ class LocalSandboxProvider(SandboxProvider):
                         )
                         continue
 
+                    # Guard against "/" root mappings that would match every absolute
+                    # path and strip the leading "/" — see _find_path_mapping().
+                    if container_path == "/":
+                        logger.warning(
+                            "Mount container_path cannot be '/', skipping: %s -> %s",
+                            mount.host_path,
+                            mount.container_path,
+                        )
+                        continue
+
                     # Reject mounts that conflict with reserved container paths
                     if any(container_path == p or container_path.startswith(p + "/") for p in _RESERVED_CONTAINER_PREFIXES):
                         logger.warning(

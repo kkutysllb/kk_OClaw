@@ -418,7 +418,12 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
 
     @staticmethod
     def _build_hard_stop_update(last_msg, content: str | list) -> dict:
-        """Clear tool-call metadata so forced-stop messages serialize as plain assistant text."""
+        """Clear tool-call metadata so forced-stop messages serialize as plain assistant text.
+
+        Also marks the message with ``name="loop_warning"`` and
+        ``additional_kwargs.hide_from_ui = True`` so the frontend
+        ``isHiddenFromUIMessage`` filter hides it from the chat UI.
+        """
         update = {
             "tool_calls": [],
             "content": content,
@@ -427,7 +432,13 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         additional_kwargs = dict(getattr(last_msg, "additional_kwargs", {}) or {})
         for key in ("tool_calls", "function_call"):
             additional_kwargs.pop(key, None)
+        # Hide from frontend UI — the LLM still sees this content internally
+        # but the user should not see raw middleware messages like
+        # [LOOP DETECTED] or [FORCED STOP].
+        additional_kwargs["hide_from_ui"] = True
         update["additional_kwargs"] = additional_kwargs
+        # name="loop_warning" is checked by the frontend isHiddenFromUIMessage()
+        update["name"] = "loop_warning"
 
         response_metadata = deepcopy(getattr(last_msg, "response_metadata", {}) or {})
         if response_metadata.get("finish_reason") == "tool_calls":

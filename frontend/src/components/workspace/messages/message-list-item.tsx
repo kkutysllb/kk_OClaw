@@ -40,6 +40,7 @@ import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
   parseUploadedFiles,
+  stripInternalContent,
   stripUploadedFilesTag,
   type FileInMessage,
 } from "@/core/messages/utils";
@@ -265,7 +266,7 @@ function MessageContent_({
     if (isHuman) {
       return rawContent ? stripUploadedFilesTag(rawContent) : "";
     }
-    return rawContent ?? "";
+    return stripInternalContent(rawContent ?? "");
   }, [rawContent, isHuman]);
 
   const filesList =
@@ -295,7 +296,7 @@ function MessageContent_({
       <AIElementMessageContent className={className}>
         <Reasoning isStreaming={isLoading}>
           <ReasoningTrigger />
-          <ReasoningContent>{reasoningContent}</ReasoningContent>
+          <ReasoningContent>{stripInternalContent(reasoningContent)}</ReasoningContent>
         </Reasoning>
         <MessageTokenUsage
           enabled={tokenUsageEnabled}

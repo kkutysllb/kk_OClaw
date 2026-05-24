@@ -33,6 +33,34 @@ _HEREDOC_START_RE: re.Pattern[str] = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Sensitive value masking for audit logs
+# ---------------------------------------------------------------------------
+
+# Pattern: common env var names followed by = and a quoted or unquoted secret
+_SECRET_ENV_PATTERNS: list[tuple[re.Pattern[str], int]] = [
+    # set_token('...'), set_token("..."), set_token(...)
+    (re.compile(r"(set_token\s*\(\s*['\"]?)([0-9a-zA-Z]{8,})(['\"]?\s*\))"), 2),
+    # TOKEN='...', TOKEN="...", TOKEN=...,  TUSHARE_TOKEN=..., MINIMAX_API_KEY=...
+    (re.compile(r"(\b[A-Z_]*(?:TOKEN|API_KEY|SECRET|PASSWORD|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL|AUTH)[A-Z_]*\s*=\s*['\"]?)([0-9a-zA-Z_\-+/=]{8,})(['\"]?)", re.IGNORECASE), 2),
+    # os.getenv('...') followed by usage but the key is in a string literal
+    # --token=..., --api-key=..., --secret=...
+    (re.compile(r"(--(?:token|api[_-]?key|secret|password|access[_-]?key|private[_-]?key)\s*=\s*['\"]?)([0-9a-zA-Z_\-+/=]{8,})(['\"]?)", re.IGNORECASE), 2),
+]
+
+
+def _mask_secrets(text: str) -> str:
+    """Mask sensitive values (API keys, tokens, passwords) in audit log output.
+
+    Replaces secret substrings matched by ``_SECRET_ENV_PATTERNS`` with
+    ``***masked***`` so that audit logs never persist credentials.
+    """
+    result = text
+    for pattern, _group in _SECRET_ENV_PATTERNS:
+        result = pattern.sub(r"\1***masked***\3", result)
+    return result
+
+
 def _strip_heredoc_bodies(command: str) -> str:
     """Replace heredoc bodies with short placeholders for length-check purposes.
 
@@ -301,6 +329,8 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         audited_command = command
         if truncate and len(command) > self._AUDIT_COMMAND_LIMIT:
             audited_command = f"{command[: self._AUDIT_COMMAND_LIMIT]}... ({len(command)} chars)"
+        # Mask sensitive values before writing to log
+        audited_command = _mask_secrets(audited_command)
         record = {
             "timestamp": datetime.now(UTC).isoformat(),
             "thread_id": thread_id or "unknown",
@@ -316,22 +346,6 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
             tool_call_id=tool_call_id,
             name="bash",
             status="error",
-        )
-
-    def _append_warn_to_result(self, result: ToolMessage | Command, command: str) -> ToolMessage | Command:
-        """Append a warning note to the tool result for medium-risk commands."""
-        if not isinstance(result, ToolMessage):
-            return result
-        warning = f"\n\n⚠️ Warning: `{command}` is a medium-risk command that may modify the runtime environment."
-        if isinstance(result.content, list):
-            new_content = list(result.content) + [{"type": "text", "text": warning}]
-        else:
-            new_content = str(result.content) + warning
-        return ToolMessage(
-            content=new_content,
-            tool_call_id=result.tool_call_id,
-            name=result.name,
-            status=result.status,
         )
 
     # ------------------------------------------------------------------
@@ -394,10 +408,12 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         audit_cmd = _strip_heredoc_bodies(command) if "<<" in command else command
         self._write_audit(thread_id, audit_cmd, verdict)
 
+        # Mask sensitive values in warning logs
+        masked_command = _mask_secrets(command)
         if verdict == "block":
-            logger.warning("[SandboxAudit] BLOCKED thread=%s cmd=%r", thread_id, command)
+            logger.warning("[SandboxAudit] BLOCKED thread=%s cmd=%r", thread_id, masked_command)
         elif verdict == "warn":
-            logger.warning("[SandboxAudit] WARN (medium-risk) thread=%s cmd=%r", thread_id, command)
+            logger.warning("[SandboxAudit] WARN (medium-risk) thread=%s cmd=%r", thread_id, masked_command)
 
         return command, thread_id, verdict, None
 
@@ -418,10 +434,10 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         if verdict == "block":
             reason = reject_reason or "security violation detected"
             return self._build_block_message(request, reason)
-        result = handler(request)
-        if verdict == "warn":
-            result = self._append_warn_to_result(result, command)
-        return result
+        # warn and pass are both executed normally; the audit log
+        # already records the verdict so we do NOT pollute the
+        # ToolMessage content that reaches the frontend.
+        return handler(request)
 
     @override
     async def awrap_tool_call(
@@ -436,7 +452,7 @@ class SandboxAuditMiddleware(AgentMiddleware[ThreadState]):
         if verdict == "block":
             reason = reject_reason or "security violation detected"
             return self._build_block_message(request, reason)
-        result = await handler(request)
-        if verdict == "warn":
-            result = self._append_warn_to_result(result, command)
-        return result
+        # warn and pass are both executed normally; the audit log
+        # already records the verdict so we do NOT pollute the
+        # ToolMessage content that reaches the frontend.
+        return await handler(request)

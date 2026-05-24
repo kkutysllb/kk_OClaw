@@ -184,27 +184,32 @@ function splitInlineReasoningFromAIMessage(message: Message) {
 }
 
 export function extractContentFromMessage(message: Message) {
+  const sanitizeForDisplay = (content: string) =>
+    message.type === "human" ? content : stripInternalContent(content);
+
   if (typeof message.content === "string") {
-    return (
+    return sanitizeForDisplay(
       splitInlineReasoningFromAIMessage(message)?.content ??
       message.content.trim()
     );
   }
   if (Array.isArray(message.content)) {
-    return message.content
-      .map((content) => {
-        switch (content.type) {
-          case "text":
-            return content.text;
-          case "image_url":
-            const imageURL = extractURLFromImageURLContent(content.image_url);
-            return `![image](${imageURL})`;
-          default:
-            return "";
-        }
-      })
-      .join("\n")
-      .trim();
+    return sanitizeForDisplay(
+      message.content
+        .map((content) => {
+          switch (content.type) {
+            case "text":
+              return content.text;
+            case "image_url":
+              const imageURL = extractURLFromImageURLContent(content.image_url);
+              return `![image](${imageURL})`;
+            default:
+              return "";
+          }
+        })
+        .join("\n")
+        .trim(),
+    );
   }
   return "";
 }
@@ -339,7 +344,7 @@ export function findToolCallResult(toolCallId: string, messages: Message[]) {
 }
 
 const AGENT_ARTIFACT_HEADER_RE =
-  /^(?:#\s*)?(?:SESSION INTENT|SUMMARY|ARTIFACTS?)[\s\n]/i;
+  /^(?:#\s*)?(?:SESSION\s+INTENT|SUMMARY|ARTIFACTS?)(?:[\s\n]|$)/i;
 
 export function isHiddenFromUIMessage(message: Message) {
   if (
@@ -354,13 +359,106 @@ export function isHiddenFromUIMessage(message: Message) {
   if (typeof meta?.caller === "string" && meta.caller.startsWith("middleware:")) {
     return true;
   }
+  // Check for internal artifact headers (SESSION INTENT / SUMMARY / ARTIFACTS).
+  // These are AI agent internal planning blocks that should never be shown to users.
+  // We check the full extracted content AND individual content blocks (for array
+  // content where the header might not be at the start of the joined text).
   if (message.type === "ai" && !message.tool_calls?.length) {
     const content = extractContentFromMessage(message);
-    if (content && AGENT_ARTIFACT_HEADER_RE.test(content)) {
+    if (content && AGENT_ARTIFACT_HEADER_RE.test(content.trim())) {
       return true;
+    }
+    // Also check individual content blocks
+    if (Array.isArray(message.content)) {
+      for (const block of message.content as Array<{ type?: string; text?: string }>) {
+        if (
+          block.type === "text" &&
+          typeof block.text === "string" &&
+          AGENT_ARTIFACT_HEADER_RE.test(block.text.trim())
+        ) {
+          return true;
+        }
+      }
     }
   }
   return false;
+}
+
+/**
+ * Strip internal planning blocks (SESSION INTENT, SUMMARY, ARTIFACTS)
+ * from AI response content before displaying to the user.
+ * Also masks sensitive values (API keys, tokens, passwords) in remaining text.
+ *
+ * Strategy:
+ *   - First check: if the first non-blank line is an internal header, the
+ *     ENTIRE text is internal planning content — return empty string.
+ *     This handles the common case where SESSION INTENT + SUMMARY + details
+ *     are the only content in the message.
+ *   - Otherwise, remove internal blocks that appear AFTER user-facing content:
+ *     enter skip mode on an internal header, and resume on a blank line when
+ *     the next non-blank line is NOT another internal header.
+ */
+export function stripInternalContent(text: string): string {
+  if (!text) return text;
+
+  const lines = text.split("\n");
+
+  // Fast path: if the first non-blank line is an internal header,
+  // the entire text is internal planning content.
+  const firstNonBlank = findNextNonBlankLine(lines, 0);
+  if (
+    firstNonBlank !== null &&
+    AGENT_ARTIFACT_HEADER_RE.test(lines[firstNonBlank]!.trim())
+  ) {
+    return "";
+  }
+
+  // Slow path: internal blocks appear mid-text (rare but possible).
+  const result: string[] = [];
+  let skipping = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const trimmed = line.trim();
+
+    if (AGENT_ARTIFACT_HEADER_RE.test(trimmed)) {
+      skipping = true;
+      continue;
+    }
+
+    if (skipping) {
+      if (trimmed === "") {
+        const nextNonBlank = findNextNonBlankLine(lines, i + 1);
+        if (
+          nextNonBlank !== null &&
+          AGENT_ARTIFACT_HEADER_RE.test(lines[nextNonBlank]!.trim())
+        ) {
+          continue;
+        }
+        skipping = false;
+      }
+      continue;
+    }
+
+    result.push(line);
+  }
+
+  let output = result.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+  // Mask sensitive values that might remain in the text
+  output = output.replace(
+    /\b([A-Z_]*(?:TOKEN|API_KEY|SECRET|PASSWORD|ACCESS_KEY|PRIVATE_KEY|CREDENTIAL)[A-Z_]*)\s*[:=]\s*['"]?[0-9a-zA-Z_\-+/=]{8,}['"]?/gi,
+    "$1=***masked***",
+  );
+  return output;
+}
+
+/** Find the index of the next non-blank line starting from `start`. */
+function findNextNonBlankLine(lines: string[], start: number): number | null {
+  for (let i = start; i < lines.length; i++) {
+    if (lines[i]!.trim() !== "") return i;
+  }
+  return null;
 }
 
 /**

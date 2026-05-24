@@ -548,7 +548,8 @@ class TestSandboxAuditMiddlewareWrapToolCall:
         assert result.status == "error"
         assert "blocked" in result.content.lower()
 
-    # --- Medium-risk: handler IS called, result has warning appended ---
+    # --- Medium-risk: handler IS called, NO warning appended to result ---
+    # (warning is only written to the audit log, not the ToolMessage content)
 
     @pytest.mark.parametrize(
         "cmd",
@@ -561,7 +562,8 @@ class TestSandboxAuditMiddlewareWrapToolCall:
         result, called, _ = self._call(cmd)
         assert called, f"handler SHOULD be called for medium-risk cmd: {cmd!r}"
         assert isinstance(result, ToolMessage)
-        assert "warning" in result.content.lower()
+        # Warning is no longer appended to ToolMessage content (hidden from frontend)
+        assert result.content == "ok"
 
     # --- Safe: handler MUST be called ---
 
@@ -655,11 +657,12 @@ class TestSandboxAuditMiddlewareAwrapToolCall:
         assert "blocked" in result.content.lower()
 
     @pytest.mark.anyio
-    async def test_medium_risk_executes_with_warning(self):
+    async def test_medium_risk_executes_no_warning_in_result(self):
         result, called, _ = await self._call("pip install requests")
         assert called
         assert isinstance(result, ToolMessage)
-        assert "warning" in result.content.lower()
+        # Warning is no longer appended to ToolMessage content (hidden from frontend)
+        assert result.content == "ok"
 
     @pytest.mark.anyio
     async def test_safe_command_passes_to_handler(self):

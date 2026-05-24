@@ -103,8 +103,12 @@ class LocalSandbox(Sandbox):
         for mapping in sorted(self.path_mappings, key=lambda m: len(m.container_path.rstrip("/") or "/"), reverse=True):
             container_path = mapping.container_path.rstrip("/") or "/"
             if container_path == "/":
-                if path_str.startswith("/"):
-                    return mapping, path_str.lstrip("/")
+                # Guard against a "/" mapping that would match every absolute path.
+                # Only match the root path itself, not arbitrary absolute paths
+                # like /Users/... which are clearly not intended to be mapped.
+                # A proper mount should use an explicit container_path prefix.
+                if path_str == "/":
+                    return mapping, ""
                 continue
 
             if path_str == container_path or path_str.startswith(container_path + "/"):

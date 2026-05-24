@@ -27,6 +27,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import {
   extractReasoningContentFromMessage,
   findToolCallResult,
+  stripInternalContent,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import { extractTitleFromMarkdown } from "@/core/utils/markdown";
@@ -451,7 +452,7 @@ function convertToSteps(messages: Message[]): CoTStep[] {
           id: message.id,
           messageId: message.id,
           type: "reasoning",
-          reasoning,
+          reasoning: stripInternalContent(reasoning),
         };
         steps.push(step);
       }

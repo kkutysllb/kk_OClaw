@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from kkoclaw.agents.lead_agent.prompt import apply_prompt_template
 from kkoclaw.agents.memory.summarization_hook import memory_flush_hook
 from kkoclaw.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from kkoclaw.agents.middlewares.internal_content_middleware import InternalContentMiddleware
 from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from kkoclaw.agents.middlewares.memory_middleware import MemoryMiddleware
 from kkoclaw.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
@@ -295,6 +296,9 @@ def _build_middlewares(
     if subagent_enabled:
         max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
         middlewares.append(SubagentLimitMiddleware(max_concurrent=max_concurrent_subagents))
+
+    # InternalContentMiddleware — strip SESSION INTENT/SUMMARY/ARTIFACTS from AI messages
+    middlewares.append(InternalContentMiddleware())
 
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     middlewares.append(LoopDetectionMiddleware())
