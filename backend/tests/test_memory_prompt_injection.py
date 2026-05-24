@@ -37,6 +37,23 @@ def test_format_memory_sorts_facts_by_confidence_desc() -> None:
     assert result.index("High confidence fact") < result.index("Low confidence fact")
 
 
+def test_format_memory_prefers_ranked_facts_when_provided() -> None:
+    memory_data = {
+        "facts": [
+            {"content": "Low confidence fact", "category": "context", "confidence": 0.2},
+            {"content": "High confidence fact", "category": "context", "confidence": 0.9},
+        ]
+    }
+    ranked_facts = [
+        {"content": "Low confidence fact", "category": "context", "confidence": 0.2},
+        {"content": "High confidence fact", "category": "context", "confidence": 0.9},
+    ]
+
+    result = format_memory_for_injection(memory_data, max_tokens=2000, ranked_facts=ranked_facts)
+
+    assert result.index("Low confidence fact") < result.index("High confidence fact")
+
+
 def test_format_memory_respects_budget_when_adding_facts(monkeypatch) -> None:
     # Make token counting deterministic for this test by counting characters.
     monkeypatch.setattr("kkoclaw.agents.memory.prompt._count_tokens", lambda text, encoding_name="cl100k_base": len(text))
