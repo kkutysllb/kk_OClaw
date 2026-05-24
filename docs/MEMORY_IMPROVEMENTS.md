@@ -15,6 +15,7 @@
 - 可配置的相似度/置信度权重（`similarity_weight`、`confidence_weight`）。
 - 运行时中间件会在每次 agent 执行前注入按上下文排序后的 facts。
 - retrieval 已引入 facts 侧文档集签名缓存，复用分词、IDF 和 facts 向量预处理结果。
+- `tokenize_text()` 已增强中文 2/3-gram、技术词分隔符拆分、驼峰拆分和路径片段切分。
 
 ## 当前行为
 
@@ -47,6 +48,7 @@ Token 计数：
 - 检索目标仅覆盖 `facts[]`
 - `user.*` 与 `history.*` 仍作为摘要背景注入，不参与 retrieval 排序
 - 第一版缓存为进程内 `lru_cache`，未做跨进程共享
+- tokenizer 仍为轻量规则方案，未引入自定义技术词表或外部分词依赖
 - 第一版未引入 BM25 或 embedding 检索
 
 ## 当前评分策略

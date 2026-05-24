@@ -1,5 +1,5 @@
 from kkoclaw.agents.memory import retrieval as retrieval_module
-from kkoclaw.agents.memory.retrieval import rank_memory_facts
+from kkoclaw.agents.memory.retrieval import rank_memory_facts, tokenize_text
 from kkoclaw.config.memory_config import MemoryConfig
 
 
@@ -131,3 +131,66 @@ def test_rank_memory_facts_cache_does_not_change_result_order() -> None:
     )
 
     assert [fact["content"] for fact in first] == [fact["content"] for fact in second]
+
+
+def test_tokenize_text_expands_chinese_phrases_into_ngrams() -> None:
+    tokens = tokenize_text("上下文感知排序")
+
+    assert "上下文感知排序" in tokens
+    assert "感知" in tokens
+    assert "排序" in tokens
+    assert "文感知" in tokens
+
+
+def test_tokenize_text_splits_technical_tokens_and_camel_case() -> None:
+    tokens = tokenize_text("DeepSeekCoder langgraph-sdk/v1 gpt-4o-mini")
+
+    assert "deepseekcoder" in tokens
+    assert "deepseek" in tokens
+    assert "coder" in tokens
+    assert "langgraph-sdk/v1" in tokens
+    assert "langgraph" in tokens
+    assert "sdk" in tokens
+    assert "v1" in tokens
+    assert "gpt-4o-mini" in tokens
+    assert "gpt" in tokens
+    assert "mini" in tokens
+
+
+def test_tokenize_text_dedupes_and_preserves_order() -> None:
+    tokens = tokenize_text("LangGraph langgraph-sdk langgraph")
+
+    assert tokens.count("langgraph") == 1
+    assert tokens.index("langgraph") < tokens.index("sdk")
+
+
+def test_rank_memory_facts_matches_partial_chinese_phrase() -> None:
+    facts = [
+        {"content": "系统支持上下文感知排序和记忆注入。", "category": "goal", "confidence": 0.7},
+        {"content": "用户偏好 SQLAlchemy。", "category": "preference", "confidence": 0.95},
+    ]
+
+    ranked = rank_memory_facts(
+        facts,
+        current_context="继续优化感知排序",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    assert ranked[0]["content"].startswith("系统支持上下文感知排序")
+
+
+def test_rank_memory_facts_matches_api_path_subtokens() -> None:
+    facts = [
+        {"content": "接口路径是 /api/v1/chat/completions。", "category": "context", "confidence": 0.6},
+        {"content": "用户喜欢 PostgreSQL。", "category": "preference", "confidence": 0.95},
+    ]
+
+    ranked = rank_memory_facts(
+        facts,
+        current_context="继续处理 chat completions 接口",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    assert ranked[0]["content"].startswith("接口路径是 /api/v1/chat/completions")

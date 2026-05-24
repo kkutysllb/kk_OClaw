@@ -13,6 +13,8 @@ from kkoclaw.agents.memory.message_processing import extract_message_text, filte
 from kkoclaw.agents.memory.prompt import _coerce_confidence
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]*|[\u4e00-\u9fff]+")
+_TECH_SPLIT_RE = re.compile(r"[-_./:+]+")
+_CAMEL_SEGMENT_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 
 FactSignature = tuple[str, float, str, str | None]
 
@@ -32,12 +34,88 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text).strip().lower())
 
 
+def _normalize_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text).strip())
+
+
+def _is_chinese_token(token: str) -> bool:
+    return bool(token) and all("\u4e00" <= ch <= "\u9fff" for ch in token)
+
+
+def _generate_chinese_ngrams(token: str) -> list[str]:
+    expanded: list[str] = []
+    for size in (2, 3):
+        if len(token) < size:
+            continue
+        for index in range(len(token) - size + 1):
+            expanded.append(token[index : index + size])
+    return expanded
+
+
+def _split_camel_case_token(token: str) -> list[str]:
+    segments = [segment.lower() for segment in _CAMEL_SEGMENT_RE.findall(token) if segment]
+    if len(segments) <= 1:
+        return []
+
+    expanded: list[str] = []
+    for index, segment in enumerate(segments):
+        if len(segment) >= 2:
+            expanded.append(segment)
+        if index + 1 < len(segments):
+            pair = "".join(segments[index : index + 2])
+            if len(pair) >= 2:
+                expanded.append(pair)
+    return expanded
+
+
+def _split_alpha_numeric_token(token: str) -> list[str]:
+    parts = [part.lower() for part in re.findall(r"[A-Za-z]+\d*|\d+[A-Za-z]*", token) if len(part) >= 2]
+    return parts if len(parts) > 1 else []
+
+
+def _split_technical_token(token: str) -> list[str]:
+    parts = [part for part in _TECH_SPLIT_RE.split(token) if len(part) >= 2]
+    expanded: list[str] = []
+    for part in parts:
+        lowered = part.lower()
+        if len(lowered) >= 2:
+            expanded.append(lowered)
+        expanded.extend(_split_camel_case_token(part))
+        expanded.extend(_split_alpha_numeric_token(part))
+    return expanded
+
+
+def _dedupe_preserve_order(tokens: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for token in tokens:
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        ordered.append(token)
+    return ordered
+
+
 def tokenize_text(text: str) -> list[str]:
     """Tokenize mixed Chinese / English / technical text without extra deps."""
-    normalized = normalize_text(text)
+    normalized = _normalize_whitespace(text)
     if not normalized:
         return []
-    return _TOKEN_RE.findall(normalized)
+
+    expanded_tokens: list[str] = []
+    for raw_token in _TOKEN_RE.findall(normalized):
+        base_token = raw_token if _is_chinese_token(raw_token) else raw_token.lower()
+        expanded_tokens.append(base_token)
+
+        if _is_chinese_token(raw_token):
+            expanded_tokens.extend(_generate_chinese_ngrams(raw_token))
+            continue
+
+        expanded_tokens.extend(_split_technical_token(raw_token))
+        expanded_tokens.extend(_split_camel_case_token(raw_token))
+        expanded_tokens.extend(_split_alpha_numeric_token(raw_token))
+
+    return _dedupe_preserve_order(expanded_tokens)
 
 
 def _build_tfidf_vector(tokens: list[str], idf_map: dict[str, float]) -> dict[str, float]:
