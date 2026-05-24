@@ -14,6 +14,7 @@
 - 用于上下文感知评分的 `current_context` 输入。
 - 可配置的相似度/置信度权重（`similarity_weight`、`confidence_weight`）。
 - 运行时中间件会在每次 agent 执行前注入按上下文排序后的 facts。
+- retrieval 已引入 facts 侧文档集签名缓存，复用分词、IDF 和 facts 向量预处理结果。
 
 ## 当前行为
 
@@ -45,7 +46,8 @@ Token 计数：
 
 - 检索目标仅覆盖 `facts[]`
 - `user.*` 与 `history.*` 仍作为摘要背景注入，不参与 retrieval 排序
-- 第一版未引入缓存、BM25 或 embedding 检索
+- 第一版缓存为进程内 `lru_cache`，未做跨进程共享
+- 第一版未引入 BM25 或 embedding 检索
 
 ## 当前评分策略
 

@@ -1,5 +1,6 @@
-from kkoclaw.config.memory_config import MemoryConfig
+from kkoclaw.agents.memory import retrieval as retrieval_module
 from kkoclaw.agents.memory.retrieval import rank_memory_facts
+from kkoclaw.config.memory_config import MemoryConfig
 
 
 def test_memory_config_defaults_retrieval_disabled() -> None:
@@ -44,3 +45,89 @@ def test_rank_memory_facts_falls_back_to_confidence_without_context() -> None:
     )
 
     assert [fact["content"] for fact in ranked] == ["High", "Low"]
+
+
+def test_rank_memory_facts_reuses_prepared_corpus_for_same_facts(monkeypatch) -> None:
+    retrieval_module._prepare_fact_corpus_cached.cache_clear()
+    call_count = 0
+    original = retrieval_module._prepare_fact_corpus
+
+    def wrapped(facts_signature):
+        nonlocal call_count
+        call_count += 1
+        return original(facts_signature)
+
+    monkeypatch.setattr(retrieval_module, "_prepare_fact_corpus", wrapped)
+
+    facts = [
+        {"content": "用户最近在实现 retrieval 缓存。", "category": "goal", "confidence": 0.8},
+        {"content": "用户喜欢 SQLAlchemy。", "category": "preference", "confidence": 0.9},
+    ]
+
+    rank_memory_facts(
+        facts,
+        current_context="继续优化 retrieval 缓存",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+    rank_memory_facts(
+        facts,
+        current_context="继续优化 facts cache 命中率",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    assert call_count == 1
+
+
+def test_rank_memory_facts_rebuilds_cache_when_facts_change(monkeypatch) -> None:
+    retrieval_module._prepare_fact_corpus_cached.cache_clear()
+    call_count = 0
+    original = retrieval_module._prepare_fact_corpus
+
+    def wrapped(facts_signature):
+        nonlocal call_count
+        call_count += 1
+        return original(facts_signature)
+
+    monkeypatch.setattr(retrieval_module, "_prepare_fact_corpus", wrapped)
+
+    facts_a = [{"content": "A", "category": "goal", "confidence": 0.7}]
+    facts_b = [{"content": "B", "category": "goal", "confidence": 0.7}]
+
+    rank_memory_facts(
+        facts_a,
+        current_context="A",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+    rank_memory_facts(
+        facts_b,
+        current_context="B",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    assert call_count == 2
+
+
+def test_rank_memory_facts_cache_does_not_change_result_order() -> None:
+    facts = [
+        {"content": "实现 retrieval cache", "category": "goal", "confidence": 0.75},
+        {"content": "喜欢 SQLAlchemy", "category": "preference", "confidence": 0.95},
+    ]
+
+    first = rank_memory_facts(
+        facts,
+        current_context="继续实现 retrieval cache",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+    second = rank_memory_facts(
+        facts,
+        current_context="继续实现 retrieval cache",
+        similarity_weight=0.6,
+        confidence_weight=0.4,
+    )
+
+    assert [fact["content"] for fact in first] == [fact["content"] for fact in second]
