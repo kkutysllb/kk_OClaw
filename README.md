@@ -133,6 +133,14 @@ make install  # 安装 backend + frontend 依赖
 ./start.sh start docker
 ```
 
+生产部署如果需要提高 Gateway 并发，可在 `.env` 中设置：
+
+```bash
+GATEWAY_WORKERS=2
+```
+
+该配置同时适用于本地 `prod` 与 Docker `prod`；开发模式因启用热重载，会忽略该参数并保持单 worker。
+
 访问地址：http://localhost:9191（可通过 `.env` 中的 `NGINX_PORT` 自定义）
 
 > **提示**：Docker 模式需要先安装并启动 Docker。`stop`/`status`/`logs` 命令会自动检测当前运行模式（本地或 Docker），无需手动指定。
@@ -171,6 +179,8 @@ SKIP_INSTALL=true ./start.sh start
 | Gateway  | 9193    | `GATEWAY_PORT`    |
 
 本地开发和 Docker 模式共享同一套端口配置，切换部署方式时访问地址不变。
+
+Gateway 生产并发数通过 `.env` 中的 `GATEWAY_WORKERS` 控制，默认 `1`。
 
 ### 进阶配置
 
@@ -339,6 +349,7 @@ token_usage:
 - 增强 `tokenize_text()` 的中文与技术词切分能力
 - 增加可配置的 subagent 父模型到子模型路由能力，支持候选模型与回退策略配置
 - 支持将 `.kkoclaw/agents` 下的自定义 agent 直接桥接为可由 `task` 调度的 subagent
+- 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数，缓解长任务期间的页面 503/504
 - 修复 `MemoryMiddleware` 的 `runtime` 注入问题，并补充异步回归测试
 
 ### 后续待完成

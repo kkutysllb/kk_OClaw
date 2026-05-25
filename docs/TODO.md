@@ -18,6 +18,7 @@
 - [x] 增强 `tokenize_text()` 的中文/技术词切分能力
 - [x] 为 memory retrieval 增加可查询统计与调试日志
 - [x] 支持将 `.kkoclaw/agents/<name>` 自定义 agent 桥接为可由 `task` 调度的 subagent
+- [x] 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数
 
 ## 计划功能
 

@@ -245,6 +245,7 @@ stop_nginx_svc() {
 
 start_gateway() {
     local mode="${1:-dev}"
+    local gateway_workers="${GATEWAY_WORKERS:-1}"
 
     # 前置检查
     if ! { \
@@ -260,8 +261,15 @@ start_gateway() {
     mkdir -p "$LOG_DIR" "$PID_DIR"
 
     local gateway_flags=""
+    local gateway_worker_flags=""
     if [ "$mode" != "prod" ]; then
         gateway_flags="--reload --reload-include='*.yaml' --reload-include='.env' --reload-exclude='*.pyc' --reload-exclude='__pycache__' --reload-exclude='sandbox/' --reload-exclude='.kkoclaw/'"
+    else
+        if ! [[ "$gateway_workers" =~ ^[1-9][0-9]*$ ]]; then
+            _err "GATEWAY_WORKERS 必须是大于等于 1 的整数，当前值: $gateway_workers"
+            return 1
+        fi
+        gateway_worker_flags="--workers $gateway_workers"
     fi
 
     # 停止已有的 Gateway
@@ -269,14 +277,18 @@ start_gateway() {
 
     _info "启动 Gateway..."
     :> "$GATEWAY_LOG"
-    nohup sh -c "cd backend && KKOCLAW_PROJECT_ROOT=\"$REPO_ROOT\" PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port $GATEWAY_PORT $gateway_flags" \
+    nohup sh -c "cd backend && KKOCLAW_PROJECT_ROOT=\"$REPO_ROOT\" PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port $GATEWAY_PORT $gateway_flags $gateway_worker_flags" \
         > "$GATEWAY_LOG" 2>&1 &
     local gpid=$!
     disown $gpid 2>/dev/null || true
     _write_pid "$GATEWAY_PID_FILE" "$gpid"
 
     if _wait_for_port "$GATEWAY_PORT" 30 "Gateway"; then
-        _ok "Gateway 已启动  PID: $gpid  端口: $GATEWAY_PORT"
+        if [ "$mode" = "prod" ]; then
+            _ok "Gateway 已启动  PID: $gpid  端口: $GATEWAY_PORT  workers: $gateway_workers"
+        else
+            _ok "Gateway 已启动  PID: $gpid  端口: $GATEWAY_PORT"
+        fi
     else
         _err "Gateway 启动失败，查看日志: $GATEWAY_LOG"
         tail -20 "$GATEWAY_LOG"
