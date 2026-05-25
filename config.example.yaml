@@ -340,94 +340,93 @@ tool_groups:
 
 tools:
   # ===================== Web Search =====================
-  # Recommended for China: InfoQuest (BytePlus, domestic API)
+  # Recommended: Zhipu Web (domestic MCP gateway, uses ZHIPU_API_KEY)
+  # Works reliably in China. Powered by 智谱 BigModel MCP gateway.
+  - name: web_search
+    group: web
+    use: kkoclaw.community.zhipu_web.tools:web_search_tool
+    location: cn
+
+  # DuckDuckGo (no API key needed, but may timeout in China)
+  # - name: web_search
+  #   group: web
+  #   use: kkoclaw.community.ddg_search.tools:web_search_tool
+  #   max_results: 5
+
+  # InfoQuest (BytePlus, requires INFOQUEST_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.infoquest.tools:web_search_tool
   #   search_time_range: 10
-
-  # DuckDuckGo (no API key needed, but may timeout in China)
-  - name: web_search
-    group: web
-    use: kkoclaw.community.ddg_search.tools:web_search_tool
-    max_results: 5
 
   # Serper (Google Search API, requires SERPER_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.serper.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $SERPER_API_KEY
 
   # Tavily (requires TAVILY_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.tavily.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $TAVILY_API_KEY
-
-  # InfoQuest (BytePlus, recommended for China, requires INFOQUEST_API_KEY)
-  # - name: web_search
-  #   group: web
-  #   use: kkoclaw.community.infoquest.tools:web_search_tool
-  #   search_time_range: 10
 
   # Exa (requires EXA_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.exa.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $EXA_API_KEY
 
   # Firecrawl (requires FIRECRAWL_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.firecrawl.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $FIRECRAWL_API_KEY
 
   # ===================== Web Fetch =====================
   # NOTE: Only one web_fetch provider can be active at a time.
 
-  # Jina AI reader (API-based, works in China)
+  # Recommended: Zhipu Web Reader (domestic MCP gateway, uses ZHIPU_API_KEY)
   - name: web_fetch
     group: web
-    use: kkoclaw.community.jina_ai.tools:web_fetch_tool
-    timeout: 10
+    use: kkoclaw.community.zhipu_web.tools:web_fetch_tool
+    timeout: 30
 
-  # InfoQuest fetch (BytePlus, recommended for China)
+  # Jina AI reader (API-based, works in China)
+  # - name: web_fetch
+  #   group: web
+  #   use: kkoclaw.community.jina_ai.tools:web_fetch_tool
+  #   timeout: 10
+
+  # InfoQuest fetch (BytePlus, requires INFOQUEST_API_KEY)
   # - name: web_fetch
   #   group: web
   #   use: kkoclaw.community.infoquest.tools:web_fetch_tool
   #   timeout: 10
-  #   fetch_time: 10
-  #   navigation_timeout: 30
 
   # Exa fetch (requires EXA_API_KEY)
   # - name: web_fetch
   #   group: web
   #   use: kkoclaw.community.exa.tools:web_fetch_tool
-  #   # api_key: $EXA_API_KEY
 
   # Firecrawl fetch (requires FIRECRAWL_API_KEY)
   # - name: web_fetch
   #   group: web
   #   use: kkoclaw.community.firecrawl.tools:web_fetch_tool
-  #   # api_key: $FIRECRAWL_API_KEY
 
   # ===================== Image Search =====================
-  # Recommended for China: InfoQuest (BytePlus, domestic API)
-  # - name: image_search
-  #   group: web
-  #   use: kkoclaw.community.infoquest.tools:image_search_tool
-  #   image_search_time_range: 10
-  #   image_size: i
-
   # DuckDuckGo image search (may timeout in China)
   - name: image_search
     group: web
     use: kkoclaw.community.image_search.tools:image_search_tool
     max_results: 5
+
+  # InfoQuest image search (BytePlus, requires INFOQUEST_API_KEY)
+  # - name: image_search
+  #   group: web
+  #   use: kkoclaw.community.infoquest.tools:image_search_tool
+  #   image_search_time_range: 10
+  #   image_size: i
 
   # File operations tools
   - name: ls

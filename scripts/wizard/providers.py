@@ -168,9 +168,17 @@ LLM_PROVIDERS: list[LLMProvider] = [
 
 SEARCH_PROVIDERS: list[SearchProvider] = [
     SearchProvider(
+        name="zhipu_web",
+        display_name="Zhipu Web (智谱 MCP gateway, recommended for China)",
+        description="Domestic MCP gateway, uses ZHIPU_API_KEY, no extra key needed",
+        use="kkoclaw.community.zhipu_web.tools:web_search_tool",
+        env_var="ZHIPU_API_KEY",
+        extra_config={"location": "cn"},
+    ),
+    SearchProvider(
         name="infoquest",
-        display_name="InfoQuest (BytePlus, recommended for China)",
-        description="Domestic API, higher quality vertical search, API key required",
+        display_name="InfoQuest (BytePlus)",
+        description="Domestic API, API key required",
         use="kkoclaw.community.infoquest.tools:web_search_tool",
         env_var="INFOQUEST_API_KEY",
         extra_config={"search_time_range": 10},
@@ -215,8 +223,17 @@ SEARCH_PROVIDERS: list[SearchProvider] = [
 
 WEB_FETCH_PROVIDERS: list[WebProvider] = [
     WebProvider(
+        name="zhipu_web",
+        display_name="Zhipu Web Reader (智谱 MCP gateway, recommended for China)",
+        description="Domestic MCP gateway, uses ZHIPU_API_KEY, no extra key needed",
+        use="kkoclaw.community.zhipu_web.tools:web_fetch_tool",
+        env_var="ZHIPU_API_KEY",
+        tool_name="web_fetch",
+        extra_config={"timeout": 30},
+    ),
+    WebProvider(
         name="infoquest",
-        display_name="InfoQuest (BytePlus, recommended for China)",
+        display_name="InfoQuest (BytePlus)",
         description="Domestic API, API key required",
         use="kkoclaw.community.infoquest.tools:web_fetch_tool",
         env_var="INFOQUEST_API_KEY",
