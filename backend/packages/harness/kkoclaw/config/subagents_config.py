@@ -120,6 +120,16 @@ class SubagentsAppConfig(BaseModel):
         ge=1,
         description="Optional default max-turn override for all subagents (None = keep builtin defaults)",
     )
+    recursion_limit_multiplier: int = Field(
+        default=3,
+        ge=1,
+        description="Multiplier for recursion_limit formula: max_turns * multiplier + base (default: 3)",
+    )
+    recursion_limit_base: int = Field(
+        default=20,
+        ge=0,
+        description="Base offset for recursion_limit formula: max_turns * multiplier + base (default: 20)",
+    )
     agents: dict[str, SubagentOverrideConfig] = Field(
         default_factory=dict,
         description="Per-agent configuration overrides keyed by agent name",
@@ -184,6 +194,20 @@ class SubagentsAppConfig(BaseModel):
             return override.skills
         return None
 
+    def compute_recursion_limit(self, max_turns: int) -> int:
+        """Compute the LangGraph recursion_limit for a given max_turns.
+
+        Formula: max_turns * recursion_limit_multiplier + recursion_limit_base
+        Default: max_turns * 3 + 20
+
+        Args:
+            max_turns: The effective max_turns for the subagent.
+
+        Returns:
+            The computed recursion_limit value.
+        """
+        return max_turns * self.recursion_limit_multiplier + self.recursion_limit_base
+
 
 _subagents_config: SubagentsAppConfig = SubagentsAppConfig()
 
@@ -218,19 +242,23 @@ def load_subagents_config_from_dict(config_dict: dict) -> None:
         f"rules={len(_subagents_config.model_routing.rules)}"
     )
 
+    recursion_summary = f"recursion_limit={_subagents_config.recursion_limit_multiplier}*max_turns+{_subagents_config.recursion_limit_base}"
+
     if overrides_summary or custom_agents_names:
         logger.info(
-            "Subagents config loaded: default timeout=%ss, default max_turns=%s, per-agent overrides=%s, custom_agents=%s, model_routing=%s",
+            "Subagents config loaded: default timeout=%ss, default max_turns=%s, %s, per-agent overrides=%s, custom_agents=%s, model_routing=%s",
             _subagents_config.timeout_seconds,
             _subagents_config.max_turns,
+            recursion_summary,
             overrides_summary or "none",
             custom_agents_names or "none",
             routing_summary,
         )
     else:
         logger.info(
-            "Subagents config loaded: default timeout=%ss, default max_turns=%s, no per-agent overrides, model_routing=%s",
+            "Subagents config loaded: default timeout=%ss, default max_turns=%s, %s, no per-agent overrides, model_routing=%s",
             _subagents_config.timeout_seconds,
             _subagents_config.max_turns,
+            recursion_summary,
             routing_summary,
         )

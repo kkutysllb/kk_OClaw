@@ -19,6 +19,7 @@
 - [x] 为 memory retrieval 增加可查询统计与调试日志
 - [x] 支持将 `.kkoclaw/agents/<name>` 自定义 agent 桥接为可由 `task` 调度的 subagent
 - [x] 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数
+- [x] subagent recursion_limit 公式可配置化（`recursion_limit_multiplier` × max_turns + `recursion_limit_base`，默认 `3*max_turns+20`）
 
 ## 计划功能
 

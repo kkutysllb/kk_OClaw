@@ -588,6 +588,12 @@ sandbox:
 #   # Optional global max-turn override for all subagents
 #   # max_turns: 120
 #
+#   # LangGraph recursion_limit formula for subagents (default: max_turns * 3 + 20)
+#   # Increase if complex subagents hit GraphRecursionError before finishing.
+#   # Example: with max_turns=25, default gives 25*3+20=95 steps.
+#   # recursion_limit_multiplier: 3   # multiplier (default: 3)
+#   # recursion_limit_base: 20         # base offset (default: 20)
+#
 #   # Optional per-agent overrides (applies to both built-in and custom agents)
 #   agents:
 #     general-purpose:

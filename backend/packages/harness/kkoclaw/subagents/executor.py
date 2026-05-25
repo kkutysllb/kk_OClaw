@@ -457,10 +457,13 @@ class SubagentExecutor:
             # Build config with thread_id for sandbox access and recursion limit
             # Include "subagent:{name}" tag so RunJournal classifies token usage correctly.
             # NOTE: recursion_limit scales with max_turns because each agent "turn"
-            # consumes ~2 graph steps (agent node + tool node).  Formula: max_turns * 2 + 10
-            # provides enough headroom while preventing unbounded graph recursion.
+            # consumes multiple graph steps (agent node + tool node + intermediate routing).
+            # Formula: max_turns * multiplier + base (configurable via config.yaml subagents section).
+            app_config = self.app_config or get_app_config()
+            subagents_cfg = app_config.subagents
+            recursion_limit = subagents_cfg.compute_recursion_limit(self.config.max_turns)
             run_config: RunnableConfig = {
-                "recursion_limit": self.config.max_turns * 2 + 10,
+                "recursion_limit": recursion_limit,
                 "tags": [f"subagent:{self.config.name}"],
             }
             context: dict[str, Any] = {}
@@ -470,7 +473,7 @@ class SubagentExecutor:
             if self.app_config is not None:
                 context["app_config"] = self.app_config
 
-            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} starting async execution with max_turns={self.config.max_turns}")
+            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} starting async execution with max_turns={self.config.max_turns}, recursion_limit={recursion_limit}")
 
             # Use stream instead of invoke to get real-time updates
             # This allows us to collect AI messages as they are generated
