@@ -7,7 +7,16 @@ description: Use this skill when the user requests to generate, create, imagine,
 
 ## Overview
 
-This skill generates high-quality images using structured prompts and a Python script. The workflow includes creating JSON-formatted prompts and executing image generation with optional reference images.
+This skill generates high-quality images using structured prompts and a Python script. The script supports multiple image generation providers with automatic priority selection:
+
+1. **GPT/Image2** (priority) — OpenAI-compatible images/generations endpoint
+2. **Gemini** (fallback) — Google Gemini generateContent API
+3. **MiniMax** (legacy) — MiniMax image_generation API
+
+Provider is auto-selected based on environment variables configured in `.env`:
+- `GPT_IMAGE2_API_KEY` + `GPT_IMAGE2_BASE_URL` → GPT/Image2
+- `GEMINI_API_KEY` + `GEMINI_BASE_URL` → Gemini
+- `MINIMAX_API_KEY` → MiniMax
 
 ## Core Capabilities
 
