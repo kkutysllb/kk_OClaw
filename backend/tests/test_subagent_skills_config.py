@@ -9,9 +9,11 @@ Covers:
 - Skills filter passthrough in task_tool config assembly
 """
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from kkoclaw.config.subagents_config import (
     CustomSubagentConfig,
@@ -30,6 +32,23 @@ from kkoclaw.subagents.config import SubagentConfig
 def _reset_subagents_config(**kwargs) -> None:
     """Reset global subagents config to a known state."""
     load_subagents_config_from_dict(kwargs)
+
+
+def _make_paths(base_dir: Path):
+    from kkoclaw.config.paths import Paths
+
+    return Paths(base_dir=base_dir)
+
+
+def _write_custom_agent(base_dir: Path, name: str, config: dict, soul: str = "You are helpful.") -> None:
+    agent_dir = base_dir / "agents" / name
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    data = dict(config)
+    if "name" not in data:
+        data["name"] = name
+    with open(agent_dir / "config.yaml", "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+    (agent_dir / "SOUL.md").write_text(soul, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -435,6 +454,76 @@ class TestRegistryCustomAgentLookup:
         assert config.timeout_seconds == 300  # Override applied
         assert config.skills == ["overridden-skill"]  # Override applied
 
+    def test_custom_agent_directory_is_bridged_as_subagent(self, monkeypatch, tmp_path):
+        from kkoclaw.subagents.registry import get_subagent_config
+
+        _write_custom_agent(
+            tmp_path,
+            "kkutys-stock",
+            {
+                "description": "Stock analysis specialist",
+                "skills": ["kk-stock-analysis", "tushare-data"],
+                "model": "glm-5.1",
+            },
+            soul="You are a stock research specialist.",
+        )
+        monkeypatch.setattr("kkoclaw.config.agents_config.get_paths", lambda: _make_paths(tmp_path))
+        _reset_subagents_config()
+
+        config = get_subagent_config("kkutys-stock")
+
+        assert config is not None
+        assert config.name == "kkutys-stock"
+        assert config.description == "Stock analysis specialist"
+        assert config.system_prompt == "You are a stock research specialist."
+        assert config.skills == ["kk-stock-analysis", "tushare-data"]
+        assert config.model == "glm-5.1"
+
+    def test_custom_agent_directory_missing_soul_is_not_exposed(self, monkeypatch, tmp_path):
+        from kkoclaw.subagents.registry import get_available_subagent_names, get_subagent_config
+
+        agent_dir = tmp_path / "agents" / "kkutys-stock"
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        with open(agent_dir / "config.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"name": "kkutys-stock", "description": "Stock analysis specialist"}, f, sort_keys=False)
+        monkeypatch.setattr("kkoclaw.config.agents_config.get_paths", lambda: _make_paths(tmp_path))
+        _reset_subagents_config()
+
+        assert get_subagent_config("kkutys-stock") is None
+        assert "kkutys-stock" not in get_available_subagent_names()
+
+    def test_config_custom_agent_takes_priority_over_custom_agent_directory(self, monkeypatch, tmp_path):
+        from kkoclaw.subagents.registry import get_subagent_config
+
+        _write_custom_agent(
+            tmp_path,
+            "kkutys-stock",
+            {
+                "description": "Directory-defined stock specialist",
+                "skills": ["tushare-data"],
+            },
+            soul="Directory soul.",
+        )
+        monkeypatch.setattr("kkoclaw.config.agents_config.get_paths", lambda: _make_paths(tmp_path))
+        load_subagents_config_from_dict(
+            {
+                "custom_agents": {
+                    "kkutys-stock": {
+                        "description": "Config-defined stock specialist",
+                        "system_prompt": "Config prompt.",
+                        "skills": ["kk-stock-analysis"],
+                    }
+                }
+            }
+        )
+
+        config = get_subagent_config("kkutys-stock")
+
+        assert config is not None
+        assert config.description == "Config-defined stock specialist"
+        assert config.system_prompt == "Config prompt."
+        assert config.skills == ["kk-stock-analysis"]
+
 
 # ---------------------------------------------------------------------------
 # Registry: skills override on builtin agents
@@ -548,6 +637,25 @@ class TestRegistryAvailableNames:
         )
         names = get_subagent_names()
         assert names.count("general-purpose") == 1
+
+    def test_includes_bridged_custom_agent_directory_names(self, monkeypatch, tmp_path):
+        from kkoclaw.subagents.registry import get_subagent_names
+
+        _write_custom_agent(
+            tmp_path,
+            "kkutys-stock",
+            {
+                "description": "Stock analysis specialist",
+                "skills": ["kk-stock-analysis"],
+            },
+            soul="You are a stock analysis specialist.",
+        )
+        monkeypatch.setattr("kkoclaw.config.agents_config.get_paths", lambda: _make_paths(tmp_path))
+        _reset_subagents_config()
+
+        names = get_subagent_names()
+
+        assert "kkutys-stock" in names
 
 
 # ---------------------------------------------------------------------------

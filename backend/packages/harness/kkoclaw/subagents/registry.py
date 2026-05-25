@@ -4,6 +4,7 @@ import logging
 from dataclasses import replace
 from typing import Any
 
+from kkoclaw.config.agents_config import list_custom_agents, load_agent_config, load_agent_soul
 from kkoclaw.sandbox.security import is_host_bash_allowed
 from kkoclaw.subagents.builtins import BUILTIN_SUBAGENTS
 from kkoclaw.subagents.config import SubagentConfig
@@ -47,13 +48,53 @@ def _build_custom_subagent_config(name: str, *, app_config: Any | None = None) -
     )
 
 
+def _build_directory_backed_subagent_config(name: str) -> SubagentConfig | None:
+    """Build a SubagentConfig from .kkoclaw/agents/<name>/ if it is complete enough."""
+    try:
+        agent = load_agent_config(name)
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        logger.warning("Skipping custom agent '%s' for subagent bridge: %s", name, exc)
+        return None
+
+    try:
+        soul = load_agent_soul(name)
+    except Exception as exc:
+        logger.warning("Skipping custom agent '%s' SOUL for subagent bridge: %s", name, exc)
+        return None
+
+    if not soul:
+        logger.debug("Skipping custom agent '%s' for subagent bridge: missing SOUL.md", name)
+        return None
+
+    return SubagentConfig(
+        name=agent.name,
+        description=agent.description,
+        system_prompt=soul,
+        skills=agent.skills,
+        model=agent.model or "inherit",
+    )
+
+
+def _list_directory_backed_subagent_names() -> list[str]:
+    names: list[str] = []
+    for agent in list_custom_agents():
+        if load_agent_soul(agent.name):
+            names.append(agent.name)
+        else:
+            logger.debug("Skipping custom agent '%s' from subagent names: missing SOUL.md", agent.name)
+    return names
+
+
 def get_subagent_config(name: str, *, app_config: Any | None = None) -> SubagentConfig | None:
     """Get a subagent configuration by name, with config.yaml overrides applied.
 
     Resolution order (mirrors Codex's config layering):
     1. Built-in subagents (general-purpose, bash)
     2. Custom subagents from config.yaml custom_agents section
-    3. Per-agent overrides from config.yaml agents section (timeout, max_turns, model, skills)
+    3. Directory-backed custom agents from .kkoclaw/agents/<name>/
+    4. Per-agent overrides from config.yaml agents section (timeout, max_turns, model, skills)
 
     Args:
         name: The name of the subagent.
@@ -66,6 +107,8 @@ def get_subagent_config(name: str, *, app_config: Any | None = None) -> Subagent
     config = BUILTIN_SUBAGENTS.get(name)
     if config is None:
         config = _build_custom_subagent_config(name, app_config=app_config)
+    if config is None:
+        config = _build_directory_backed_subagent_config(name)
     if config is None:
         return None
 
@@ -141,6 +184,10 @@ def get_subagent_names(*, app_config: Any | None = None) -> list[str]:
     # Merge custom_agents from config.yaml
     subagents_config = _resolve_subagents_app_config(app_config)
     for custom_name in subagents_config.custom_agents:
+        if custom_name not in names:
+            names.append(custom_name)
+
+    for custom_name in _list_directory_backed_subagent_names():
         if custom_name not in names:
             names.append(custom_name)
 
