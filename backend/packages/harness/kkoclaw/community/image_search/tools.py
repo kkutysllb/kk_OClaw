@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def _search_images(
     query: str,
     max_results: int = 5,
-    region: str = "wt-wt",
+    region: str = "cn-zh",
     safesearch: str = "moderate",
     size: str | None = None,
     color: str | None = None,

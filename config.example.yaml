@@ -339,98 +339,95 @@ tool_groups:
 # Configure available tools for the agent to use
 
 tools:
-  # Web search tool (uses DuckDuckGo, no API key required)
+  # ===================== Web Search =====================
+  # Recommended for China: InfoQuest (BytePlus, domestic API)
+  # - name: web_search
+  #   group: web
+  #   use: kkoclaw.community.infoquest.tools:web_search_tool
+  #   search_time_range: 10
+
+  # DuckDuckGo (no API key needed, but may timeout in China)
   - name: web_search
     group: web
     use: kkoclaw.community.ddg_search.tools:web_search_tool
     max_results: 5
 
-  # Web search tool (uses Serper - Google Search API, requires SERPER_API_KEY)
-  # Serper provides real-time Google Search results. Sign up at https://serper.dev
-  # Note: set SERPER_API_KEY in your environment before starting the app, or
-  # uncomment and fill in api_key below (the $VAR syntax is resolved at startup).
+  # Serper (Google Search API, requires SERPER_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.serper.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $SERPER_API_KEY  # Optional if SERPER_API_KEY env var is set
+  #   # api_key: $SERPER_API_KEY
 
-  # Web search tool (requires Tavily API key)
+  # Tavily (requires TAVILY_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.tavily.tools:web_search_tool
   #   max_results: 5
-  #   # api_key: $TAVILY_API_KEY  # Set if needed
+  #   # api_key: $TAVILY_API_KEY
 
-  # Web search tool (uses InfoQuest, requires InfoQuest API key)
+  # InfoQuest (BytePlus, recommended for China, requires INFOQUEST_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.infoquest.tools:web_search_tool
-  #   # Used to limit the scope of search results, only returns content within the specified time range. Set to -1 to disable time filtering
   #   search_time_range: 10
 
-  # Web search tool (uses Exa, requires EXA_API_KEY)
+  # Exa (requires EXA_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.exa.tools:web_search_tool
   #   max_results: 5
-  #   search_type: auto  # Options: auto, neural, keyword
-  #   contents_max_characters: 1000
   #   # api_key: $EXA_API_KEY
 
-  # Web search tool (uses Firecrawl, requires FIRECRAWL_API_KEY)
+  # Firecrawl (requires FIRECRAWL_API_KEY)
   # - name: web_search
   #   group: web
   #   use: kkoclaw.community.firecrawl.tools:web_search_tool
   #   max_results: 5
   #   # api_key: $FIRECRAWL_API_KEY
 
-  # Web fetch tool (uses Exa)
+  # ===================== Web Fetch =====================
   # NOTE: Only one web_fetch provider can be active at a time.
-  # Comment out the Jina AI web_fetch entry below before enabling this one.
-  # - name: web_fetch
-  #   group: web
-  #   use: kkoclaw.community.exa.tools:web_fetch_tool
-  #   # api_key: $EXA_API_KEY
 
-  # Web fetch tool (uses Jina AI reader)
+  # Jina AI reader (API-based, works in China)
   - name: web_fetch
     group: web
     use: kkoclaw.community.jina_ai.tools:web_fetch_tool
     timeout: 10
 
-  # Web fetch tool (uses InfoQuest)
+  # InfoQuest fetch (BytePlus, recommended for China)
   # - name: web_fetch
   #   group: web
   #   use: kkoclaw.community.infoquest.tools:web_fetch_tool
-  #   # Overall timeout for the entire crawling process (in seconds). Set to positive value to enable, -1 to disable
   #   timeout: 10
-  #   # Waiting time after page loading (in seconds). Set to positive value to enable, -1 to disable
   #   fetch_time: 10
-  #   # Timeout for navigating to the page (in seconds). Set to positive value to enable, -1 to disable
   #   navigation_timeout: 30
 
-  # Web fetch tool (uses Firecrawl, requires FIRECRAWL_API_KEY)
+  # Exa fetch (requires EXA_API_KEY)
+  # - name: web_fetch
+  #   group: web
+  #   use: kkoclaw.community.exa.tools:web_fetch_tool
+  #   # api_key: $EXA_API_KEY
+
+  # Firecrawl fetch (requires FIRECRAWL_API_KEY)
   # - name: web_fetch
   #   group: web
   #   use: kkoclaw.community.firecrawl.tools:web_fetch_tool
   #   # api_key: $FIRECRAWL_API_KEY
 
-  # Image search tool (uses DuckDuckGo)
-  # Use this to find reference images before image generation
+  # ===================== Image Search =====================
+  # Recommended for China: InfoQuest (BytePlus, domestic API)
+  # - name: image_search
+  #   group: web
+  #   use: kkoclaw.community.infoquest.tools:image_search_tool
+  #   image_search_time_range: 10
+  #   image_size: i
+
+  # DuckDuckGo image search (may timeout in China)
   - name: image_search
     group: web
     use: kkoclaw.community.image_search.tools:image_search_tool
     max_results: 5
-
-  # Image search tool (uses InfoQuest)
-  # - name: image_search
-  #   group: web
-  #   use: kkoclaw.community.infoquest.tools:image_search_tool
-  #   # Used to limit the scope of image search results, only returns content within the specified time range. Set to -1 to disable time filtering
-  #   image_search_time_range: 10
-  #   # Image size filter. Options: "l" (large), "m" (medium), "i" (icon).
-  #   image_size: "i"
 
   # File operations tools
   - name: ls

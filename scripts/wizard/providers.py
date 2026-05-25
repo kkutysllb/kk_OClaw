@@ -168,8 +168,16 @@ LLM_PROVIDERS: list[LLMProvider] = [
 
 SEARCH_PROVIDERS: list[SearchProvider] = [
     SearchProvider(
+        name="infoquest",
+        display_name="InfoQuest (BytePlus, recommended for China)",
+        description="Domestic API, higher quality vertical search, API key required",
+        use="kkoclaw.community.infoquest.tools:web_search_tool",
+        env_var="INFOQUEST_API_KEY",
+        extra_config={"search_time_range": 10},
+    ),
+    SearchProvider(
         name="ddg",
-        display_name="DuckDuckGo (free, no key needed)",
+        display_name="DuckDuckGo (free, may timeout in China)",
         description="No API key required",
         use="kkoclaw.community.ddg_search.tools:web_search_tool",
         env_var=None,
@@ -178,18 +186,10 @@ SEARCH_PROVIDERS: list[SearchProvider] = [
     SearchProvider(
         name="tavily",
         display_name="Tavily",
-        description="Recommended, free tier available",
+        description="Free tier available",
         use="kkoclaw.community.tavily.tools:web_search_tool",
         env_var="TAVILY_API_KEY",
         extra_config={"max_results": 5},
-    ),
-    SearchProvider(
-        name="infoquest",
-        display_name="InfoQuest",
-        description="Higher quality vertical search, API key required",
-        use="kkoclaw.community.infoquest.tools:web_search_tool",
-        env_var="INFOQUEST_API_KEY",
-        extra_config={"search_time_range": 10},
     ),
     SearchProvider(
         name="exa",
@@ -215,6 +215,15 @@ SEARCH_PROVIDERS: list[SearchProvider] = [
 
 WEB_FETCH_PROVIDERS: list[WebProvider] = [
     WebProvider(
+        name="infoquest",
+        display_name="InfoQuest (BytePlus, recommended for China)",
+        description="Domestic API, API key required",
+        use="kkoclaw.community.infoquest.tools:web_fetch_tool",
+        env_var="INFOQUEST_API_KEY",
+        tool_name="web_fetch",
+        extra_config={"timeout": 10, "fetch_time": 10, "navigation_timeout": 30},
+    ),
+    WebProvider(
         name="jina_ai",
         display_name="Jina AI Reader",
         description="Good default reader, no API key required",
@@ -230,15 +239,6 @@ WEB_FETCH_PROVIDERS: list[WebProvider] = [
         use="kkoclaw.community.exa.tools:web_fetch_tool",
         env_var="EXA_API_KEY",
         tool_name="web_fetch",
-    ),
-    WebProvider(
-        name="infoquest",
-        display_name="InfoQuest",
-        description="API key required",
-        use="kkoclaw.community.infoquest.tools:web_fetch_tool",
-        env_var="INFOQUEST_API_KEY",
-        tool_name="web_fetch",
-        extra_config={"timeout": 10, "fetch_time": 10, "navigation_timeout": 30},
     ),
     WebProvider(
         name="firecrawl",
