@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/cover.svg">
-    <img alt="KKOCLAW — 开源超级智能体平台" src="assets/cover.svg" width="100%" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/cover.png">
+    <img alt="KKOCLAW — 开源超级智能体平台" src="assets/cover.png" width="100%" />
   </picture>
 </p>
 

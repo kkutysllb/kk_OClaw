@@ -152,6 +152,33 @@ models:
   #       thinking:
   #         type: disabled
 
+  # Example: Zhipu GLM-5 model (requires ZHIPU_API_KEY)
+  # IMPORTANT: Use kkoclaw.models.patched_zhipu:PatchedChatZhipu instead of
+  # langchain_openai:ChatOpenAI — the standard client sends stream_options
+  # which Zhipu API rejects with error code 1210 ("API 调用参数有误").
+  # For Coding plan, use coding endpoint; for general plan, use standard endpoint.
+  # - name: glm-5-turbo
+  #   display_name: GLM-5-Turbo
+  #   use: kkoclaw.models.patched_zhipu:PatchedChatZhipu
+  #   model: GLM-5-Turbo
+  #   api_key: $ZHIPU_API_KEY
+  #   base_url: https://open.bigmodel.cn/api/coding/paas/v4  # Coding 端点
+  #   # base_url: https://open.bigmodel.cn/api/paas/v4      # 通用端点
+  #   request_timeout: 600.0
+  #   max_tokens: 65536
+  #   temperature: 1.0
+  #   supports_thinking: true
+  #   supports_vision: true
+  #   supports_reasoning_effort: false  # GLM-5 does not support reasoning_effort
+  #   when_thinking_enabled:
+  #     extra_body:
+  #       thinking:
+  #         type: enabled
+  #   when_thinking_disabled:
+  #     extra_body:
+  #       thinking:
+  #         type: disabled
+
   # Example: DeepSeek model (with thinking support)
   # - name: deepseek-v3
   #   display_name: DeepSeek V3 (Thinking)
