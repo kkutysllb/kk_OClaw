@@ -344,6 +344,9 @@ token_usage:
 
 ### 今日已完成
 
+- 修复智谱 GLM-5 模型 1210 错误：创建 `PatchedChatZhipu` 适配器剥离不兼容的 `stream_options` 参数
+- 工具循环中断前端提示：`LoopDetectionMiddleware` 触发 hard_stop 时通过 SSE custom 事件通知前端，前端以 toast 展示中断原因和「继续」操作指引
+- `PatchedChatDeepSeek` 增加模型名别名映射机制（`_MODEL_NAME_ALIASES`），支持本地部署模型名（如 `deepseek_v4`）自动映射为 API 接受的名称（如 `deepseek-v4-flash`）
 - 完成基于 `current_context` 的 TF-IDF 相似度检索与 memory facts 加权排序
 - 为 memory retrieval 增加 facts 侧缓存、可查询统计与调试日志
 - 增强 `tokenize_text()` 的中文与技术词切分能力

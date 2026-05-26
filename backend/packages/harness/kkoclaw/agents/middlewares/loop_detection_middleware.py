@@ -417,12 +417,17 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         return str(content) + f"\n\n{text}"
 
     @staticmethod
-    def _build_hard_stop_update(last_msg, content: str | list) -> dict:
+    def _build_hard_stop_update(last_msg, content: str | list, *, interrupt_info: dict | None = None) -> dict:
         """Clear tool-call metadata so forced-stop messages serialize as plain assistant text.
 
         Also marks the message with ``name="loop_warning"`` and
         ``additional_kwargs.hide_from_ui = True`` so the frontend
         ``isHiddenFromUIMessage`` filter hides it from the chat UI.
+
+        When *interrupt_info* is provided (a dict with keys ``reason`` and
+        ``message``), it is stored under ``additional_kwargs.task_interrupted``
+        so the ``run_agent`` worker can detect it and publish a custom SSE
+        event to the frontend.
         """
         update = {
             "tool_calls": [],
@@ -436,6 +441,10 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         # but the user should not see raw middleware messages like
         # [LOOP DETECTED] or [FORCED STOP].
         additional_kwargs["hide_from_ui"] = True
+        # Attach task_interrupted metadata for the worker to detect and
+        # forward to the frontend as a custom SSE event.
+        if interrupt_info is not None:
+            additional_kwargs["task_interrupted"] = interrupt_info
         update["additional_kwargs"] = additional_kwargs
         # name="loop_warning" is checked by the frontend isHiddenFromUIMessage()
         update["name"] = "loop_warning"
@@ -463,7 +472,16 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             messages = state.get("messages", [])
             last_msg = messages[-1]
             content = self._append_text(last_msg.content, warning or _HARD_STOP_MSG)
-            stripped_msg = last_msg.model_copy(update=self._build_hard_stop_update(last_msg, content))
+            # Build interrupt info for frontend notification
+            interrupt_info = {
+                "type": "task_interrupted",
+                "reason": "tool_loop",
+                "message": "由于重复调用工具超过安全限制，任务已中断。",
+                "hint": '请输入"继续"完成任务或主动停止任务。',
+            }
+            stripped_msg = last_msg.model_copy(
+                update=self._build_hard_stop_update(last_msg, content, interrupt_info=interrupt_info)
+            )
             return {"messages": [stripped_msg]}
 
         if warning:

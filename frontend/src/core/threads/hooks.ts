@@ -267,6 +267,20 @@ export function useThreadStream({
         const e = event as { type: "llm_retry"; message: string };
         toast(e.message);
       }
+
+      if (
+        typeof event === "object" &&
+        event !== null &&
+        "type" in event &&
+        event.type === "task_interrupted" &&
+        "message" in event &&
+        typeof event.message === "string" &&
+        "hint" in event &&
+        typeof event.hint === "string"
+      ) {
+        const e = event as { type: "task_interrupted"; message: string; hint: string };
+        toast.warning(`${e.message} ${e.hint}`, { duration: 10000 });
+      }
     },
     onError(error) {
       setOptimisticMessages([]);

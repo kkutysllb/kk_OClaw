@@ -21,7 +21,15 @@ class PatchedChatDeepSeek(ChatDeepSeek):
     to be present on ALL assistant messages in multi-turn conversations. This patched
     version ensures reasoning_content from additional_kwargs is included in the
     request payload.
+
+    Model name aliases are resolved so that locally deployed model names (e.g.
+    ``deepseek_v4``) are automatically mapped to the name accepted by the API.
     """
+
+    # Mapping from local/custom model names to API-accepted names.
+    _MODEL_NAME_ALIASES: dict[str, str] = {
+        "deepseek_v4": "deepseek-v4-flash",
+    }
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -51,6 +59,11 @@ class PatchedChatDeepSeek(ChatDeepSeek):
 
         # Call parent to get the base payload
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+
+        # Resolve model name aliases (e.g. deepseek_v4 → deepseek-v4-flash)
+        model_name = payload.get("model")
+        if model_name and model_name in self._MODEL_NAME_ALIASES:
+            payload["model"] = self._MODEL_NAME_ALIASES[model_name]
 
         # Strip image_url parts from multi-modal user messages.
         # DeepSeek's API cannot deserialize image_url content in user messages.

@@ -278,6 +278,7 @@ async def run_agent(
                     break
                 sse_event = _lg_mode_to_sse_event(single_mode)
                 await bridge.publish(run_id, sse_event, serialize(chunk, mode=single_mode))
+                await _publish_interrupt_if_present(run_id, chunk, mode=single_mode, bridge=bridge)
         else:
             # Multiple modes or subgraphs: astream yields tuples
             async for item in agent.astream(
@@ -296,6 +297,7 @@ async def run_agent(
 
                 sse_event = _lg_mode_to_sse_event(mode)
                 await bridge.publish(run_id, sse_event, serialize(chunk, mode=mode))
+                await _publish_interrupt_if_present(run_id, chunk, mode=mode, bridge=bridge)
 
         # 8. Final status
         if record.abort_event.is_set():
@@ -504,6 +506,66 @@ async def _rollback_to_pre_run_checkpoint(
 def _new_checkpoint_marker() -> dict[str, str]:
     marker = empty_checkpoint()
     return {"id": marker["id"], "ts": marker["ts"]}
+
+
+async def _publish_interrupt_if_present(
+    run_id: str,
+    chunk: Any,
+    *,
+    mode: str,
+    bridge: StreamBridge,
+) -> None:
+    """Detect ``task_interrupted`` in a stream chunk and publish a custom SSE event.
+
+    When the ``LoopDetectionMiddleware`` triggers a hard stop, it marks the
+    resulting AIMessage with ``additional_kwargs.task_interrupted = {…}``.
+    This helper scans the chunk for such a marker and, if found, publishes
+    a ``"custom"`` SSE event that the frontend can display as an inline hint.
+    """
+    interrupt_info: dict | None = None
+
+    # ``updates`` mode: chunk is a state dict, e.g. {"messages": [AIMessage(...)]}
+    if mode == "updates" and isinstance(chunk, dict):
+        for _key, value in chunk.items():
+            msgs = value if isinstance(value, list) else [value]
+            for msg in msgs:
+                info = _extract_interrupt_info(msg)
+                if info is not None:
+                    interrupt_info = info
+                    break
+            if interrupt_info:
+                break
+
+    # ``messages`` mode: chunk is (message_chunk, metadata)
+    elif mode == "messages" and isinstance(chunk, tuple) and len(chunk) >= 1:
+        info = _extract_interrupt_info(chunk[0])
+        if info is not None:
+            interrupt_info = info
+
+    # ``values`` mode: chunk is the full state dict
+    elif mode == "values" and isinstance(chunk, dict):
+        messages = chunk.get("messages", [])
+        if isinstance(messages, list):
+            for msg in reversed(messages):  # check latest first
+                info = _extract_interrupt_info(msg)
+                if info is not None:
+                    interrupt_info = info
+                    break
+
+    if interrupt_info is not None:
+        logger.info("Run %s: publishing task_interrupted custom event", run_id)
+        await bridge.publish(run_id, "custom", interrupt_info)
+
+
+def _extract_interrupt_info(msg: Any) -> dict | None:
+    """Extract ``task_interrupted`` info from a message's additional_kwargs."""
+    if msg is None:
+        return None
+    kwargs = getattr(msg, "additional_kwargs", None)
+    if not isinstance(kwargs, dict):
+        return None
+    info = kwargs.get("task_interrupted")
+    return info if isinstance(info, dict) else None
 
 
 def _lg_mode_to_sse_event(mode: str) -> str:
