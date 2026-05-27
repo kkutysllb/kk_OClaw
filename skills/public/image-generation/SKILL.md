@@ -9,13 +9,13 @@ description: Use this skill when the user requests to generate, create, imagine,
 
 This skill generates high-quality images using structured prompts and a Python script. The script supports multiple image generation providers with automatic priority selection:
 
-1. **GPT/Image2** (priority) — OpenAI-compatible images/generations endpoint
-2. **Gemini** (fallback) — Google Gemini generateContent API
+1. **Gemini/Doubao** (priority) — OpenAI-compatible images/generations endpoint (e.g. doubao-seedream)
+2. **GPT/Image2** (fallback) — OpenAI-compatible images/generations endpoint
 3. **MiniMax** (legacy) — MiniMax image_generation API
 
 Provider is auto-selected based on environment variables configured in `.env`:
+- `GEMINI_API_KEY` + `GEMINI_BASE_URL` → Gemini/Doubao
 - `GPT_IMAGE2_API_KEY` + `GPT_IMAGE2_BASE_URL` → GPT/Image2
-- `GEMINI_API_KEY` + `GEMINI_BASE_URL` → Gemini
 - `MINIMAX_API_KEY` → MiniMax
 
 ## Core Capabilities

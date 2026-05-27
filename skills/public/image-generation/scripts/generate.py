@@ -10,15 +10,18 @@ from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Provider configuration (priority order)
-#   1. GPT/Image2  (OpenAI-compatible images/generations endpoint)
-#   2. Gemini      (generateContent endpoint)
-#   3. MiniMax     (legacy fallback)
+#   1. Gemini/Doubao  (OpenAI-compatible images/generations endpoint)
+#   2. GPT/Image2     (OpenAI-compatible images/generations endpoint)
+#   3. MiniMax        (legacy fallback)
 # ---------------------------------------------------------------------------
 _GPT_IMAGE2_API_KEY = os.getenv("GPT_IMAGE2_API_KEY")
 _GPT_IMAGE2_BASE_URL = os.getenv("GPT_IMAGE2_BASE_URL", "")
+_GPT_IMAGE2_MODEL = os.getenv("GPT_IMAGE2_MODEL", "gpt-image-2")
 
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 _GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "")
+_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "doubao-seedream-5-0-260128")
+
 
 _MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
 _MINIMAX_API_BASE = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/v1")
@@ -26,10 +29,10 @@ _MINIMAX_API_BASE = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com").rs
 
 def _select_provider() -> str:
     """Return the first provider with credentials configured."""
-    if _GPT_IMAGE2_API_KEY and _GPT_IMAGE2_BASE_URL:
-        return "gpt-image2"
     if _GEMINI_API_KEY and _GEMINI_BASE_URL:
         return "gemini"
+    if _GPT_IMAGE2_API_KEY and _GPT_IMAGE2_BASE_URL:
+        return "gpt-image2"
     if _MINIMAX_API_KEY:
         return "minimax"
     return ""
@@ -102,6 +105,20 @@ def generate_image(
         return _generate_minimax(prompt, valid_reference_images, output_file, aspect_ratio)
 
 
+def _aspect_ratio_to_size(aspect_ratio: str) -> str:
+    """Convert aspect ratio string (e.g. '16:9') to OpenAI size string (e.g. '1024x1024')."""
+    _SIZE_MAP = {
+        "1:1": "1024x1024",
+        "16:9": "1536x1024",
+        "9:16": "1024x1536",
+        "4:3": "1536x1024",
+        "3:4": "1024x1536",
+        "3:2": "1536x1024",
+        "2:3": "1024x1536",
+    }
+    return _SIZE_MAP.get(aspect_ratio, "1024x1024")
+
+
 def _generate_gpt_image2(
     prompt: str,
     reference_images: list[str],
@@ -109,14 +126,13 @@ def _generate_gpt_image2(
     aspect_ratio: str,
 ) -> str:
     """Generate image using GPT/Image2 (OpenAI-compatible) API."""
-    # Embed aspect ratio into prompt (GPT image2 ignores size parameter)
-    enriched_prompt = f"{aspect_ratio} aspect ratio. {prompt}"
-
     request_body: dict = {
-        "model": "gpt-image-2",
-        "prompt": enriched_prompt,
-        "response_format": "b64_json",
+        "model": _GPT_IMAGE2_MODEL,
+        "prompt": prompt,
         "n": 1,
+        "size": _aspect_ratio_to_size(aspect_ratio),
+        "quality": "low",
+        "format": "jpeg",
     }
 
     # Add reference images if provided
@@ -130,11 +146,6 @@ def _generate_gpt_image2(
                 "type": "input_image",
                 "image_url": f"data:{mime_type};base64,{image_b64}",
             })
-        # For edit-style: use image array in prompt content
-        if input_images:
-            request_body["prompt"] = enriched_prompt
-            # GPT image2 supports reference via images API parameter
-            # but many proxies only support text prompt, so we add as description
 
     response = requests.post(
         _GPT_IMAGE2_BASE_URL,
@@ -179,29 +190,12 @@ def _generate_gemini(
     output_file: str,
     aspect_ratio: str,
 ) -> str:
-    """Generate image using Gemini generateContent API."""
-    enriched_prompt = f"Generate an image with {aspect_ratio} aspect ratio. {prompt}"
-
-    # Build parts
-    parts = [{"text": enriched_prompt}]
-
-    # Add reference images as inline_data
-    for ref_img in reference_images:
-        mime_type = _get_mime_type(ref_img)
-        with open(ref_img, "rb") as f:
-            image_b64 = base64.b64encode(f.read()).decode("utf-8")
-        parts.append({
-            "inline_data": {
-                "mime_type": mime_type,
-                "data": image_b64,
-            }
-        })
-
-    request_body = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
+    """Generate image using Gemini-compatible (OpenAI images/generations) API."""
+    request_body: dict = {
+        "model": _GEMINI_MODEL,
+        "prompt": prompt,
+        "n": 1,
+        "size": _aspect_ratio_to_size(aspect_ratio),
     }
 
     response = requests.post(
@@ -216,19 +210,24 @@ def _generate_gemini(
     response.raise_for_status()
     result = response.json()
 
-    # Extract image from response
-    candidates = result.get("candidates", [])
-    if candidates:
-        content_parts = candidates[0].get("content", {}).get("parts", [])
-        for part in content_parts:
-            inline_data = part.get("inlineData") or part.get("inline_data")
-            if inline_data:
-                img_b64 = inline_data.get("data", "")
-                if img_b64:
-                    img_bytes = base64.b64decode(img_b64)
-                    img = Image.open(io.BytesIO(img_bytes))
-                    img.save(output_file)
-                    return f"Successfully generated image to {output_file} (provider: gemini)"
+    # Extract image data (supports both b64_json and url response)
+    data_list = result.get("data", [])
+    if data_list:
+        item = data_list[0]
+        b64 = item.get("b64_json", "")
+        if b64:
+            if b64.startswith("data:"):
+                b64 = b64.split(",", 1)[1]
+            with open(output_file, "wb") as f:
+                f.write(base64.b64decode(b64))
+            return f"Successfully generated image to {output_file} (provider: gemini/{_GEMINI_MODEL})"
+        url = item.get("url", "")
+        if url:
+            img_resp = requests.get(url, timeout=60)
+            img_resp.raise_for_status()
+            with open(output_file, "wb") as f:
+                f.write(img_resp.content)
+            return f"Successfully generated image to {output_file} (provider: gemini/{_GEMINI_MODEL})"
 
     raise Exception(
         f"Gemini API returned no image data. Response: {json.dumps(result)[:500]}"
