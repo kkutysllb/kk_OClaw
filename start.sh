@@ -93,9 +93,27 @@ _banner() {
     echo ""
 }
 
-# 检查端口是否被监听
+# 检查端口是否被监听（lsof → ss → netstat 三重 fallback）
 _port_listening() {
-    lsof -i ":$1" -sTCP:LISTEN 2>/dev/null | grep -q LISTEN
+    # 方法 1: lsof
+    if command -v lsof >/dev/null 2>&1; then
+        if lsof -i ":$1" -sTCP:LISTEN 2>/dev/null | grep -q LISTEN; then
+            return 0
+        fi
+    fi
+    # 方法 2: ss
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ltn "( sport = :$1 )" 2>/dev/null | tail -n +2 | grep -q .; then
+            return 0
+        fi
+    fi
+    # 方法 3: netstat
+    if command -v netstat >/dev/null 2>&1; then
+        if netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "(^|[.:])${1}$"; then
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # 通过 PID 文件检查进程是否存活
