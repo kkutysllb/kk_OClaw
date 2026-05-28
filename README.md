@@ -53,7 +53,7 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
 1. **克隆仓库**
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/kkutysllb/kk_OClaw
    cd kk_OClaw
    ```
 
@@ -355,6 +355,14 @@ token_usage:
 - subagent recursion_limit 公式可配置化（`recursion_limit_multiplier` × max_turns + `recursion_limit_base`），默认 `3*max_turns+20`
 - 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数，缓解长任务期间的页面 503/504
 - 修复 `MemoryMiddleware` 的 `runtime` 注入问题，并补充异步回归测试
+- **System Prompt Token 用量优化**（prompt.py 828→563 行，prompt ~17k→~6.2k 字符，降幅 63%）：
+  - 精简 enabled skills（禁用 5 个不常用 skill）
+  - 压缩 6 大段落：Subagent Section / Clarification System / Citations / Working Directory / Response Style / Critical Reminders
+  - Skill 列表从 XML 格式改为单行简洁格式，Skill Evolution 从 9 行压缩为 3 行
+  - Progressive Loading Pattern 从 6 步说明压缩为 1 句
+  - 消除 Subagent 三重重复（section / reminder / thinking 去重）
+  - 添加防啰嗦指令：`NEVER recap or summarize previous conversation steps`
+  - Summarization 触发阈值从 15564→8000 tokens，自定义简洁摘要 prompt（只保留目标+决策+进度，上限 200 词）
 
 ### 后续待完成
 
