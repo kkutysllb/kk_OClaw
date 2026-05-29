@@ -268,19 +268,7 @@ export function useThreadStream({
         toast(e.message);
       }
 
-      if (
-        typeof event === "object" &&
-        event !== null &&
-        "type" in event &&
-        event.type === "task_interrupted" &&
-        "message" in event &&
-        typeof event.message === "string" &&
-        "hint" in event &&
-        typeof event.hint === "string"
-      ) {
-        const e = event as { type: "task_interrupted"; message: string; hint: string };
-        toast.warning(`${e.message} ${e.hint}`, { duration: 10000 });
-      }
+      // task_interrupted toast disabled per user request
     },
     onError(error) {
       setOptimisticMessages([]);

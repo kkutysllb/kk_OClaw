@@ -186,10 +186,16 @@ class TestTitleMiddlewareCoreLogic:
         monkeypatch.setattr(middleware, "_generate_title_result", MagicMock(return_value=None))
         assert middleware.after_model({"messages": []}, runtime=MagicMock()) is None
 
-    def test_sync_generate_title_uses_fallback_without_model(self):
-        """Sync path avoids LLM calls and derives a local fallback title."""
+    def test_sync_generate_title_uses_fallback_without_model(self, monkeypatch):
+        """Sync path delegates to async LLM; when unavailable it falls back to local title."""
         _set_test_title_config(max_chars=20)
         middleware = TitleMiddleware()
+
+        # Mock create_chat_model to raise, simulating LLM unavailability
+        monkeypatch.setattr(
+            title_middleware_module, "create_chat_model",
+            MagicMock(side_effect=RuntimeError("LLM unavailable")),
+        )
 
         state = {
             "messages": [
@@ -200,10 +206,16 @@ class TestTitleMiddlewareCoreLogic:
         result = middleware._generate_title_result(state)
         assert result == {"title": "请帮我写测试"}
 
-    def test_sync_generate_title_respects_fallback_truncation(self):
-        """Sync fallback path still respects max_chars truncation rules."""
+    def test_sync_generate_title_respects_fallback_truncation(self, monkeypatch):
+        """Sync fallback path still respects max_chars truncation rules when LLM fails."""
         _set_test_title_config(max_chars=50)
         middleware = TitleMiddleware()
+
+        # Mock create_chat_model to raise, simulating LLM unavailability
+        monkeypatch.setattr(
+            title_middleware_module, "create_chat_model",
+            MagicMock(side_effect=RuntimeError("LLM unavailable")),
+        )
 
         state = {
             "messages": [

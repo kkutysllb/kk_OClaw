@@ -1,5 +1,6 @@
 """Middleware for automatic thread title generation."""
 
+import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING, Any, NotRequired, override
@@ -139,12 +140,19 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
         return config
 
     def _generate_title_result(self, state: TitleMiddlewareState) -> dict | None:
-        """Generate a local fallback title without blocking on an LLM call."""
+        """Generate a title synchronously by running the async path in an event loop."""
         if not self._should_generate_title(state):
             return None
-
-        _, user_msg = self._build_title_prompt(state)
-        return {"title": self._fallback_title(user_msg)}
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            # Already inside an async context – fall back to local title
+            # to avoid "asyncio.run() cannot be called from a running event loop".
+            _, user_msg = self._build_title_prompt(state)
+            return {"title": self._fallback_title(user_msg)}
+        return asyncio.run(self._agenerate_title_result(state))
 
     async def _agenerate_title_result(self, state: TitleMiddlewareState) -> dict | None:
         """Generate a title asynchronously and fall back locally on failure."""
@@ -162,12 +170,18 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
                 model = create_chat_model(name=config.model_name, **model_kwargs)
             else:
                 model = create_chat_model(**model_kwargs)
-            response = await model.ainvoke(prompt, config=self._get_runnable_config())
+            from langchain_core.messages import HumanMessage
+            response = await model.ainvoke(
+                [HumanMessage(content=prompt)],
+                config=self._get_runnable_config(),
+            )
             title = self._parse_title(response.content)
             if title:
+                logger.info("Generated thread title via LLM: %s", title)
                 return {"title": title}
+            logger.warning("LLM returned empty title; falling back")
         except Exception:
-            logger.debug("Failed to generate async title; falling back to local title", exc_info=True)
+            logger.warning("Failed to generate title via LLM; falling back to local title", exc_info=True)
         return {"title": self._fallback_title(user_msg)}
 
     @override
