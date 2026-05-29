@@ -19,6 +19,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -179,11 +180,21 @@ function ModelSection({
 }) {
   const color = MODEL_COLORS[colorIdx % MODEL_COLORS.length];
 
-  const labelInterval = tsData.length > 31
-    ? Math.floor(tsData.length / 15)
-    : undefined;
+  const labelInterval = tsData.length > 15
+    ? Math.ceil(tsData.length / 12)
+    : tsData.length > 7
+      ? 1
+      : 0;
+
+  // 当日期较多时倾斜刻度标签以避免重叠
+  const tickAngle = tsData.length > 10 ? -40 : 0;
+  // 倾斜时需要额外的底部空间
+  const bottomMargin = tickAngle !== 0 ? 24 : 0;
 
   const chartTickStyle = { fontSize: 10, fill: "var(--muted-foreground)" };
+  const tiltedTickStyle = tickAngle !== 0
+    ? { ...chartTickStyle, angle: tickAngle, textAnchor: "end" as const }
+    : chartTickStyle;
   const tooltipStyle = {
     backgroundColor: "var(--card)",
     border: "1px solid var(--border)",
@@ -218,33 +229,49 @@ function ModelSection({
 
       {/* Charts grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* API calls area chart */}
+        {/* API calls & task runs dual-axis chart */}
         <div>
-          <div className="text-xs text-muted-foreground mb-1">API 调用次数</div>
+          <div className="text-xs text-muted-foreground mb-1">API 调用 / 任务完成次数</div>
           {tsData.length > 0 ? (
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <ComposedChart data={tsData} margin={{ top: 4, right: 8, bottom: bottomMargin, left: 0 }}>
                   <defs>
                     <linearGradient id={`area-calls-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                     </linearGradient>
+                    <linearGradient id={`area-runs-${colorIdx}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={chartTickStyle}
+                    tick={tiltedTickStyle}
                     axisLine={false}
                     tickLine={false}
-                    interval={labelInterval ?? "preserveStartEnd"}
+                    interval={labelInterval}
                     tickFormatter={formatShortDate}
                   />
+                  {/* 左 Y 轴：API 调用次数 */}
                   <YAxis
+                    yAxisId="left"
                     tick={{ ...chartTickStyle, fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
                     width={40}
+                    tickFormatter={(v: number) => fmtNum(v)}
+                  />
+                  {/* 右 Y 轴：任务完成次数 */}
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ ...chartTickStyle, fontSize: 10, fill: "#10b981" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
                     tickFormatter={(v: number) => fmtNum(v)}
                   />
                   <Tooltip
@@ -252,9 +279,21 @@ function ModelSection({
                     contentStyle={tooltipStyle}
                     labelStyle={{ color: "var(--foreground)" }}
                     labelFormatter={formatShortDate}
-                    formatter={(value) => [String(value), "API 调用次数"]}
+                    formatter={(value, name) => {
+                      if (name === "llm_call_count") return [String(value), "API 调用次数"];
+                      if (name === "run_count") return [String(value), "任务完成"];
+                      return [String(value), name];
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 10, paddingTop: 2 }}
+                    iconSize={8}
+                    formatter={(value) =>
+                      value === "llm_call_count" ? "API 调用" : "任务完成"
+                    }
                   />
                   <Area
+                    yAxisId="left"
                     type="monotone"
                     dataKey="llm_call_count"
                     stroke="#f59e0b"
@@ -263,7 +302,17 @@ function ModelSection({
                     dot={false}
                     activeDot={{ r: 4, fill: "#f59e0b" }}
                   />
-                </AreaChart>
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="run_count"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fill={`url(#area-runs-${colorIdx})`}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#10b981" }}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           ) : (
@@ -277,14 +326,14 @@ function ModelSection({
           {tsData.length > 0 ? (
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={tsData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <BarChart data={tsData} margin={{ top: 4, right: 8, bottom: bottomMargin, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis
                     dataKey="date"
-                    tick={chartTickStyle}
+                    tick={tiltedTickStyle}
                     axisLine={false}
                     tickLine={false}
-                    interval={labelInterval ?? "preserveStartEnd"}
+                    interval={labelInterval}
                     tickFormatter={formatShortDate}
                   />
                   <YAxis

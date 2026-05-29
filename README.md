@@ -363,6 +363,7 @@ token_usage:
   - 消除 Subagent 三重重复（section / reminder / thinking 去重）
   - 添加防啰嗦指令：`NEVER recap or summarize previous conversation steps`
   - Summarization 触发阈值从 15564→8000 tokens，自定义简洁摘要 prompt（只保留目标+决策+进度，上限 200 词）
+- **Token 用量页面图表增强**：X 轴日期刻度智能倾斜+分级间隔避免重叠；API 调用次数图表升级为双纵轴面积图（左轴 API 调用 + 右轴任务完成次数）
 
 ### 后续待完成
 
