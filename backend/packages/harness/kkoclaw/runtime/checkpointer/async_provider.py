@@ -35,6 +35,40 @@ from kkoclaw.runtime.store._sqlite_utils import ensure_sqlite_parent_dir, resolv
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# SQLite WAL helper
+# ---------------------------------------------------------------------------
+
+_SQLITE_WAL_PRAGMAS = """
+PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=10000;
+PRAGMA synchronous=NORMAL;
+PRAGMA temp_store=MEMORY;
+"""
+
+
+@contextlib.asynccontextmanager
+async def _wal_sqlite_saver(conn_str: str) -> AsyncIterator:
+    """Create an AsyncSqliteSaver with WAL mode and a 10s busy timeout.
+
+    The default ``AsyncSqliteSaver.from_conn_string`` opens a plain
+    aiosqlite connection without any PRAGMA configuration.  Under concurrent
+    writes (e.g. multiple runs hitting the checkpointer simultaneously)
+    this quickly triggers ``sqlite3.OperationalError: database is locked``.
+
+    Enabling WAL mode allows concurrent readers and a single writer, while
+    ``busy_timeout=10000`` makes writers wait up to 10 seconds for the lock
+    instead of failing immediately.
+    """
+    import aiosqlite
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+    async with aiosqlite.connect(conn_str) as conn:
+        await conn.executescript(_SQLITE_WAL_PRAGMAS)
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        yield saver
+
+# ---------------------------------------------------------------------------
 # Async factory
 # ---------------------------------------------------------------------------
 
@@ -56,8 +90,7 @@ async def _async_checkpointer(config) -> AsyncIterator[Checkpointer]:
 
         conn_str = resolve_sqlite_conn_str(config.connection_string or "store.db")
         await asyncio.to_thread(ensure_sqlite_parent_dir, conn_str)
-        async with AsyncSqliteSaver.from_conn_string(conn_str) as saver:
-            await saver.setup()
+        async with _wal_sqlite_saver(conn_str) as saver:
             yield saver
         return
 
@@ -100,8 +133,7 @@ async def _async_checkpointer_from_database(db_config) -> AsyncIterator[Checkpoi
 
         conn_str = db_config.checkpointer_sqlite_path
         ensure_sqlite_parent_dir(conn_str)
-        async with AsyncSqliteSaver.from_conn_string(conn_str) as saver:
-            await saver.setup()
+        async with _wal_sqlite_saver(conn_str) as saver:
             yield saver
         return
 

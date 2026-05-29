@@ -128,7 +128,7 @@ class TestGetCheckpointer:
                 get_checkpointer()
 
     def test_sqlite_creates_saver(self):
-        """SQLite checkpointer is created when package is available."""
+        """SQLite checkpointer is created via _wal_sync_sqlite_saver helper."""
         load_checkpointer_config_from_dict({"type": "sqlite", "connection_string": "/tmp/test.db"})
 
         mock_saver_instance = MagicMock()
@@ -136,19 +136,15 @@ class TestGetCheckpointer:
         mock_cm.__enter__ = MagicMock(return_value=mock_saver_instance)
         mock_cm.__exit__ = MagicMock(return_value=False)
 
-        mock_saver_cls = MagicMock()
-        mock_saver_cls.from_conn_string = MagicMock(return_value=mock_cm)
-
-        mock_module = MagicMock()
-        mock_module.SqliteSaver = mock_saver_cls
-
-        with patch.dict(sys.modules, {"langgraph.checkpoint.sqlite": mock_module}):
+        with (
+            patch("kkoclaw.runtime.checkpointer.provider.resolve_sqlite_conn_str", return_value="/tmp/test.db"),
+            patch("kkoclaw.runtime.checkpointer.provider.ensure_sqlite_parent_dir"),
+            patch("kkoclaw.runtime.checkpointer.provider._wal_sync_sqlite_saver", return_value=mock_cm),
+        ):
             reset_checkpointer()
             cp = get_checkpointer()
 
         assert cp is mock_saver_instance
-        mock_saver_cls.from_conn_string.assert_called_once()
-        mock_saver_instance.setup.assert_called_once()
 
     def test_sqlite_creates_parent_dir(self):
         """Sync SQLite checkpointer should call ensure_sqlite_parent_dir before connecting.
@@ -166,29 +162,22 @@ class TestGetCheckpointer:
         mock_cm.__enter__ = MagicMock(return_value=mock_saver_instance)
         mock_cm.__exit__ = MagicMock(return_value=False)
 
-        mock_saver_cls = MagicMock()
-        mock_saver_cls.from_conn_string = MagicMock(return_value=mock_cm)
-
-        mock_module = MagicMock()
-        mock_module.SqliteSaver = mock_saver_cls
-
         with (
-            patch.dict(sys.modules, {"langgraph.checkpoint.sqlite": mock_module}),
-            patch("kkoclaw.runtime.checkpointer.provider.ensure_sqlite_parent_dir") as mock_ensure,
             patch(
                 "kkoclaw.runtime.checkpointer.provider.resolve_sqlite_conn_str",
                 return_value="/tmp/resolved/relative/test.db",
             ),
+            patch("kkoclaw.runtime.checkpointer.provider.ensure_sqlite_parent_dir") as mock_ensure,
+            patch("kkoclaw.runtime.checkpointer.provider._wal_sync_sqlite_saver", return_value=mock_cm),
         ):
             reset_checkpointer()
             cp = get_checkpointer()
 
         assert cp is mock_saver_instance
         mock_ensure.assert_called_once_with("/tmp/resolved/relative/test.db")
-        mock_saver_cls.from_conn_string.assert_called_once_with("/tmp/resolved/relative/test.db")
 
     def test_sqlite_ensure_parent_dir_before_connect(self):
-        """ensure_sqlite_parent_dir must be called before from_conn_string."""
+        """ensure_sqlite_parent_dir must be called before _wal_sync_sqlite_saver."""
         load_checkpointer_config_from_dict({"type": "sqlite", "connection_string": "relative/test.db"})
 
         call_order = []
@@ -198,24 +187,25 @@ class TestGetCheckpointer:
         mock_cm.__enter__ = MagicMock(return_value=mock_saver_instance)
         mock_cm.__exit__ = MagicMock(return_value=False)
 
-        mock_saver_cls = MagicMock()
-        mock_saver_cls.from_conn_string = MagicMock(side_effect=lambda *a, **kw: (call_order.append("connect"), mock_cm)[1])
-
-        mock_module = MagicMock()
-        mock_module.SqliteSaver = mock_saver_cls
-
         def record_ensure(*a, **kw):
             call_order.append("ensure")
 
+        def record_connect(*a, **kw):
+            call_order.append("connect")
+            return mock_cm
+
         with (
-            patch.dict(sys.modules, {"langgraph.checkpoint.sqlite": mock_module}),
+            patch(
+                "kkoclaw.runtime.checkpointer.provider.resolve_sqlite_conn_str",
+                return_value="/tmp/resolved/relative/test.db",
+            ),
             patch(
                 "kkoclaw.runtime.checkpointer.provider.ensure_sqlite_parent_dir",
                 side_effect=record_ensure,
             ),
             patch(
-                "kkoclaw.runtime.checkpointer.provider.resolve_sqlite_conn_str",
-                return_value="/tmp/resolved/relative/test.db",
+                "kkoclaw.runtime.checkpointer.provider._wal_sync_sqlite_saver",
+                side_effect=record_connect,
             ),
         ):
             reset_checkpointer()
@@ -250,7 +240,7 @@ class TestGetCheckpointer:
 class TestAsyncCheckpointer:
     @pytest.mark.anyio
     async def test_sqlite_creates_parent_dir_via_to_thread(self):
-        """Async SQLite setup should move mkdir off the event loop."""
+        """Async SQLite setup calls ensure_sqlite_parent_dir before connecting."""
         from kkoclaw.runtime.checkpointer.async_provider import make_checkpointer
 
         mock_config = MagicMock()
@@ -261,20 +251,11 @@ class TestAsyncCheckpointer:
         mock_cm.__aenter__.return_value = mock_saver
         mock_cm.__aexit__.return_value = False
 
-        mock_saver_cls = MagicMock()
-        mock_saver_cls.from_conn_string.return_value = mock_cm
-
-        mock_module = MagicMock()
-        mock_module.AsyncSqliteSaver = mock_saver_cls
-
         with (
             patch("kkoclaw.runtime.checkpointer.async_provider.get_app_config", return_value=mock_config),
-            patch.dict(sys.modules, {"langgraph.checkpoint.sqlite.aio": mock_module}),
+            patch("kkoclaw.runtime.checkpointer.async_provider.resolve_sqlite_conn_str", return_value="/tmp/resolved/test.db"),
             patch("kkoclaw.runtime.checkpointer.async_provider.asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread,
-            patch(
-                "kkoclaw.runtime.checkpointer.async_provider.resolve_sqlite_conn_str",
-                return_value="/tmp/resolved/test.db",
-            ),
+            patch("kkoclaw.runtime.checkpointer.async_provider._wal_sqlite_saver", return_value=mock_cm),
         ):
             async with make_checkpointer() as saver:
                 assert saver is mock_saver
@@ -283,8 +264,6 @@ class TestAsyncCheckpointer:
         called_fn, called_path = mock_to_thread.await_args.args
         assert called_fn.__name__ == "ensure_sqlite_parent_dir"
         assert called_path == "/tmp/resolved/test.db"
-        mock_saver_cls.from_conn_string.assert_called_once_with("/tmp/resolved/test.db")
-        mock_saver.setup.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

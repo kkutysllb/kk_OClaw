@@ -32,6 +32,34 @@ from kkoclaw.runtime.store._sqlite_utils import ensure_sqlite_parent_dir, resolv
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# SQLite WAL helper (sync)
+# ---------------------------------------------------------------------------
+
+_SQLITE_WAL_PRAGMAS = """
+PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=10000;
+PRAGMA synchronous=NORMAL;
+PRAGMA temp_store=MEMORY;
+"""
+
+
+@contextlib.contextmanager
+def _wal_sync_sqlite_saver(conn_str: str) -> Iterator[Checkpointer]:
+    """Create a sync SqliteSaver with WAL mode and a 10s busy timeout."""
+    import sqlite3
+    from langgraph.checkpoint.sqlite import SqliteSaver
+
+    conn = sqlite3.connect(conn_str)
+    try:
+        conn.executescript(_SQLITE_WAL_PRAGMAS)
+        saver = SqliteSaver(conn)
+        saver.setup()
+        logger.info("Checkpointer: using SqliteSaver with WAL (%s)", conn_str)
+        yield saver
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------------------------
 # Error message constants — imported by aio.provider too
 # ---------------------------------------------------------------------------
 
@@ -68,9 +96,7 @@ def _sync_checkpointer_cm(config: CheckpointerConfig) -> Iterator[Checkpointer]:
 
         conn_str = resolve_sqlite_conn_str(config.connection_string or "store.db")
         ensure_sqlite_parent_dir(conn_str)
-        with SqliteSaver.from_conn_string(conn_str) as saver:
-            saver.setup()
-            logger.info("Checkpointer: using SqliteSaver (%s)", conn_str)
+        with _wal_sync_sqlite_saver(conn_str) as saver:
             yield saver
         return
 

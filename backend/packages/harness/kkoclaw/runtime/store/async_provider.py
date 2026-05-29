@@ -30,6 +30,31 @@ from kkoclaw.runtime.store.provider import POSTGRES_CONN_REQUIRED, POSTGRES_STOR
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# SQLite WAL helper
+# ---------------------------------------------------------------------------
+
+_SQLITE_WAL_PRAGMAS = """
+PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=10000;
+PRAGMA synchronous=NORMAL;
+PRAGMA temp_store=MEMORY;
+"""
+
+
+@contextlib.asynccontextmanager
+async def _wal_sqlite_store(conn_str: str) -> AsyncIterator[BaseStore]:
+    """Create an AsyncSqliteStore with WAL mode and a 10s busy timeout."""
+    import aiosqlite
+    from langgraph.store.sqlite.aio import AsyncSqliteStore
+
+    async with aiosqlite.connect(conn_str, isolation_level=None) as conn:
+        await conn.executescript(_SQLITE_WAL_PRAGMAS)
+        store = AsyncSqliteStore(conn)
+        await store.setup()
+        logger.info("Store: using AsyncSqliteStore with WAL (%s)", conn_str)
+        yield store
+
+# ---------------------------------------------------------------------------
 # Internal backend factory
 # ---------------------------------------------------------------------------
 
@@ -57,9 +82,7 @@ async def _async_store(config) -> AsyncIterator[BaseStore]:
         conn_str = resolve_sqlite_conn_str(config.connection_string or "store.db")
         ensure_sqlite_parent_dir(conn_str)
 
-        async with AsyncSqliteStore.from_conn_string(conn_str) as store:
-            await store.setup()
-            logger.info("Store: using AsyncSqliteStore (%s)", conn_str)
+        async with _wal_sqlite_store(conn_str) as store:
             yield store
         return
 
@@ -104,9 +127,7 @@ async def _async_store_from_database(db_config: DatabaseConfig) -> AsyncIterator
         conn_str = db_config.checkpointer_sqlite_path
         ensure_sqlite_parent_dir(conn_str)
 
-        async with AsyncSqliteStore.from_conn_string(conn_str) as store:
-            await store.setup()
-            logger.info("Store: using AsyncSqliteStore (%s)", conn_str)
+        async with _wal_sqlite_store(conn_str) as store:
             yield store
         return
 
