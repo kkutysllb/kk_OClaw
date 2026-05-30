@@ -437,3 +437,108 @@ async def test_async_circuit_breaker_trips_and_recovers(monkeypatch: pytest.Monk
     assert result.content == "Success"
     assert middleware._circuit_failure_count == 0  # RESET
     assert middleware._check_circuit() is False
+
+
+# ---------- Context Window Overflow Detection Tests ----------
+
+
+def _context_overflow_response(
+    finish_reason: str = "model_context_window_exceeded",
+    content: str = "",
+) -> AIMessage:
+    """Simulate a GLM-style context overflow response."""
+    return AIMessage(
+        content=content,
+        response_metadata={"finish_reason": finish_reason, "model_name": "glm-5.1"},
+    )
+
+
+def test_sync_context_overflow_returns_error_message() -> None:
+    """Empty response with model_context_window_exceeded triggers overflow message."""
+    middleware = _build_middleware()
+
+    def handler(_request) -> AIMessage:
+        return _context_overflow_response()
+
+    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+
+    assert isinstance(result, AIMessage)
+    assert "context window was exceeded" in result.content
+    assert middleware._circuit_failure_count == 0  # Not a retriable error
+
+
+@pytest.mark.anyio
+async def test_async_context_overflow_returns_error_message() -> None:
+    """Async: empty response with model_context_window_exceeded triggers overflow message."""
+    middleware = _build_middleware()
+
+    async def handler(_request) -> AIMessage:
+        return _context_overflow_response()
+
+    result = await middleware.awrap_model_call(SimpleNamespace(), handler)
+
+    assert isinstance(result, AIMessage)
+    assert "context window was exceeded" in result.content
+
+
+def test_context_overflow_with_tool_calls_not_triggered() -> None:
+    """If the response has tool_calls, it should NOT be treated as overflow."""
+    middleware = _build_middleware()
+
+    def handler(_request) -> AIMessage:
+        return AIMessage(
+            content="",
+            tool_calls=[{"name": "bash", "id": "tc1", "args": {"command": "ls"}}],
+            response_metadata={"finish_reason": "model_context_window_exceeded"},
+        )
+
+    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+
+    # Should pass through as-is (not intercepted)
+    assert isinstance(result, AIMessage)
+    assert result.tool_calls is not None
+    assert "context window" not in result.content
+
+
+def test_context_overflow_with_nonempty_content_not_triggered() -> None:
+    """If the response has actual content, it should NOT be treated as overflow."""
+    middleware = _build_middleware()
+
+    def handler(_request) -> AIMessage:
+        return AIMessage(
+            content="I completed the task successfully.",
+            response_metadata={"finish_reason": "model_context_window_exceeded"},
+        )
+
+    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+
+    assert result.content == "I completed the task successfully."
+
+
+def test_context_overflow_with_normal_finish_reason_not_triggered() -> None:
+    """Empty response with 'stop' finish_reason should not be treated as overflow."""
+    middleware = _build_middleware()
+
+    def handler(_request) -> AIMessage:
+        return AIMessage(
+            content="",
+            response_metadata={"finish_reason": "stop"},
+        )
+
+    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+
+    # Passes through — the model chose to say nothing, which is valid.
+    assert result.content == ""
+
+
+def test_context_overflow_with_content_length_exceeded() -> None:
+    """content_length_exceeded is also a recognized overflow finish_reason."""
+    middleware = _build_middleware()
+
+    def handler(_request) -> AIMessage:
+        return _context_overflow_response(finish_reason="content_length_exceeded")
+
+    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+
+    assert "context window was exceeded" in result.content
+

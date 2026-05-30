@@ -62,6 +62,14 @@ _AUTH_PATTERNS = (
     "未授权",
 )
 
+# Finish reasons that indicate the model's context window was exceeded.
+# The model returns an empty response with one of these finish reasons
+# instead of raising an HTTP error, so we must detect it post-hoc.
+_CONTEXT_OVERFLOW_FINISH_REASONS = frozenset({
+    "model_context_window_exceeded",  # GLM / 智谱
+    "content_length_exceeded",
+})
+
 
 class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     """Retry transient LLM errors and surface graceful assistant messages."""
@@ -82,6 +90,40 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         self._circuit_open_until = 0.0
         self._circuit_state = "closed"
         self._circuit_probe_in_flight = False
+
+    def _is_context_overflow_response(self, response: ModelCallResult) -> bool:
+        """Detect a successful-but-empty response caused by context window overflow.
+
+        Some providers (notably GLM/智谱) return HTTP 200 with empty content and
+        a special ``finish_reason`` instead of raising an error.  The agent then
+        treats the empty message as a normal completion and silently stops.
+        """
+        if not isinstance(response, AIMessage):
+            return False
+
+        # If the response has tool_calls the model is still functioning.
+        if getattr(response, "tool_calls", None):
+            return False
+
+        # Non-empty content means the model produced output.
+        content = response.content
+        if isinstance(content, str) and content.strip():
+            return False
+        if isinstance(content, list):
+            # Multimodal content — only trigger on truly empty lists.
+            if content:
+                return False
+
+        resp_meta = getattr(response, "response_metadata", None) or {}
+        finish_reason = resp_meta.get("finish_reason", "")
+        return finish_reason in _CONTEXT_OVERFLOW_FINISH_REASONS
+
+    def _build_context_overflow_message(self) -> str:
+        return (
+            "The model's context window was exceeded — the response was empty. "
+            "The conversation history is too long for the model to process. "
+            "Please start a new conversation or ask me to summarize the conversation so far."
+        )
 
     def _check_circuit(self) -> bool:
         """Returns True if circuit is OPEN (fast fail), False otherwise."""
@@ -232,6 +274,13 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         while True:
             try:
                 response = handler(request)
+                if self._is_context_overflow_response(response):
+                    logger.warning(
+                        "Model returned empty response due to context window overflow "
+                        "(finish_reason=%s). Returning error message to user.",
+                        getattr(response, "response_metadata", {}).get("finish_reason"),
+                    )
+                    return AIMessage(content=self._build_context_overflow_message())
                 self._record_success()
                 return response
             except GraphBubbleUp:
@@ -278,6 +327,13 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         while True:
             try:
                 response = await handler(request)
+                if self._is_context_overflow_response(response):
+                    logger.warning(
+                        "Model returned empty response due to context window overflow "
+                        "(finish_reason=%s). Returning error message to user.",
+                        getattr(response, "response_metadata", {}).get("finish_reason"),
+                    )
+                    return AIMessage(content=self._build_context_overflow_message())
                 self._record_success()
                 return response
             except GraphBubbleUp:
