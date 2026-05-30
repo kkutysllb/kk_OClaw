@@ -51,18 +51,29 @@ class PatchedChatZhipu(ChatOpenAI):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> dict:
-        """Build request payload with ``stream_options`` stripped.
+        """Build request payload with Zhipu-incompatible parameters stripped.
 
-        Zhipu's API rejects the ``stream_options`` parameter with error code
-        1210.  LangChain's ``ChatOpenAI._stream`` / ``_astream`` adds
-        ``stream_options={"include_usage": True}`` to *kwargs* when
-        ``stream_usage=True``.  We intercept the payload after the parent
-        builds it and remove the unsupported key.
+        The Zhipu GLM API rejects several parameters that LangChain injects:
+
+        1. ``stream_options`` — causes error 1210.  LangChain adds
+           ``stream_options={"include_usage": True}`` when
+           ``stream_usage=True``.  Zhipu returns usage in the final chunk
+           by default, so this is safe to strip.
+
+        2. ``max_completion_tokens`` — causes error 1210.  LangChain's
+           ``ChatOpenAI._get_request_payload`` renames ``max_tokens`` to
+           ``max_completion_tokens`` for OpenAI compatibility, but the
+           Zhipu API only accepts ``max_tokens``.
         """
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
 
         # Zhipu API does not support stream_options — causes error 1210.
-        # Token usage is still returned in the final streaming chunk by default.
         payload.pop("stream_options", None)
+
+        # Zhipu API only accepts "max_tokens", not "max_completion_tokens".
+        # LangChain's ChatOpenAI renames max_tokens → max_completion_tokens
+        # in _get_request_payload, which the Zhipu API rejects with 1210.
+        if "max_completion_tokens" in payload:
+            payload["max_tokens"] = payload.pop("max_completion_tokens")
 
         return payload
