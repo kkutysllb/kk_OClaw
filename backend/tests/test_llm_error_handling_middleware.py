@@ -460,6 +460,7 @@ def test_sync_context_overflow_returns_error_message() -> None:
     def handler(_request) -> AIMessage:
         return _context_overflow_response()
 
+    # Use SimpleNamespace without messages -> won't trigger trim retry (msg_count=0)
     result = middleware.wrap_model_call(SimpleNamespace(), handler)
 
     assert isinstance(result, AIMessage)
@@ -510,7 +511,9 @@ def test_context_overflow_with_nonempty_content_not_triggered() -> None:
             response_metadata={"finish_reason": "model_context_window_exceeded"},
         )
 
-    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+    # Provide messages to avoid AttributeError on SimpleNamespace
+    request = SimpleNamespace(messages=["msg"] * 20)
+    result = middleware.wrap_model_call(request, handler)
 
     assert result.content == "I completed the task successfully."
 
@@ -525,7 +528,8 @@ def test_context_overflow_with_normal_finish_reason_not_triggered() -> None:
             response_metadata={"finish_reason": "stop"},
         )
 
-    result = middleware.wrap_model_call(SimpleNamespace(), handler)
+    request = SimpleNamespace(messages=["msg"] * 20)
+    result = middleware.wrap_model_call(request, handler)
 
     # Passes through — the model chose to say nothing, which is valid.
     assert result.content == ""
@@ -540,5 +544,101 @@ def test_context_overflow_with_content_length_exceeded() -> None:
 
     result = middleware.wrap_model_call(SimpleNamespace(), handler)
 
+    assert "context window was exceeded" in result.content
+
+
+def test_sync_context_overflow_trims_and_retries() -> None:
+    """When overflow detected, middleware trims messages and retries."""
+    middleware = _build_middleware()
+    call_count = 0
+    captured_msg_count = 0
+
+    # 20 messages -> will trigger trim (keep last 15)
+    messages = [f"msg_{i}" for i in range(20)]
+
+    def handler(req) -> AIMessage:
+        nonlocal call_count, captured_msg_count
+        call_count += 1
+        if call_count == 1:
+            # First call: overflow
+            return _context_overflow_response()
+        # Second call (trimmed): success
+        captured_msg_count = len(getattr(req, "messages", []))
+        return AIMessage(content="Task continued successfully")
+
+    request = SimpleNamespace(messages=messages)
+    result = middleware.wrap_model_call(request, handler)
+
+    assert call_count == 2
+    assert captured_msg_count == 16  # 15 kept + 1 truncation notice
+    assert isinstance(result, AIMessage)
+    assert result.content == "Task continued successfully"
+    # Should have the recovery marker
+    assert result.response_metadata.get("_context_overflow_recovery") is True
+
+
+@pytest.mark.anyio
+async def test_async_context_overflow_trims_and_retries() -> None:
+    """Async: when overflow detected, middleware trims messages and retries."""
+    middleware = _build_middleware()
+    call_count = 0
+    captured_msg_count = 0
+
+    messages = [f"msg_{i}" for i in range(20)]
+
+    async def handler(req) -> AIMessage:
+        nonlocal call_count, captured_msg_count
+        call_count += 1
+        if call_count == 1:
+            return _context_overflow_response()
+        captured_msg_count = len(getattr(req, "messages", []))
+        return AIMessage(content="Task continued successfully")
+
+    request = SimpleNamespace(messages=messages)
+    result = await middleware.awrap_model_call(request, handler)
+
+    assert call_count == 2
+    assert captured_msg_count == 16
+    assert isinstance(result, AIMessage)
+    assert result.content == "Task continued successfully"
+    assert result.response_metadata.get("_context_overflow_recovery") is True
+
+
+def test_context_overflow_no_trim_if_few_messages() -> None:
+    """If there are few messages, no trim retry — go straight to error."""
+    middleware = _build_middleware()
+    call_count = 0
+
+    # Only 5 messages -> below _OVERFLOW_TRIM_KEEP (15)
+    messages = [f"msg_{i}" for i in range(5)]
+
+    def handler(_request) -> AIMessage:
+        nonlocal call_count
+        call_count += 1
+        return _context_overflow_response()
+
+    request = SimpleNamespace(messages=messages)
+    result = middleware.wrap_model_call(request, handler)
+
+    assert call_count == 1  # No retry
+    assert "context window was exceeded" in result.content
+
+
+def test_context_overflow_trim_still_overflows_gives_error() -> None:
+    """If trimmed retry also overflows, return error message."""
+    middleware = _build_middleware()
+    call_count = 0
+
+    messages = [f"msg_{i}" for i in range(20)]
+
+    def handler(_request) -> AIMessage:
+        nonlocal call_count
+        call_count += 1
+        return _context_overflow_response()  # Always overflow
+
+    request = SimpleNamespace(messages=messages)
+    result = middleware.wrap_model_call(request, handler)
+
+    assert call_count == 2  # Original + 1 trimmed retry
     assert "context window was exceeded" in result.content
 

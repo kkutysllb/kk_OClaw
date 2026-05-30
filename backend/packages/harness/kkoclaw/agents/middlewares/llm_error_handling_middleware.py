@@ -17,7 +17,7 @@ from langchain.agents.middleware.types import (
     ModelRequest,
     ModelResponse,
 )
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.errors import GraphBubbleUp
 
 from kkoclaw.config.app_config import AppConfig
@@ -78,6 +78,13 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     retry_base_delay_ms: int = 1000
     retry_cap_delay_ms: int = 8000
 
+    # Number of recent messages to keep when trimming context for overflow retry.
+    _OVERFLOW_TRIM_KEEP = 15
+
+    # Metadata key used to mark overflow-recovery AIMessages so that
+    # ``after_model`` can detect them and force a summarization pass.
+    _OVERFLOW_RECOVERY_META_KEY = "_context_overflow_recovery"
+
     def __init__(self, *, app_config: AppConfig, **kwargs: Any) -> None:
         super().__init__(**kwargs)
 
@@ -90,6 +97,79 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         self._circuit_open_until = 0.0
         self._circuit_state = "closed"
         self._circuit_probe_in_flight = False
+
+        # Thread-level overflow retry counter (thread_id -> count)
+        self._overflow_retry_lock = threading.Lock()
+        self._overflow_retries: dict[str, int] = {}
+
+    def _get_overflow_retry_count(self, thread_id: str | None) -> int:
+        if not thread_id:
+            return 0
+        with self._overflow_retry_lock:
+            return self._overflow_retries.get(thread_id, 0)
+
+    def _increment_overflow_retry(self, thread_id: str | None) -> None:
+        if not thread_id:
+            return
+        with self._overflow_retry_lock:
+            self._overflow_retries[thread_id] = self._overflow_retries.get(thread_id, 0) + 1
+
+    def _reset_overflow_retry(self, thread_id: str | None) -> None:
+        if not thread_id:
+            return
+        with self._overflow_retry_lock:
+            self._overflow_retries.pop(thread_id, None)
+
+    @staticmethod
+    def _get_thread_id(runtime: Any) -> str | None:
+        """Best-effort thread_id extraction from runtime context."""
+        try:
+            ctx = getattr(runtime, "context", None) or {}
+            return ctx.get("thread_id") or ctx.get("config", {}).get("configurable", {}).get("thread_id")
+        except Exception:
+            return None
+
+    def _trim_request_messages(self, request: ModelRequest) -> ModelRequest:
+        """Return a new ModelRequest with trimmed messages for overflow retry."""
+        messages = getattr(request, "messages", [])
+        if len(messages) <= self._OVERFLOW_TRIM_KEEP:
+            return request
+
+        # Keep only the most recent messages
+        trimmed = messages[-self._OVERFLOW_TRIM_KEEP:]
+
+        # Prepend a note so the model knows context was lost
+        truncation_notice = HumanMessage(
+            name="system",
+            content=(
+                "[Context Recovery] The earlier conversation history was too long and has been "
+                "automatically trimmed. Please continue the current task based on the recent "
+                "context below. If you need information from earlier in the conversation, "
+                "ask the user."
+            ),
+        )
+        trimmed = [truncation_notice, *trimmed]
+
+        # If request is a proper ModelRequest, create a new one with trimmed messages
+        if isinstance(request, ModelRequest):
+            return ModelRequest(
+                model=request.model,
+                messages=trimmed,
+                system_message=request.system_message,
+                tool_choice=request.tool_choice,
+                tools=request.tools,
+                response_format=request.response_format,
+                state=request.state,
+                runtime=request.runtime,
+                model_settings=request.model_settings,
+            )
+
+        # Fallback for test mocks / non-standard request objects
+        import copy
+
+        trimmed_request = copy.copy(request)
+        trimmed_request.messages = trimmed
+        return trimmed_request
 
     def _is_context_overflow_response(self, response: ModelCallResult) -> bool:
         """Detect a successful-but-empty response caused by context window overflow.
@@ -118,7 +198,13 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         finish_reason = resp_meta.get("finish_reason", "")
         return finish_reason in _CONTEXT_OVERFLOW_FINISH_REASONS
 
-    def _build_context_overflow_message(self) -> str:
+    def _build_context_overflow_message(self, *, recovered: bool = False) -> str:
+        if recovered:
+            return (
+                "I've recovered from a context window overflow by trimming older conversation history. "
+                "I'm continuing with the most recent context. If I seem to have lost track of "
+                "earlier details, please remind me and I'll pick up where we left off."
+            )
         return (
             "The model's context window was exceeded — the response was empty. "
             "The conversation history is too long for the model to process. "
@@ -275,13 +361,43 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
             try:
                 response = handler(request)
                 if self._is_context_overflow_response(response):
+                    runtime = getattr(request, "runtime", None)
+                    thread_id = self._get_thread_id(runtime) if runtime else None
+                    msg_count = len(getattr(request, "messages", []))
+                    retry_count = self._get_overflow_retry_count(thread_id)
                     logger.warning(
                         "Model returned empty response due to context window overflow "
-                        "(finish_reason=%s). Returning error message to user.",
+                        "(finish_reason=%s, thread=%s, overflow_retry=%d).",
                         getattr(response, "response_metadata", {}).get("finish_reason"),
+                        thread_id,
+                        retry_count,
                     )
+                    if retry_count < 1 and msg_count > self._OVERFLOW_TRIM_KEEP:
+                        # Trim messages and retry once
+                        self._increment_overflow_retry(thread_id)
+                        trimmed_request = self._trim_request_messages(request)
+                        logger.info(
+                            "Retrying with trimmed messages (%d -> %d) for thread %s",
+                            msg_count,
+                            len(trimmed_request.messages),
+                            thread_id,
+                        )
+                        response = handler(trimmed_request)
+                        if not self._is_context_overflow_response(response):
+                            self._record_success()
+                            # Mark the response so after_model knows to trigger summarization
+                            if not isinstance(response, AIMessage):
+                                return response
+                            meta = dict(getattr(response, "response_metadata", {}) or {})
+                            meta[self._OVERFLOW_RECOVERY_META_KEY] = True
+                            return response.model_copy(update={"response_metadata": meta})
+                    # Could not recover — return error message
                     return AIMessage(content=self._build_context_overflow_message())
                 self._record_success()
+                # Reset overflow retry counter on success
+                runtime = getattr(request, "runtime", None)
+                if runtime is not None:
+                    self._reset_overflow_retry(self._get_thread_id(runtime))
                 return response
             except GraphBubbleUp:
                 # Preserve LangGraph control-flow signals (interrupt/pause/resume).
@@ -328,13 +444,42 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
             try:
                 response = await handler(request)
                 if self._is_context_overflow_response(response):
+                    runtime = getattr(request, "runtime", None)
+                    thread_id = self._get_thread_id(runtime) if runtime else None
+                    msg_count = len(getattr(request, "messages", []))
+                    retry_count = self._get_overflow_retry_count(thread_id)
                     logger.warning(
                         "Model returned empty response due to context window overflow "
-                        "(finish_reason=%s). Returning error message to user.",
+                        "(finish_reason=%s, thread=%s, overflow_retry=%d).",
                         getattr(response, "response_metadata", {}).get("finish_reason"),
+                        thread_id,
+                        retry_count,
                     )
+                    if retry_count < 1 and msg_count > self._OVERFLOW_TRIM_KEEP:
+                        # Trim messages and retry once
+                        self._increment_overflow_retry(thread_id)
+                        trimmed_request = self._trim_request_messages(request)
+                        logger.info(
+                            "Retrying with trimmed messages (%d -> %d) for thread %s",
+                            msg_count,
+                            len(trimmed_request.messages),
+                            thread_id,
+                        )
+                        response = await handler(trimmed_request)
+                        if not self._is_context_overflow_response(response):
+                            self._record_success()
+                            if not isinstance(response, AIMessage):
+                                return response
+                            meta = dict(getattr(response, "response_metadata", {}) or {})
+                            meta[self._OVERFLOW_RECOVERY_META_KEY] = True
+                            return response.model_copy(update={"response_metadata": meta})
+                    # Could not recover — return error message
                     return AIMessage(content=self._build_context_overflow_message())
                 self._record_success()
+                # Reset overflow retry counter on success
+                runtime = getattr(request, "runtime", None)
+                if runtime is not None:
+                    self._reset_overflow_retry(self._get_thread_id(runtime))
                 return response
             except GraphBubbleUp:
                 # Preserve LangGraph control-flow signals (interrupt/pause/resume).
