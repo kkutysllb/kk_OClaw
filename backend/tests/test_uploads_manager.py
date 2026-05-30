@@ -126,13 +126,14 @@ class TestWriteUploadFileNoSymlink:
         assert dest.read_bytes() == b"new contents"
         assert os.stat(dest).st_nlink == 1
 
-    def test_fails_closed_without_no_follow_support(self, tmp_path, monkeypatch):
+    def test_fallback_without_no_follow_support(self, tmp_path, monkeypatch):
+        """When O_NOFOLLOW is unavailable, the Windows-compatible fallback should still write safely."""
         monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
 
-        with pytest.raises(UnsafeUploadPathError, match="O_NOFOLLOW"):
-            write_upload_file_no_symlink(tmp_path, "notes.txt", b"hello")
+        dest = write_upload_file_no_symlink(tmp_path, "notes.txt", b"hello")
 
-        assert not (tmp_path / "notes.txt").exists()
+        assert dest.read_bytes() == b"hello"
+        assert os.stat(dest).st_nlink == 1
 
     def test_open_uses_nonblocking_flag_when_available(self, tmp_path):
         with patch("kkoclaw.uploads.manager.os.open", side_effect=OSError(errno.ENXIO, "no reader")) as open_mock:

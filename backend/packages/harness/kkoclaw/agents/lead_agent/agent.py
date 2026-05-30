@@ -7,15 +7,18 @@ from langchain_core.runnables import RunnableConfig
 from kkoclaw.agents.lead_agent.prompt import apply_prompt_template
 from kkoclaw.agents.memory.summarization_hook import memory_flush_hook
 from kkoclaw.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from kkoclaw.agents.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from kkoclaw.agents.middlewares.internal_content_middleware import InternalContentMiddleware
 from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from kkoclaw.agents.middlewares.memory_middleware import MemoryMiddleware
+from kkoclaw.agents.middlewares.safety_finish_reason_middleware import SafetyFinishReasonMiddleware
 from kkoclaw.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from kkoclaw.agents.middlewares.summarization_middleware import BeforeSummarizationHook, KKOCLAWSummarizationMiddleware
 from kkoclaw.agents.middlewares.title_middleware import TitleMiddleware
 from kkoclaw.agents.middlewares.todo_middleware import TodoMiddleware
 from kkoclaw.agents.middlewares.token_usage_middleware import TokenUsageMiddleware
 from kkoclaw.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
+from kkoclaw.agents.middlewares.tool_output_budget_middleware import ToolOutputBudgetMiddleware
 from kkoclaw.agents.middlewares.view_image_middleware import ViewImageMiddleware
 from kkoclaw.agents.thread_state import RuntimeContext, ThreadState
 from kkoclaw.config.agents_config import load_agent_config, validate_agent_name
@@ -257,6 +260,15 @@ def _build_middlewares(
     resolved_app_config = app_config or get_app_config()
     middlewares = build_lead_runtime_middlewares(app_config=resolved_app_config, lazy_init=True)
 
+    # DynamicContextMiddleware — inject current date (and optionally memory)
+    # as <system-reminder> into first HumanMessage for prefix-cache reuse.
+    middlewares.append(DynamicContextMiddleware(agent_name=agent_name, app_config=resolved_app_config))
+
+    # ToolOutputBudgetMiddleware — enforce per-result budget on tool outputs
+    tool_output_config = resolved_app_config.tool_output
+    if tool_output_config.enabled:
+        middlewares.append(ToolOutputBudgetMiddleware.from_app_config(resolved_app_config))
+
     # Add summarization middleware if enabled
     summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)
     if summarization_middleware is not None:
@@ -306,6 +318,13 @@ def _build_middlewares(
     # Inject custom middlewares before ClarificationMiddleware
     if custom_middlewares:
         middlewares.extend(custom_middlewares)
+
+    # SafetyFinishReasonMiddleware — suppress tool execution when the provider
+    # safety-terminated the response. Registered after custom middlewares so
+    # that LangChain's reverse-order after_model dispatch runs Safety first.
+    safety_config = resolved_app_config.safety_finish_reason
+    if safety_config.enabled:
+        middlewares.append(SafetyFinishReasonMiddleware.from_config(safety_config))
 
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())

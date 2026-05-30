@@ -104,13 +104,28 @@ def _report_subagent_tokens(runtime: Any, subagent_name: str, result: SubagentRe
         )
         return
 
-    journal.record_subagent_tokens(
-        subagent_name,
-        total_tokens=result.total_tokens,
-        total_input_tokens=result.total_input_tokens,
-        total_output_tokens=result.total_output_tokens,
-        llm_call_count=result.llm_call_count,
-    )
+    # Build token_usage_records from the SubagentResult for dedup-aware reporting.
+    records = []
+    if result.token_usage_records:
+        # Per-call records from SubagentTokenCollector — use source_run_id dedup
+        for rec in result.token_usage_records:
+            records.append({
+                "source_run_id": rec.get("source_run_id", ""),
+                "caller": f"subagent:{subagent_name}",
+                "input_tokens": rec.get("input_tokens", 0),
+                "output_tokens": rec.get("output_tokens", 0),
+                "total_tokens": rec.get("total_tokens", 0),
+            })
+    else:
+        # Legacy path: aggregate totals only
+        records.append({
+            "source_run_id": f"subagent:{subagent_name}:{getattr(result, 'run_id', 'unknown')}",
+            "caller": f"subagent:{subagent_name}",
+            "input_tokens": result.total_input_tokens,
+            "output_tokens": result.total_output_tokens,
+            "total_tokens": result.total_tokens,
+        })
+    journal.record_external_llm_usage_records(records)
     logger.info(
         "Reported subagent token usage to RunJournal: subagent=%s, total=%d",
         subagent_name, result.total_tokens,

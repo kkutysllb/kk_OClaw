@@ -1,4 +1,5 @@
 import errno
+import logging
 import ntpath
 import os
 import shutil
@@ -10,6 +11,8 @@ from typing import NamedTuple
 from kkoclaw.sandbox.local.list_dir import list_dir
 from kkoclaw.sandbox.sandbox import Sandbox
 from kkoclaw.sandbox.search import GrepMatch, find_glob_matches, find_grep_matches
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,13 @@ class LocalSandbox(Sandbox):
     def _is_cmd_shell(shell: str) -> bool:
         """Return whether the selected shell is cmd.exe."""
         return LocalSandbox._shell_name(shell) in {"cmd", "cmd.exe"}
+
+    @staticmethod
+    def _is_msys_shell(shell: str) -> bool:
+        """Return whether the selected shell is a Git Bash/MSYS shell."""
+        normalized = shell.replace("\\", "/").lower()
+        shell_name = LocalSandbox._shell_name(shell)
+        return shell_name in {"sh.exe", "bash.exe"} and any(part in normalized for part in ("/git/", "/mingw", "/msys"))
 
     @staticmethod
     def _find_first_available_shell(candidates: tuple[str, ...]) -> str | None:
@@ -307,12 +317,19 @@ class LocalSandbox(Sandbox):
         shell = self._get_shell()
 
         if os.name == "nt":
+            env = None
             if self._is_powershell(shell):
                 args = [shell, "-NoProfile", "-Command", resolved_command]
             elif self._is_cmd_shell(shell):
                 args = [shell, "/c", resolved_command]
             else:
                 args = [shell, "-c", resolved_command]
+                if self._is_msys_shell(shell):
+                    env = {
+                        **os.environ,
+                        "MSYS_NO_PATHCONV": "1",
+                        "MSYS2_ARG_CONV_EXCL": "*",
+                    }
 
             result = subprocess.run(
                 args,
@@ -320,6 +337,7 @@ class LocalSandbox(Sandbox):
                 capture_output=True,
                 text=True,
                 timeout=600,
+                env=env,
             )
         else:
             args = [shell, "-c", resolved_command]

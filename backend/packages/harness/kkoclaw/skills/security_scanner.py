@@ -28,13 +28,46 @@ def _extract_json_object(raw: str) -> dict | None:
     except json.JSONDecodeError:
         pass
 
-    match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not match:
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    fence_match = re.match(r"^```(?:json)?\s*\n?(.*?)\n?\s*```$", raw, re.DOTALL)
+    if fence_match:
+        raw = fence_match.group(1).strip()
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+    # Brace-balanced extraction with string-awareness
+    start = raw.find("{")
+    if start == -1:
         return None
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(raw)):
+        c = raw[i]
+        if escape:
+            escape = False
+            continue
+        if c == "\\" and in_string:
+            escape = True
+            continue
+        if c == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                candidate = raw[start : i + 1]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    return None
+    return None
 
 
 async def scan_skill_content(content: str, *, executable: bool = False, location: str = SKILL_MD_FILE, app_config: AppConfig | None = None) -> ScanResult:

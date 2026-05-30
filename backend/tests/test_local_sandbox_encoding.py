@@ -105,6 +105,7 @@ def test_execute_command_uses_powershell_command_mode_on_windows(monkeypatch):
                 "capture_output": True,
                 "text": True,
                 "timeout": 600,
+                "env": None,
             },
         )
     ]
@@ -118,6 +119,7 @@ def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
         return SimpleNamespace(stdout="ok", stderr="", returncode=0)
 
     monkeypatch.setattr(local_sandbox.os, "name", "nt")
+    monkeypatch.setattr(local_sandbox.os, "environ", {})
     monkeypatch.setattr(LocalSandbox, "_get_shell", staticmethod(lambda: r"C:\Program Files\Git\bin\sh.exe"))
     monkeypatch.setattr(local_sandbox.subprocess, "run", fake_run)
 
@@ -132,6 +134,11 @@ def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
                 "capture_output": True,
                 "text": True,
                 "timeout": 600,
+                "env": {
+                    **{},
+                    "MSYS_NO_PATHCONV": "1",
+                    "MSYS2_ARG_CONV_EXCL": "*",
+                },
             },
         )
     ]
@@ -159,6 +166,7 @@ def test_execute_command_uses_cmd_command_mode_on_windows(monkeypatch):
                 "capture_output": True,
                 "text": True,
                 "timeout": 600,
+                "env": None,
             },
         )
     ]

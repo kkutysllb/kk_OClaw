@@ -356,6 +356,17 @@ token_usage:
 - 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数，缓解长任务期间的页面 503/504
 - 修复 `MemoryMiddleware` 的 `runtime` 注入问题，并补充异步回归测试
 - **Token 用量页面图表增强**：X 轴日期刻度智能倾斜+分级间隔避免重叠；API 调用次数图表升级为双纵轴面积图（左轴 API 调用 + 右轴任务完成次数）
+- **Token 追踪精度提升**：RunJournal 引入去重机制（`_counted_llm_run_ids` 等），防止 LangChain callback 重复触发导致 token 重复计数；`record_external_llm_usage_records` 替代旧接口，基于 `source_run_id` 按调用粒度去重
+- **运行进度持久化**：新增 `update_run_progress` + Progress Reporter 节流机制，长时间运行期间定期保存 token 快照，避免数据丢失
+- **RunManager 可靠性增强**：引入 `PersistenceRetryPolicy` 对 SQLite 写入瞬态错误进行有界重试；`reconcile_orphaned_inflight_runs` 在网关重启后自动恢复孤立的 pending/running 记录
+- **新增安全中间件**：`SafetyFinishReasonMiddleware` 检测 LLM 返回的 `stop_reason=SAFETY` 并自动终止运行，防止不安全内容泄露
+- **新增动态上下文中间件**：`DynamicContextMiddleware` 在运行时根据配置动态注入上下文信息
+- **新增工具输出预算中间件**：`ToolOutputBudgetMiddleware` 限制工具返回内容长度，防止超大输出挤占上下文窗口
+- **MCP 会话池化**：新增 `session_pool` 模块，stdio MCP 工具按 `(server_name, thread_id)` 复用持久会话，保障有状态服务器（如 Playwright）的连续性
+- **Sub-Agent token 收集器**：新增 `token_collector` 模块，集中采集 sub-agent 的 token 使用记录并上报至 RunJournal
+- **技能权限系统**：新增 `permissions.py` + `tool_policy.py`，支持 SKILL.md 中声明所需权限，加载时自动校验
+- **`RunRepository` SQL 实现完善**：补全 `update_model_name`、`list_inflight`、`update_run_progress` 方法，`put` 改为 upsert 模式（重试安全），`aggregate_tokens_by_thread` 支持 `include_active` 参数
+- **Langfuse 追踪集成**：新增 `tracing/metadata.py`，构建 Langfuse trace-attribute metadata 并注入 RunnableConfig
 
 ### 后续待完成
 

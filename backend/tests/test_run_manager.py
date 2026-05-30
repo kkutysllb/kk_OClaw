@@ -33,7 +33,7 @@ async def test_create_and_get(manager: RunManager):
     assert ISO_RE.match(record.created_at)
     assert ISO_RE.match(record.updated_at)
 
-    fetched = manager.get(record.run_id)
+    fetched = await manager.get(record.run_id)
     assert fetched is record
 
 
@@ -82,8 +82,9 @@ async def test_list_by_thread(manager: RunManager):
 
     runs = await manager.list_by_thread("thread-1")
     assert len(runs) == 2
-    assert runs[0].run_id == r1.run_id
-    assert runs[1].run_id == r2.run_id
+    # Newest first (sorted by created_at desc)
+    assert runs[0].run_id == r2.run_id
+    assert runs[1].run_id == r1.run_id
 
 
 @pytest.mark.anyio
@@ -115,7 +116,7 @@ async def test_cleanup(manager: RunManager):
     run_id = record.run_id
 
     await manager.cleanup(run_id, delay=0)
-    assert manager.get(run_id) is None
+    assert await manager.get(run_id) is None
 
 
 @pytest.mark.anyio
@@ -130,7 +131,7 @@ async def test_set_status_with_error(manager: RunManager):
 @pytest.mark.anyio
 async def test_get_nonexistent(manager: RunManager):
     """Getting a nonexistent run should return None."""
-    assert manager.get("does-not-exist") is None
+    assert await manager.get("does-not-exist") is None
 
 
 @pytest.mark.anyio

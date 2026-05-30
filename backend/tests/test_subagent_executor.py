@@ -240,6 +240,14 @@ class TestAgentConstruction:
                 build_subagent_runtime_middlewares=fake_build_subagent_runtime_middlewares,
             ),
         )
+        monkeypatch.setitem(
+            sys.modules,
+            "kkoclaw.agents.middlewares.loop_detection_middleware",
+            _module(
+                "kkoclaw.agents.middlewares.loop_detection_middleware",
+                LoopDetectionMiddleware=lambda **kw: object(),
+            ),
+        )
 
         executor = SubagentExecutor(
             config=base_config,
@@ -264,7 +272,10 @@ class TestAgentConstruction:
         assert captured["agent"]["model"] is model
         assert captured["agent"]["middleware"] is middlewares
         assert captured["agent"]["tools"] == []
-        assert captured["agent"]["system_prompt"] == base_config.system_prompt
+        # system_prompt is no longer passed to create_agent(); it is merged into
+        # the initial state messages by _build_initial_state() to avoid multiple
+        # SystemMessages which some LLM APIs reject.
+        assert captured["agent"]["system_prompt"] is None
 
     @pytest.mark.anyio
     async def test_load_skill_messages_uses_explicit_app_config_for_skill_storage(
@@ -297,7 +308,9 @@ class TestAgentConstruction:
             thread_id="test-thread",
         )
 
-        messages = await executor._load_skill_messages()
+        # Load skills first, then pass to _load_skill_messages
+        skills = await executor._load_skills()
+        messages = await executor._load_skill_messages(skills)
 
         assert captured["app_config"] is app_config
         assert len(messages) == 1
@@ -1268,10 +1281,10 @@ class TestCooperativeCancellation:
 
             # Set CANCELLED on the result before the timeout handler runs.
             # The 50ms timeout will fire while execute() is blocked.
-            with executor_module._background_tasks_lock:
-                executor_module._background_tasks[task_id].status = SubagentStatus.CANCELLED
-                executor_module._background_tasks[task_id].error = "Cancelled by user"
-                executor_module._background_tasks[task_id].completed_at = datetime.now()
+            executor_module._background_tasks[task_id].try_set_terminal(
+                SubagentStatus.CANCELLED,
+                error="Cancelled by user",
+            )
 
             # Wait for run_task to finish — the FuturesTimeoutError handler has
             # now executed and (should have) left CANCELLED intact.

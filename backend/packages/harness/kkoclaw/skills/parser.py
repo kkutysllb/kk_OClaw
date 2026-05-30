@@ -9,6 +9,29 @@ from .types import SKILL_MD_FILE, Skill, SkillCategory
 logger = logging.getLogger(__name__)
 
 
+def parse_allowed_tools(raw: object, skill_file: Path) -> list[str] | None:
+    """Parse the optional allowed-tools frontmatter field.
+
+    Returns None when the field is omitted. Returns a list when the field is a
+    YAML sequence of strings, including an empty list for explicit no-tool
+    skills. Raises ValueError for malformed values.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError(f"allowed-tools in {skill_file} must be a list of strings")
+
+    allowed_tools: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise ValueError(f"allowed-tools in {skill_file} must contain only strings")
+        tool_name = item.strip()
+        if not tool_name:
+            raise ValueError(f"allowed-tools in {skill_file} cannot contain empty tool names")
+        allowed_tools.append(tool_name)
+    return allowed_tools
+
+
 def parse_skill_file(skill_file: Path, category: SkillCategory, relative_path: Path | None = None) -> Skill | None:
     """Parse a SKILL.md file and extract metadata.
 

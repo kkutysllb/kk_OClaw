@@ -18,7 +18,7 @@ from langchain.tools import ToolRuntime, tool
 from langgraph.typing import ContextT
 
 from kkoclaw.agents.thread_state import ThreadState
-from kkoclaw.mcp.tools import _make_sync_tool_wrapper
+from kkoclaw.tools.sync import make_sync_tool_wrapper
 
 logger = logging.getLogger(__name__)
 
@@ -296,4 +296,4 @@ async def cron_manage_tool(
     )
 
 
-cron_manage_tool.func = _make_sync_tool_wrapper(_cron_manage_impl, "cron_manage")
+cron_manage_tool.func = make_sync_tool_wrapper(_cron_manage_impl, "cron_manage")

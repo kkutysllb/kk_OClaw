@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 
 from kkoclaw.config import get_app_config
 from kkoclaw.reflection import resolve_class
@@ -9,6 +10,7 @@ class SandboxProvider(ABC):
     """Abstract base class for sandbox providers"""
 
     uses_thread_data_mounts: bool = False
+    needs_upload_permission_adjustment: bool = True
 
     @abstractmethod
     def acquire(self, thread_id: str | None = None) -> str:
@@ -35,6 +37,20 @@ class SandboxProvider(ABC):
         Args:
             sandbox_id: The ID of the sandbox environment to destroy.
         """
+        pass
+
+    async def acquire_async(self, thread_id: str | None = None) -> str:
+        """Acquire a sandbox without blocking the event loop.
+
+        Most sandbox providers expose a synchronous lifecycle API because local
+        Docker/provisioner operations are blocking. Async runtimes should call
+        this method so those blocking operations run in a worker thread instead
+        of stalling the event loop.
+        """
+        return await asyncio.to_thread(self.acquire, thread_id)
+
+    def reset(self) -> None:
+        """Clear cached state that survives provider instance replacement."""
         pass
 
 
@@ -65,10 +81,17 @@ def reset_sandbox_provider() -> None:
     The next call to `get_sandbox_provider()` will create a new instance.
     Useful for testing or when switching configurations.
 
+    Providers can override `reset()` to clear any module-level state they keep
+    alive across instances (for example, `LocalSandboxProvider`'s cached
+    `LocalSandbox` singleton). Without it, config/mount changes would not take
+    effect on the next acquire().
+
     Note: If the provider has active sandboxes, they will be orphaned.
     Use `shutdown_sandbox_provider()` for proper cleanup.
     """
     global _default_sandbox_provider
+    if _default_sandbox_provider is not None:
+        _default_sandbox_provider.reset()
     _default_sandbox_provider = None
 
 

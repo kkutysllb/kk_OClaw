@@ -36,6 +36,7 @@ def _make_subagent_result(
     total_input_tokens: int = 300,
     total_output_tokens: int = 200,
     llm_call_count: int = 2,
+    token_usage_records: list | None = None,
 ) -> SimpleNamespace:
     """Create a result object with token fields (avoids conftest mock)."""
     return SimpleNamespace(
@@ -43,6 +44,8 @@ def _make_subagent_result(
         total_input_tokens=total_input_tokens,
         total_output_tokens=total_output_tokens,
         llm_call_count=llm_call_count,
+        token_usage_records=token_usage_records or [],
+        run_id="test-run-id",
     )
 
 
@@ -214,7 +217,6 @@ class TestReportSubagentTokens:
         assert journal._total_tokens >= 500
         assert journal._total_input_tokens >= 300
         assert journal._total_output_tokens >= 200
-        assert journal._llm_call_count >= 2
 
     def test_report_with_zero_tokens_is_noop(self):
         journal = _make_journal()
@@ -250,53 +252,58 @@ class TestReportSubagentTokens:
         assert journal._total_tokens >= 1500
         assert journal._total_input_tokens >= 900
         assert journal._total_output_tokens >= 600
-        assert journal._llm_call_count >= 5
 
 
-# ── Test: RunJournal.record_subagent_tokens ──────────────────────────────────
+# ── Test: RunJournal.record_external_llm_usage_records ──────────────────────
 
 
-class TestRunJournalRecordSubagentTokens:
-    """Directly test the RunJournal.record_subagent_tokens method."""
+class TestRunJournalRecordExternalTokens:
+    """Directly test the RunJournal.record_external_llm_usage_records method."""
 
     def test_record_positive_tokens(self):
         journal = _make_journal()
-        journal.record_subagent_tokens(
-            "my-subagent",
-            total_tokens=1000,
-            total_input_tokens=600,
-            total_output_tokens=400,
-            llm_call_count=3,
-        )
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:my-subagent", "input_tokens": 600, "output_tokens": 400, "total_tokens": 1000},
+        ])
         assert journal._subagent_tokens == 1000
         assert journal._total_tokens >= 1000
         assert journal._total_input_tokens >= 600
         assert journal._total_output_tokens >= 400
-        assert journal._llm_call_count >= 3
 
     def test_record_zero_tokens_is_noop(self):
         journal = _make_journal()
         initial_tokens = journal._total_tokens
-        journal.record_subagent_tokens(
-            "my-subagent",
-            total_tokens=0,
-        )
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:my-subagent", "total_tokens": 0},
+        ])
         assert journal._total_tokens == initial_tokens
         assert journal._subagent_tokens == 0
 
     def test_record_negative_tokens_is_noop(self):
         journal = _make_journal()
         initial_tokens = journal._total_tokens
-        journal.record_subagent_tokens(
-            "my-subagent",
-            total_tokens=-100,
-        )
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:my-subagent", "total_tokens": -100},
+        ])
         assert journal._total_tokens == initial_tokens
 
     def test_multiple_records_accumulate(self):
         journal = _make_journal()
-        journal.record_subagent_tokens("sub1", total_tokens=500, total_input_tokens=300, total_output_tokens=200, llm_call_count=2)
-        journal.record_subagent_tokens("sub2", total_tokens=1000, total_input_tokens=600, total_output_tokens=400, llm_call_count=3)
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:sub1", "input_tokens": 300, "output_tokens": 200, "total_tokens": 500},
+            {"source_run_id": "s2", "caller": "subagent:sub2", "input_tokens": 600, "output_tokens": 400, "total_tokens": 1000},
+        ])
         assert journal._subagent_tokens == 1500
         assert journal._total_input_tokens == 900
         assert journal._total_output_tokens == 600
+
+    def test_dedup_ignores_duplicate_source_run_id(self):
+        journal = _make_journal()
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:sub1", "total_tokens": 500, "input_tokens": 300, "output_tokens": 200},
+        ])
+        journal.record_external_llm_usage_records([
+            {"source_run_id": "s1", "caller": "subagent:sub1", "total_tokens": 500, "input_tokens": 300, "output_tokens": 200},
+        ])
+        assert journal._subagent_tokens == 500
+        assert journal._total_tokens == 500

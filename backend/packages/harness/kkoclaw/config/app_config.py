@@ -14,10 +14,12 @@ from kkoclaw.config.checkpointer_config import CheckpointerConfig, load_checkpoi
 from kkoclaw.config.database_config import DatabaseConfig
 from kkoclaw.config.extensions_config import ExtensionsConfig
 from kkoclaw.config.guardrails_config import GuardrailsConfig, load_guardrails_config_from_dict
+from kkoclaw.config.loop_detection_config import LoopDetectionConfig
 from kkoclaw.config.memory_config import MemoryConfig, load_memory_config_from_dict
 from kkoclaw.config.model_config import ModelConfig
 from kkoclaw.config.run_events_config import RunEventsConfig
 from kkoclaw.config.runtime_paths import existing_project_file
+from kkoclaw.config.safety_finish_reason_config import SafetyFinishReasonConfig
 from kkoclaw.config.sandbox_config import SandboxConfig
 from kkoclaw.config.cron_management_config import CronManagementConfig
 from kkoclaw.config.skill_evolution_config import SkillEvolutionConfig
@@ -28,6 +30,7 @@ from kkoclaw.config.summarization_config import SummarizationConfig, load_summar
 from kkoclaw.config.title_config import TitleConfig, load_title_config_from_dict
 from kkoclaw.config.token_usage_config import TokenUsageConfig
 from kkoclaw.config.tool_config import ToolConfig, ToolGroupConfig
+from kkoclaw.config.tool_output_config import ToolOutputConfig
 from kkoclaw.config.tool_search_config import ToolSearchConfig, load_tool_search_config_from_dict
 
 load_dotenv()
@@ -100,6 +103,9 @@ class AppConfig(BaseModel):
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")
+    loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig, description="Loop detection middleware configuration")
+    safety_finish_reason: SafetyFinishReasonConfig = Field(default_factory=SafetyFinishReasonConfig, description="Safety finish reason middleware configuration")
+    tool_output: ToolOutputConfig = Field(default_factory=ToolOutputConfig, description="Tool output budget enforcement configuration")
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig, description="LLM circuit breaker configuration")
     model_config = ConfigDict(extra="allow")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Unified database backend configuration")
@@ -186,6 +192,8 @@ class AppConfig(BaseModel):
         # Load guardrails config if present
         if "guardrails" in config_data:
             load_guardrails_config_from_dict(config_data["guardrails"])
+
+        # safety_finish_reason is loaded directly by Pydantic (no singleton pattern needed)
 
         # Load circuit_breaker config if present
         if "circuit_breaker" in config_data:

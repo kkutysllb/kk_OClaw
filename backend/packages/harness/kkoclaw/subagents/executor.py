@@ -23,7 +23,10 @@ from kkoclaw.agents.thread_state import RuntimeContext, SandboxState, ThreadData
 from kkoclaw.config import get_app_config
 from kkoclaw.config.app_config import AppConfig
 from kkoclaw.models import create_chat_model
+from kkoclaw.skills.tool_policy import filter_tools_by_skill_allowed_tools
+from kkoclaw.skills.types import Skill
 from kkoclaw.subagents.config import SubagentConfig, resolve_subagent_model_name
+from kkoclaw.subagents.token_collector import SubagentTokenCollector
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,15 @@ class SubagentStatus(Enum):
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
 
+    @property
+    def is_terminal(self) -> bool:
+        return self in {
+            type(self).COMPLETED,
+            type(self).FAILED,
+            type(self).CANCELLED,
+            type(self).TIMED_OUT,
+        }
+
 
 @dataclass
 class SubagentResult:
@@ -62,6 +74,8 @@ class SubagentResult:
         total_input_tokens: Total input tokens consumed.
         total_output_tokens: Total output tokens consumed.
         llm_call_count: Number of LLM calls made by the subagent.
+        token_usage_records: Per-call token usage records from SubagentTokenCollector.
+        usage_reported: Whether token usage has been reported to parent RunJournal.
     """
 
     task_id: str
@@ -76,12 +90,50 @@ class SubagentResult:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     llm_call_count: int = 0
+    token_usage_records: list[dict[str, int | str]] = field(default_factory=list)
+    usage_reported: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    _state_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self):
         """Initialize mutable defaults."""
         if self.ai_messages is None:
             self.ai_messages = []
+
+    def try_set_terminal(
+        self,
+        status: SubagentStatus,
+        *,
+        result: str | None = None,
+        error: str | None = None,
+        completed_at: datetime | None = None,
+        ai_messages: list[dict[str, Any]] | None = None,
+        token_usage_records: list[dict[str, int | str]] | None = None,
+    ) -> bool:
+        """Set a terminal status exactly once.
+    
+        Background timeout/cancellation and the execution worker can race on the
+        same result holder.  The first terminal transition wins; late terminal
+        writes must not change status or payload fields.
+        """
+        if not status.is_terminal:
+            raise ValueError(f"Status {status} is not terminal")
+    
+        with self._state_lock:
+            if self.status.is_terminal:
+                return False
+    
+            if result is not None:
+                self.result = result
+            if error is not None:
+                self.error = error
+            if ai_messages is not None:
+                self.ai_messages = ai_messages
+            if token_usage_records is not None:
+                self.token_usage_records = token_usage_records
+            self.completed_at = completed_at or datetime.now()
+            self.status = status
+            return True
 
 
 # Global storage for background task results
@@ -291,15 +343,16 @@ class SubagentExecutor:
         self.trace_id = trace_id or str(uuid.uuid4())[:8]
 
         # Filter tools based on config
-        self.tools = _filter_tools(
+        self._base_tools = _filter_tools(
             tools,
             config.tools,
             config.disallowed_tools,
         )
+        self.tools = self._base_tools
 
         logger.info(f"[trace={self.trace_id}] SubagentExecutor initialized: {config.name} with {len(self.tools)} tools")
 
-    def _create_agent(self):
+    def _create_agent(self, tools: list[BaseTool] | None = None):
         """Create the agent instance."""
         app_config = self.app_config or get_app_config()
         if self.model_name is None:
@@ -326,29 +379,19 @@ class SubagentExecutor:
         tool_freq_warn = max(40, tool_freq_hard // 2)
         middlewares.append(LoopDetectionMiddleware(tool_freq_warn=tool_freq_warn, tool_freq_hard_limit=tool_freq_hard))
 
+        # system_prompt is included in initial state messages (see _build_initial_state)
+        # to avoid multiple SystemMessages which some LLM APIs don't support.
         return create_agent(
             model=model,
-            tools=self.tools,
+            tools=tools if tools is not None else self.tools,
             middleware=middlewares,
-            system_prompt=self.config.system_prompt,
+            system_prompt=None,
             state_schema=ThreadState,
             context_schema=RuntimeContext,
         )
 
-    async def _load_skill_messages(self) -> list[SystemMessage]:
-        """Load skill content as conversation items based on config.skills.
-
-        Aligned with Codex's pattern: each subagent loads its own skills
-        per-session and injects them as conversation items (developer messages),
-        not as system prompt text. The config.skills whitelist controls which
-        skills are loaded:
-        - None: load all enabled skills
-        - []: no skills
-        - ["skill-a", "skill-b"]: only these skills
-
-        Returns:
-            List of SystemMessages containing skill content.
-        """
+    async def _load_skills(self) -> list[Skill]:
+        """Load enabled skill metadata based on config.skills."""
         if self.config.skills is not None and len(self.config.skills) == 0:
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} skills=[] — skipping skill loading")
             return []
@@ -372,10 +415,26 @@ class SubagentExecutor:
         # Filter by config.skills whitelist
         if self.config.skills is not None:
             allowed = set(self.config.skills)
-            skills = [s for s in all_skills if s.name in allowed]
-        else:
-            skills = all_skills
+            return [s for s in all_skills if s.name in allowed]
+        return all_skills
 
+    def _apply_skill_allowed_tools(self, skills: list[Skill]) -> list[BaseTool]:
+        return filter_tools_by_skill_allowed_tools(self._base_tools, skills)
+
+    async def _load_skill_messages(self, skills: list[Skill]) -> list[SystemMessage]:
+        """Load skill content as conversation items based on config.skills.
+
+        Aligned with Codex's pattern: each subagent loads its own skills
+        per-session and injects them as conversation items (developer messages),
+        not as system prompt text. The config.skills whitelist controls which
+        skills are loaded:
+        - None: load all enabled skills
+        - []: no skills
+        - ["skill-a", "skill-b"]: only these skills
+
+        Returns:
+            List of SystemMessages containing skill content.
+        """
         if not skills:
             return []
 
@@ -393,21 +452,34 @@ class SubagentExecutor:
 
         return messages
 
-    async def _build_initial_state(self, task: str) -> dict[str, Any]:
+    async def _build_initial_state(self, task: str) -> tuple[dict[str, Any], list[BaseTool]]:
         """Build the initial state for agent execution.
 
         Args:
             task: The task description.
 
         Returns:
-            Initial state dictionary.
+            Initial state dictionary and tools filtered by loaded skill metadata.
         """
-        # Load skills as conversation items (Codex pattern)
-        skill_messages = await self._load_skill_messages()
 
-        messages: list = []
-        # Skill content injected as developer/system messages before the task
-        messages.extend(skill_messages)
+        # Load skills as conversation items (Codex pattern)
+        skills = await self._load_skills()
+        filtered_tools = self._apply_skill_allowed_tools(skills)
+        skill_messages = await self._load_skill_messages(skills)
+
+        # Combine system_prompt and skills into a single SystemMessage.
+        # Some LLM APIs reject multiple SystemMessages with
+        # "System message must be at the beginning."
+        system_parts: list[str] = []
+        if self.config.system_prompt:
+            system_parts.append(self.config.system_prompt)
+        for skill_msg in skill_messages:
+            system_parts.append(skill_msg.content)
+
+        messages: list[Any] = []
+        if system_parts:
+            messages.append(SystemMessage(content="\n\n".join(system_parts)))
+
         # Then the actual task
         messages.append(HumanMessage(content=task))
 
@@ -421,7 +493,7 @@ class SubagentExecutor:
         if self.thread_data is not None:
             state["thread_data"] = self.thread_data
 
-        return state
+        return state, filtered_tools
 
     async def _aexecute(self, task: str, result_holder: SubagentResult | None = None) -> SubagentResult:
         """Execute a task asynchronously.
@@ -450,9 +522,14 @@ class SubagentExecutor:
             ai_messages = []
             result.ai_messages = ai_messages
 
+        collector: SubagentTokenCollector | None = None
         try:
-            agent = self._create_agent()
-            state = await self._build_initial_state(task)
+            state, filtered_tools = await self._build_initial_state(task)
+            agent = self._create_agent(filtered_tools)
+
+            # Token collector for subagent LLM calls
+            collector_caller = f"subagent:{self.config.name}"
+            collector = SubagentTokenCollector(caller=collector_caller)
 
             # Build config with thread_id for sandbox access and recursion limit
             # Include "subagent:{name}" tag so RunJournal classifies token usage correctly.
@@ -464,7 +541,8 @@ class SubagentExecutor:
             recursion_limit = subagents_cfg.compute_recursion_limit(self.config.max_turns)
             run_config: RunnableConfig = {
                 "recursion_limit": recursion_limit,
-                "tags": [f"subagent:{self.config.name}"],
+                "callbacks": [collector],
+                "tags": [collector_caller],
             }
             context: dict[str, Any] = {}
             if self.thread_id:
@@ -482,11 +560,7 @@ class SubagentExecutor:
             # Pre-check: bail out immediately if already cancelled before streaming starts
             if result.cancel_event.is_set():
                 logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} cancelled before streaming")
-                with _background_tasks_lock:
-                    if result.status == SubagentStatus.RUNNING:
-                        result.status = SubagentStatus.CANCELLED
-                        result.error = "Cancelled by user"
-                        result.completed_at = datetime.now()
+                result.try_set_terminal(SubagentStatus.CANCELLED, error="Cancelled by user")
                 return result
 
             async for chunk in agent.astream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
@@ -496,11 +570,7 @@ class SubagentExecutor:
                 # interrupted until the next chunk is yielded.
                 if result.cancel_event.is_set():
                     logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} cancelled by parent")
-                    with _background_tasks_lock:
-                        if result.status == SubagentStatus.RUNNING:
-                            result.status = SubagentStatus.CANCELLED
-                            result.error = "Cancelled by user"
-                            result.completed_at = datetime.now()
+                    result.try_set_terminal(SubagentStatus.CANCELLED, error="Cancelled by user")
                     return result
 
                 final_state = chunk
@@ -706,11 +776,9 @@ class SubagentExecutor:
                 result = SubagentResult(
                     task_id=str(uuid.uuid4())[:8],
                     trace_id=self.trace_id,
-                    status=SubagentStatus.FAILED,
+                    status=SubagentStatus.RUNNING,
                 )
-            result.status = SubagentStatus.FAILED
-            result.error = str(e)
-            result.completed_at = datetime.now()
+            result.try_set_terminal(SubagentStatus.FAILED, error=str(e))
             return result
 
     def execute_async(self, task: str, task_id: str | None = None) -> str:
@@ -757,29 +825,19 @@ class SubagentExecutor:
                 )
                 try:
                     # Wait for execution with timeout
-                    exec_result = execution_future.result(timeout=self.config.timeout_seconds)
-                    with _background_tasks_lock:
-                        _background_tasks[task_id].status = exec_result.status
-                        _background_tasks[task_id].result = exec_result.result
-                        _background_tasks[task_id].error = exec_result.error
-                        _background_tasks[task_id].completed_at = datetime.now()
-                        _background_tasks[task_id].ai_messages = exec_result.ai_messages
+                    execution_future.result(timeout=self.config.timeout_seconds)
                 except FuturesTimeoutError:
                     logger.error(f"[trace={self.trace_id}] Subagent {self.config.name} execution timed out after {self.config.timeout_seconds}s")
-                    with _background_tasks_lock:
-                        if _background_tasks[task_id].status == SubagentStatus.RUNNING:
-                            _background_tasks[task_id].status = SubagentStatus.TIMED_OUT
-                            _background_tasks[task_id].error = f"Execution timed out after {self.config.timeout_seconds} seconds"
-                            _background_tasks[task_id].completed_at = datetime.now()
+                    result_holder.try_set_terminal(
+                        SubagentStatus.TIMED_OUT,
+                        error=f"Execution timed out after {self.config.timeout_seconds} seconds",
+                    )
                     # Signal cooperative cancellation and cancel the future
                     result_holder.cancel_event.set()
                     execution_future.cancel()
             except Exception as e:
                 logger.exception(f"[trace={self.trace_id}] Subagent {self.config.name} async execution failed")
-                with _background_tasks_lock:
-                    _background_tasks[task_id].status = SubagentStatus.FAILED
-                    _background_tasks[task_id].error = str(e)
-                    _background_tasks[task_id].completed_at = datetime.now()
+                result_holder.try_set_terminal(SubagentStatus.FAILED, error=str(e))
 
         _scheduler_pool.submit(run_task)
         return task_id
@@ -850,13 +908,7 @@ def cleanup_background_task(task_id: str) -> None:
 
         # Only clean up tasks that are in a terminal state to avoid races with
         # the background executor still updating the task entry.
-        is_terminal_status = result.status in {
-            SubagentStatus.COMPLETED,
-            SubagentStatus.FAILED,
-            SubagentStatus.CANCELLED,
-            SubagentStatus.TIMED_OUT,
-        }
-        if is_terminal_status or result.completed_at is not None:
+        if result.status.is_terminal or result.completed_at is not None:
             del _background_tasks[task_id]
             logger.debug("Cleaned up background task: %s", task_id)
         else:

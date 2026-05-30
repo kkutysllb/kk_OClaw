@@ -45,7 +45,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         assistant_id: str | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
         display_name: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict:
         resolved_user_id = resolve_user_id(user_id, method_name="MemoryThreadMetaStore.create")
         now = now_iso()
@@ -69,12 +69,12 @@ class MemoryThreadMetaStore(ThreadMetaStore):
     async def search(
         self,
         *,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
         status: str | None = None,
         limit: int = 100,
         offset: int = 0,
         user_id: str | None | _AutoSentinel = AUTO,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         resolved_user_id = resolve_user_id(user_id, method_name="MemoryThreadMetaStore.search")
         filter_dict: dict[str, Any] = {}
         if metadata:
