@@ -109,6 +109,9 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
     def _build_title_prompt(self, state: TitleMiddlewareState) -> tuple[str, str]:
         """Extract user/assistant messages and build the title prompt.
 
+        Strips ``<uploaded_files>`` blocks from the user message so that
+        the title model sees the actual question, not the injected file list.
+
         Returns (prompt_string, user_msg) so callers can use user_msg as fallback.
         """
         config = self._get_title_config()
@@ -118,6 +121,9 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
         assistant_msg_content = next((m.content for m in messages if m.type == "ai"), "")
 
         user_msg = self._normalize_content(user_msg_content)
+        # Strip <uploaded_files> blocks injected by UploadsMiddleware
+        _uploaded_files_re = re.compile(r"<uploaded_files>.*?</uploaded_files>\n*", re.DOTALL)
+        user_msg = _uploaded_files_re.sub("", user_msg).strip()
         assistant_msg = self._strip_think_tags(self._normalize_content(assistant_msg_content))
 
         prompt = config.prompt_template.format(
