@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, NotRequired, override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import HumanMessage
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
@@ -16,6 +17,25 @@ from kkoclaw.models import create_chat_model
 if TYPE_CHECKING:
     from kkoclaw.config.app_config import AppConfig
     from kkoclaw.config.title_config import TitleConfig
+
+_REMINDER_KWARG_KEY = "dynamic_context_reminder"
+
+
+def _is_reminder(message: object) -> bool:
+    """Return True if *message* is a DynamicContextMiddleware reminder."""
+    return bool(getattr(message, "additional_kwargs", {}).get(_REMINDER_KWARG_KEY))
+
+
+def _is_real_user(message: object) -> bool:
+    """Return True if *message* is a genuine HumanMessage (not a reminder, summary, or memory injection)."""
+    name = getattr(message, "name", None)
+    return (
+        isinstance(message, HumanMessage)
+        and not _is_reminder(message)
+        and name not in ("summary", "memory_context")
+        and not getattr(message, "additional_kwargs", {}).get("hide_from_ui", False)
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +97,14 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
         if len(messages) < 2:
             return False
 
-        # Count user and assistant messages
-        user_messages = [m for m in messages if m.type == "human"]
+        # Count real user messages (exclude dynamic-context reminders injected by
+        # DynamicContextMiddleware which are also typed as "human" but carry
+        # the ``dynamic_context_reminder`` marker in additional_kwargs).
+        real_user_messages = [m for m in messages if _is_real_user(m)]
         assistant_messages = [m for m in messages if m.type == "ai"]
 
         # Generate title after first complete exchange
-        return len(user_messages) == 1 and len(assistant_messages) >= 1
+        return len(real_user_messages) == 1 and len(assistant_messages) >= 1
 
     def _build_title_prompt(self, state: TitleMiddlewareState) -> tuple[str, str]:
         """Extract user/assistant messages and build the title prompt.
@@ -92,7 +114,7 @@ class TitleMiddleware(AgentMiddleware[TitleMiddlewareState]):
         config = self._get_title_config()
         messages = state.get("messages", [])
 
-        user_msg_content = next((m.content for m in messages if m.type == "human"), "")
+        user_msg_content = next((m.content for m in messages if _is_real_user(m)), "")
         assistant_msg_content = next((m.content for m in messages if m.type == "ai"), "")
 
         user_msg = self._normalize_content(user_msg_content)

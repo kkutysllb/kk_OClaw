@@ -344,6 +344,12 @@ token_usage:
 
 ### 今日已完成
 
+- **上游 DeerFlow `backend/app/` 模块全面同步**（2025-05-29）
+  - 用户隔离：`paths.py` + `agents_config.py` 新增 per-user agent 目录，兼容 legacy 共享布局
+  - 路由同步：`agents.py`/`threads.py`/`runs.py`/`uploads.py`/`artifacts.py`/`auth.py`/`mcp.py` 全面对齐上游
+  - 消息转换：`services.py` 使用 `convert_to_messages` 保留 attachments + `inject_authenticated_user_context` + model 验证
+  - 安全增强：ZIP 炸弹防护、Origin 验证防 CSRF、MCP 密钥脱敏重构
+  - 启动恢复：`deps.py` 自动恢复 Gateway 重启后的孤立运行
 - 修复智谱 GLM-5 模型 1210 错误：创建 `PatchedChatZhipu` 适配器剥离不兼容的 `stream_options` 参数
 - 工具循环中断前端提示：`LoopDetectionMiddleware` 触发 hard_stop 时通过 SSE custom 事件通知前端，前端以 toast 展示中断原因和「继续」操作指引
 - `PatchedChatDeepSeek` 增加模型名别名映射机制（`_MODEL_NAME_ALIASES`），支持本地部署模型名（如 `deepseek_v4`）自动映射为 API 接受的名称（如 `deepseek-v4-flash`）

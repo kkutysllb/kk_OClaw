@@ -11,6 +11,8 @@ from typing import Any
 
 from langchain_core.language_models import LanguageModelInput
 from langchain_deepseek import ChatDeepSeek
+from pydantic import model_validator
+from typing_extensions import Self
 
 from kkoclaw.models.assistant_payload_replay import (
     restore_assistant_payloads,
@@ -42,6 +44,22 @@ class PatchedChatDeepSeek(ChatDeepSeek):
     @property
     def lc_secrets(self) -> dict[str, str]:
         return {"api_key": "DEEPSEEK_API_KEY", "openai_api_key": "DEEPSEEK_API_KEY"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_base_url(cls, data: Any) -> Any:
+        """Map ``base_url`` / ``openai_api_base`` to ChatDeepSeek's ``api_base``.
+
+        The factory passes ``base_url`` (standardised across all model providers),
+        but ``ChatDeepSeek`` expects ``api_base``.  Without this remap the custom
+        URL is silently ignored and requests always go to the official endpoint.
+        """
+        if isinstance(data, dict):
+            if "base_url" in data and "api_base" not in data:
+                data["api_base"] = data.pop("base_url")
+            elif "openai_api_base" in data and "api_base" not in data:
+                data["api_base"] = data.pop("openai_api_base")
+        return data
 
     def _get_request_payload(
         self,

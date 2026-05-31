@@ -20,6 +20,15 @@
 - [x] 支持将 `.kkoclaw/agents/<name>` 自定义 agent 桥接为可由 `task` 调度的 subagent
 - [x] 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数
 - [x] subagent recursion_limit 公式可配置化（`recursion_limit_multiplier` × max_turns + `recursion_limit_base`，默认 `3*max_turns+20`）
+- [x] 上游 DeerFlow `backend/app/` 模块全面同步（2025-05-29）
+  - **用户隔离**：`paths.py` 新增 `user_agents_dir`/`user_agent_dir` 方法；`agents_config.py` 新增 `resolve_agent_dir()` 按用户优先解析 agent 目录，兼容 legacy 共享布局
+  - **路由模块**：`agents.py` 完整支持 per-user agent 目录 + legacy 回退；`threads.py` 新增 metadata 过滤器验证（`InvalidMetadataFilterError`）；`runs.py` 使用 `wait_for_run_completion` 替代直接 `await task`
+  - **上传安全**：`uploads.py` 新增 `_make_file_sandbox_readable`（Docker sandbox 文件可读性）+ `claim_unique_filename` 重复文件名去重
+  - **安全增强**：`artifacts.py` 新增 `_read_skill_archive_member` ZIP 炸弹防护（16MB 限制）；`csrf_middleware.py` 新增 Origin 验证防 CSRF 登录攻击
+  - **MCP 密钥脱敏**：`mcp.py` 重构为 `_mask_server_config` + `_merge_preserving_secrets`，保留 raw JSON `$VAR` 占位符
+  - **auth 状态缓存**：`auth.py` setup-status 改为 TTL 缓存 + asyncio 去重，避免多标签页 429
+  - **消息转换**：`services.py` 使用 `convert_to_messages` 保留 attachments 等字段，新增 `inject_authenticated_user_context` + model 验证 + `resolve_root_run_name`
+  - **启动恢复**：`deps.py` 新增 `_mark_latest_recovered_threads_error`，Gateway 重启后自动恢复孤立运行并标记线程状态
 
 ## 计划功能
 
