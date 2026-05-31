@@ -12,7 +12,6 @@ from PIL import Image
 # Provider configuration (priority order)
 #   1. Gemini/Doubao  (OpenAI-compatible images/generations endpoint)
 #   2. GPT/Image2     (OpenAI-compatible images/generations endpoint)
-#   3. MiniMax        (legacy fallback)
 # ---------------------------------------------------------------------------
 _GPT_IMAGE2_API_KEY = os.getenv("GPT_IMAGE2_API_KEY")
 _GPT_IMAGE2_BASE_URL = os.getenv("GPT_IMAGE2_BASE_URL", "")
@@ -23,9 +22,6 @@ _GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "")
 _GEMINI_MODEL = os.getenv("GEMINI_MODEL", "doubao-seedream-5-0-260128")
 
 
-_MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
-_MINIMAX_API_BASE = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/v1")
-
 
 def _select_provider() -> str:
     """Return the first provider with credentials configured."""
@@ -33,8 +29,6 @@ def _select_provider() -> str:
         return "gemini"
     if _GPT_IMAGE2_API_KEY and _GPT_IMAGE2_BASE_URL:
         return "gpt-image2"
-    if _MINIMAX_API_KEY:
-        return "minimax"
     return ""
 
 
@@ -93,16 +87,14 @@ def generate_image(
 
     provider = _select_provider()
     if not provider:
-        return "Error: No image generation provider configured. Set GPT_IMAGE2_API_KEY, GEMINI_API_KEY, or MINIMAX_API_KEY."
+        return "Error: No image generation provider configured. Set GPT_IMAGE2_API_KEY or GEMINI_API_KEY."
 
     print(f"Using provider: {provider}")
 
     if provider == "gpt-image2":
         return _generate_gpt_image2(prompt, valid_reference_images, output_file, aspect_ratio)
-    elif provider == "gemini":
-        return _generate_gemini(prompt, valid_reference_images, output_file, aspect_ratio)
     else:
-        return _generate_minimax(prompt, valid_reference_images, output_file, aspect_ratio)
+        return _generate_gemini(prompt, valid_reference_images, output_file, aspect_ratio)
 
 
 def _aspect_ratio_to_size(aspect_ratio: str) -> str:
@@ -234,72 +226,11 @@ def _generate_gemini(
     )
 
 
-def _generate_minimax(
-    prompt: str,
-    reference_images: list[str],
-    output_file: str,
-    aspect_ratio: str,
-) -> str:
-    """Generate image using MiniMax API (legacy fallback)."""
-    request_body: dict = {
-        "model": "image-01",
-        "prompt": prompt,
-        "aspect_ratio": aspect_ratio,
-        "response_format": "base64",
-        "n": 1,
-        "prompt_optimizer": False,
-    }
-
-    if reference_images:
-        subject_refs = []
-        for ref_img in reference_images:
-            mime_type = _get_mime_type(ref_img)
-            with open(ref_img, "rb") as f:
-                image_b64 = base64.b64encode(f.read()).decode("utf-8")
-            subject_refs.append({
-                "type": "character",
-                "image_file": f"data:{mime_type};base64,{image_b64}",
-            })
-        request_body["subject_reference"] = subject_refs
-
-    response = requests.post(
-        f"{_MINIMAX_API_BASE}/v1/image_generation",
-        headers={
-            "Authorization": f"Bearer {_MINIMAX_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json=request_body,
-    )
-    response.raise_for_status()
-    result = response.json()
-
-    # Check MiniMax error code
-    base_resp = result.get("base_resp", {})
-    if base_resp.get("status_code") != 0:
-        raise Exception(
-            f"MiniMax API error (code={base_resp.get('status_code')}): "
-            f"{base_resp.get('status_msg', 'unknown error')}"
-        )
-
-    # Extract base64 image data
-    data = result.get("data", {})
-    image_base64_list = data.get("image_base64", [])
-    if image_base64_list:
-        base64_image = image_base64_list[0]
-        with open(output_file, "wb") as f:
-            f.write(base64.b64decode(base64_image))
-        return f"Successfully generated image to {output_file} (provider: minimax)"
-    else:
-        raise Exception(
-            f"Failed to generate image: no image data in response. "
-            f"Response keys: {list(result.keys())}"
-        )
-
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate images (GPT/Image2 -> Gemini -> MiniMax)")
+    parser = argparse.ArgumentParser(description="Generate images (Gemini -> GPT/Image2)")
     parser.add_argument(
         "--prompt-file",
         required=True,

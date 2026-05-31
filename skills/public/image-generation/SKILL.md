@@ -11,12 +11,10 @@ This skill generates high-quality images using structured prompts and a Python s
 
 1. **Gemini/Doubao** (priority) — OpenAI-compatible images/generations endpoint (e.g. doubao-seedream)
 2. **GPT/Image2** (fallback) — OpenAI-compatible images/generations endpoint
-3. **MiniMax** (legacy) — MiniMax image_generation API
 
 Provider is auto-selected based on environment variables configured in `.env`:
 - `GEMINI_API_KEY` + `GEMINI_BASE_URL` → Gemini/Doubao
 - `GPT_IMAGE2_API_KEY` + `GPT_IMAGE2_BASE_URL` → GPT/Image2
-- `MINIMAX_API_KEY` → MiniMax
 
 ## Core Capabilities
 
