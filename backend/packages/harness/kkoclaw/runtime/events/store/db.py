@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from kkoclaw.persistence.models.run_event import RunEventRow
 from kkoclaw.runtime.events.store.base import RunEventStore
-from kkoclaw.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_user_id
+from kkoclaw.runtime.user_context import _AutoSentinel, get_current_user, resolve_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +33,21 @@ class DbRunEventStore(RunEventStore):
         if isinstance(val, datetime):
             d["created_at"] = val.isoformat()
         d.pop("id", None)
-        # Restore dict content that was JSON-serialized on write
+        # Restore dict/list content that was JSON-serialized on write
         raw = d.get("content", "")
-        if isinstance(raw, str) and d.get("metadata", {}).get("content_is_dict"):
+        meta = d.get("metadata", {})
+        if isinstance(raw, str) and meta.get("content_is_dict"):
             try:
                 d["content"] = json.loads(raw)
             except (json.JSONDecodeError, ValueError):
                 # Content looked like JSON (content_is_dict flag) but failed to parse;
                 # keep the raw string as-is.
                 logger.debug("Failed to deserialize content as JSON for event seq=%s", d.get("seq"))
+        elif isinstance(raw, str) and meta.get("content_is_json"):
+            try:
+                d["content"] = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                logger.debug("Failed to deserialize JSON content for event seq=%s", d.get("seq"))
         return d
 
     def _truncate_trace(self, category: str, content: str | dict, metadata: dict | None) -> tuple[str | dict, dict]:
@@ -85,8 +91,12 @@ class DbRunEventStore(RunEventStore):
         if isinstance(content, dict):
             db_content = json.dumps(content, default=str, ensure_ascii=False)
             metadata = {**(metadata or {}), "content_is_dict": True}
-        else:
+        elif isinstance(content, str):
             db_content = content
+        else:
+            # list 或其他非字符串类型（如 Command 对象）-> JSON 序列化
+            db_content = json.dumps(content, default=str, ensure_ascii=False)
+            metadata = {**(metadata or {}), "content_is_json": True}
         user_id = self._user_id_from_context()
         async with self._sf() as session:
             async with session.begin():
@@ -131,8 +141,12 @@ class DbRunEventStore(RunEventStore):
                     if isinstance(content, dict):
                         db_content = json.dumps(content, default=str, ensure_ascii=False)
                         metadata = {**(metadata or {}), "content_is_dict": True}
-                    else:
+                    elif isinstance(content, str):
                         db_content = content
+                    else:
+                        # list 或其他非字符串类型（如 Command 对象）-> JSON 序列化
+                        db_content = json.dumps(content, default=str, ensure_ascii=False)
+                        metadata = {**(metadata or {}), "content_is_json": True}
                     row = RunEventRow(
                         thread_id=e["thread_id"],
                         run_id=e["run_id"],
@@ -155,7 +169,7 @@ class DbRunEventStore(RunEventStore):
         limit=50,
         before_seq=None,
         after_seq=None,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.list_messages")
         stmt = select(RunEventRow).where(RunEventRow.thread_id == thread_id, RunEventRow.category == "message")
@@ -187,7 +201,7 @@ class DbRunEventStore(RunEventStore):
         *,
         event_types=None,
         limit=500,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.list_events")
         stmt = select(RunEventRow).where(RunEventRow.thread_id == thread_id, RunEventRow.run_id == run_id)
@@ -208,7 +222,7 @@ class DbRunEventStore(RunEventStore):
         limit=50,
         before_seq=None,
         after_seq=None,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.list_messages_by_run")
         stmt = select(RunEventRow).where(
@@ -239,7 +253,7 @@ class DbRunEventStore(RunEventStore):
         self,
         thread_id,
         *,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.count_messages")
         stmt = select(func.count()).select_from(RunEventRow).where(RunEventRow.thread_id == thread_id, RunEventRow.category == "message")
@@ -252,7 +266,7 @@ class DbRunEventStore(RunEventStore):
         self,
         thread_id,
         *,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.delete_by_thread")
         async with self._sf() as session:
@@ -271,7 +285,7 @@ class DbRunEventStore(RunEventStore):
         thread_id,
         run_id,
         *,
-        user_id: str | None | _AutoSentinel = AUTO,
+        user_id: str | None | _AutoSentinel = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="DbRunEventStore.delete_by_run")
         async with self._sf() as session:

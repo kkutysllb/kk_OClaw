@@ -219,7 +219,7 @@ class RunRepository(RunStore):
         stmt = (
             select(RunRow)
             .where(
-                RunRow.status.in_("pending", "running"),
+                RunRow.status.in_(["pending", "running"]),
                 RunRow.created_at <= before_dt,
             )
             .order_by(RunRow.created_at.asc())
