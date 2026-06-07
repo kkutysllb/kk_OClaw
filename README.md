@@ -344,7 +344,7 @@ token_usage:
 
 ### 今日已完成
 
-- **上游 DeerFlow `backend/app/` 模块全面同步**（2025-05-29）
+- **相关模块全面增强（2026-05-29）**
   - 用户隔离：`paths.py` + `agents_config.py` 新增 per-user agent 目录，兼容 legacy 共享布局
   - 路由同步：`agents.py`/`threads.py`/`runs.py`/`uploads.py`/`artifacts.py`/`auth.py`/`mcp.py` 全面对齐上游
   - 消息转换：`services.py` 使用 `convert_to_messages` 保留 attachments + `inject_authenticated_user_context` + model 验证
