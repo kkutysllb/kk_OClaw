@@ -114,6 +114,23 @@ jobs:
       #   TAURI_SIGNING_PRIVATE_KEY  — base64-encoded minisign .key content
       #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the key
       # ════════════════════════════════════════════════════════════════
+      - name: Diagnose signing secrets
+        env:
+          _KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          _PWD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          echo "=== Secret diagnosis ==="
+          echo "TAURI_SIGNING_PRIVATE_KEY length: ${#_KEY} chars"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD length: ${#_PWD} chars"
+          if [ -n "$_KEY" ]; then
+            echo "Key starts with: ${_KEY:0:20}..."
+            echo "Key looks like base64: $(echo "$_KEY" | grep -qE '^[A-Za-z0-9+/=]+$' && echo YES || echo NO)"
+          else
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is EMPTY or not defined!"
+            echo "Check: Settings → Secrets and variables → Actions → Repository secrets"
+            echo "Must have a secret named exactly: TAURI_SIGNING_PRIVATE_KEY"
+          fi
+
       - name: Decode Tauri signing key
         env:
           TAURI_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
