@@ -23,7 +23,7 @@ export function Footer({ className }: FooterProps) {
       </div>
       <div className="text-muted-foreground container mb-8 flex flex-col items-center justify-center text-xs">
         <p>基于 MIT 协议开源</p>
-        <p>&copy; {year} KKOCLAW</p>
+        <p>&copy; {year} OClaw</p>
       </div>
     </footer>
   );

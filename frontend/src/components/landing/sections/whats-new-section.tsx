@@ -113,8 +113,8 @@ export function WhatsNewSection({ className }: { className?: string }) {
   return (
     <Section
       className={cn("", className)}
-      title="KKOCLAW 平台特性"
-      subtitle="KKOCLAW 正从深度研究智能体进化为全栈超级智能体。"
+      title="OClaw 平台特性"
+      subtitle="OClaw 正从深度研究智能体进化为全栈超级智能体。"
     >
       <div className="flex w-full items-center justify-center">
         <MagicBento data={features} />

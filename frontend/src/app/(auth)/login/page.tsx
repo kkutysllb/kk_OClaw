@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
@@ -46,7 +46,7 @@ function validateNextParam(next: string | null): string | null {
   return next;
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
@@ -136,7 +136,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="dark bg-background text-foreground relative flex min-h-screen items-center justify-center overflow-hidden">
       {/* Galaxy WebGL starfield background */}
       <div className="absolute inset-0 z-0 bg-black/50">
         <Galaxy
@@ -174,7 +174,7 @@ export default function LoginPage() {
           >
         <div className="text-center">
           <h1 className="bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-4xl font-bold text-transparent">
-            KKOCLAW
+            OClaw
           </h1>
           <p className="text-muted-foreground mt-2">
             {isLogin ? "登录您的账户" : "创建新账户"}
@@ -183,7 +183,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-2">
           <div className="flex flex-col space-y-1">
-            <label htmlFor="email" className="text-sm font-medium">
+            <label htmlFor="email" className="text-foreground text-sm font-medium">
               邮箱
             </label>
             <Input
@@ -193,11 +193,11 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="请输入邮箱地址"
               required
-              className="border-border/50 focus:border-purple-500/50 transition-colors"
+              className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
             />
           </div>
           <div className="flex flex-col space-y-1">
-            <label htmlFor="password" className="text-sm font-medium">
+            <label htmlFor="password" className="text-foreground text-sm font-medium">
               密码
             </label>
             <Input
@@ -208,7 +208,7 @@ export default function LoginPage() {
               placeholder="请输入密码"
               required
               minLength={isLogin ? 6 : 8}
-              className="border-border/50 focus:border-purple-500/50 transition-colors"
+              className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
             />
           </div>
 
@@ -254,5 +254,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageInner />
+    </Suspense>
   );
 }

@@ -17,6 +17,7 @@ import {
   MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { RefreshButton } from "@/components/workspace/refresh-button";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
@@ -125,6 +126,7 @@ export default function AgentChatPage() {
               <ThreadTitle threadId={threadId} thread={thread} />
             </div>
             <div className="mr-4 flex items-center">
+              <RefreshButton />
               <Tooltip content={t.agents.newChat}>
                 <Button
                   size="sm"

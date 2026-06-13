@@ -1,4 +1,5 @@
 import { buildLoginUrl } from "@/core/auth/types";
+import { isDesktop } from "@/core/config";
 
 /** HTTP methods that the gateway's CSRFMiddleware checks. */
 export type StateChangingMethod = "POST" | "PUT" | "DELETE" | "PATCH";
@@ -77,10 +78,15 @@ export async function fetch(
   const res = await globalThis.fetch(url, {
     ...init,
     headers,
-    credentials: "include",
+    // In desktop production (static dist), no cookies needed (direct gateway).
+    // In desktop dev mode, cookies ARE needed for auth (proxied via Next.js).
+    ...(isDesktop() && typeof window !== "undefined" && window.location.port !== "8659"
+      ? {}
+      : { credentials: "include" as RequestCredentials }),
   });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !isDesktop()) {
+    // Only redirect to login in web mode; desktop runs its own auth flow
     window.location.href = buildLoginUrl(window.location.pathname);
     throw new Error("Unauthorized");
   }

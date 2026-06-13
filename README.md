@@ -29,6 +29,11 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
     - [MCP Server](#mcp-server)
     - [IM 渠道](#im-渠道)
     - [LangSmith 链路追踪](#langsmith-链路追踪)
+- [桌面端](#桌面端)
+  - [桌面端开发环境搭建](#桌面端开发环境搭建)
+  - [桌面端运行命令](#桌面端运行命令)
+  - [桌面端特性](#桌面端特性)
+  - [桌面端自动更新](#桌面端自动更新)
 - [核心特性](#核心特性)
   - [Skills 与 Tools](#skills-与-tools)
   - [Sub-Agents](#sub-agents)
@@ -259,6 +264,84 @@ LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_API_KEY=lsv2_pt_xxxxxxxxxxxxxxxx
 LANGSMITH_PROJECT=xxx
 ```
+
+## 桌面端
+
+除了通过浏览器访问 Web 端，KKOCLAW 还提供了一个基于 **Tauri 2.0** 的跨平台桌面客户端（macOS / Linux / Windows），将前端、后端和 Python 运行时封装在一个原生应用中。
+
+桌面客户端启动时会自动拉起本地后端服务（Gateway + Frontend），用户无需手动执行 `start.sh`。关闭窗口时自动最小化到系统托盘，点击托盘图标即可恢复。
+
+### 桌面端开发环境搭建
+
+桌面端在原有 Web 端依赖的基础上，还需要 Rust 和 Tauri CLI。
+
+```bash
+# 进入 desktop 目录
+./setup.sh         # macOS / Linux
+setup.bat          # Windows
+
+# 或仅检查前置依赖
+./setup.sh --check
+```
+
+`setup.sh` 会自动检查并安装以下依赖：
+
+| 依赖 | 版本要求 | 说明 |
+|------|---------|------|
+| Rust | stable | Tauri 2.0 编译需要 |
+| Tauri CLI | latest | `cargo install tauri-cli` |
+| Python | 3.12+ | 后端运行时 |
+| uv | latest | Python 包管理 |
+| pnpm | latest | 前端包管理 |
+
+> Linux 用户还需要安装 `libwebkit2gtk-4.1-dev`、`libgtk-3-dev`、`libayatana-appindicator3-dev`、`librsvg2-dev` 等系统依赖。
+
+### 桌面端运行命令
+
+```bash
+cd desktop
+
+# 开发模式（热重载，前端运行在 8659 端口）
+pnpm dev
+
+# 构建生产版本
+cargo tauri build
+
+# 仅构建前端（Next.js 静态导出）
+cd ../frontend
+node scripts/desktop-build.mjs
+```
+
+开发模式下，桌面端会连接 `http://localhost:8659` 的前端开发服务器，同时自动启动后端 Gateway（端口 9987）。
+
+### 桌面端特性
+
+| 特性 | 说明 |
+|------|------|
+| 后端自启 | 应用启动时自动拉起 Python 后端，无需手动 `start.sh` |
+| 系统托盘 | 关闭窗口时最小化到托盘，托盘菜单支持查看后端状态、重启后端、退出 |
+| 全局快捷键 | `Cmd/Ctrl + Shift + O` 快速显示/隐藏主窗口 |
+| 原生文件拖拽 | 支持从系统拖拽文件到聊天窗口直接上传 |
+| 中文菜单栏 | macOS 原生菜单栏完全中文化（关于/编辑/视图/窗口/帮助） |
+| 自适应图标 | 跟随系统主题的八角形 O-Claw 图标 |
+
+### 桌面端自动更新
+
+桌面客户端内置了基于 **GitHub Releases** 的自动更新功能：
+
+- 应用启动 5 秒后自动检查新版本
+- 发现新版本时弹出更新对话框，点击「立即更新」自动下载安装
+- 更新包使用 Tauri 签名密钥验证，确保安全性
+
+发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建 4 个平台的安装包并上传到 Release：
+
+```bash
+# 更新 tauri.conf.json 中的 version
+git tag v0.x.0
+git push origin main --tags
+```
+
+用户端会自动收到更新推送。
 
 ## 核心特性
 

@@ -154,7 +154,7 @@ export default function SetupPage() {
   // ── Admin initialization form ──────────────────────────────────────
   if (mode === "init_admin") {
     return (
-      <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden">
+      <div className="dark bg-background text-foreground relative flex min-h-screen items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 bg-black/50">
           <Galaxy
             mouseRepulsion={false}
@@ -188,7 +188,7 @@ export default function SetupPage() {
             >
           <div className="text-center">
             <h1 className="bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-4xl font-bold text-transparent">
-              KKOCLAW
+              OClaw
             </h1>
             <p className="text-muted-foreground mt-2">创建管理员账户</p>
             <p className="text-muted-foreground mt-1 text-xs">
@@ -197,7 +197,7 @@ export default function SetupPage() {
           </div>
           <form onSubmit={handleInitAdmin} className="space-y-2">
             <div className="flex flex-col space-y-1">
-              <label htmlFor="email" className="text-sm font-medium">
+              <label htmlFor="email" className="text-foreground text-sm font-medium">
                 邮箱
               </label>
               <Input
@@ -207,11 +207,11 @@ export default function SetupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="border-border/50 focus:border-purple-500/50 transition-colors"
+                className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
               />
             </div>
             <div className="flex flex-col space-y-1">
-              <label htmlFor="password" className="text-sm font-medium">
+              <label htmlFor="password" className="text-foreground text-sm font-medium">
                 密码
               </label>
               <Input
@@ -222,11 +222,11 @@ export default function SetupPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
                 minLength={8}
-                className="border-border/50 focus:border-purple-500/50 transition-colors"
+                className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
               />
             </div>
             <div className="flex flex-col space-y-1">
-              <label htmlFor="confirmPassword" className="text-sm font-medium">
+              <label htmlFor="confirmPassword" className="text-foreground text-sm font-medium">
                 确认密码
               </label>
               <Input
@@ -237,7 +237,7 @@ export default function SetupPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
-                className="border-border/50 focus:border-purple-500/50 transition-colors"
+                className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
               />
             </div>
             {error && <p className="ms-1 text-sm text-red-400">{error}</p>}
@@ -261,7 +261,7 @@ export default function SetupPage() {
 
   // ── Change-password form (needs_setup after login) ─────────────────
   return (
-    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="dark bg-background text-foreground relative flex min-h-screen items-center justify-center overflow-hidden">
       <div className="absolute inset-0 z-0 bg-black/50">
         <Galaxy
           mouseRepulsion={false}
@@ -295,7 +295,7 @@ export default function SetupPage() {
           >
         <div className="text-center">
           <h1 className="bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-4xl font-bold text-transparent">
-            KKOCLAW
+            OClaw
           </h1>
           <p className="text-muted-foreground mt-2">
             完成管理员账户设置
@@ -311,7 +311,7 @@ export default function SetupPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="border-border/50 focus:border-purple-500/50 transition-colors"
+            className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
           />
           <Input
             type="password"
@@ -319,7 +319,7 @@ export default function SetupPage() {
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
-            className="border-border/50 focus:border-purple-500/50 transition-colors"
+            className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
           />
           <Input
             type="password"
@@ -328,7 +328,7 @@ export default function SetupPage() {
             onChange={(e) => setNewPassword(e.target.value)}
             required
             minLength={8}
-            className="border-border/50 focus:border-purple-500/50 transition-colors"
+            className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
           />
           <Input
             type="password"
@@ -337,7 +337,7 @@ export default function SetupPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             minLength={8}
-            className="border-border/50 focus:border-purple-500/50 transition-colors"
+            className="border-border/50 text-foreground placeholder:text-muted-foreground/80 focus:border-purple-500/50 transition-colors"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="relative group">

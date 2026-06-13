@@ -4,6 +4,11 @@ import { DEFAULT_LOCALE, normalizeLocale, type Locale } from "./locale";
 import { translations } from "./translations";
 
 export async function detectLocaleServer(): Promise<Locale> {
+  // Desktop static export: skip cookies() (incompatible with output: "export")
+  if (process.env.DESKTOP_BUILD === "true" || process.env.DESKTOP_BUILD === "1") {
+    return DEFAULT_LOCALE;
+  }
+
   const cookieStore = await cookies();
   let locale = cookieStore.get("locale")?.value;
   if (locale !== undefined) {

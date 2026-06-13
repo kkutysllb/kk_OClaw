@@ -128,6 +128,12 @@ export interface Translations {
     tokenUsage: string;
   };
 
+  // Toolbar
+  toolbar: {
+    refresh: string;
+    refreshing: string;
+  };
+
   // Agents
   agents: {
     title: string;

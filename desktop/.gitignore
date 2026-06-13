@@ -1,0 +1,26 @@
+# Rust build artifacts
+src-tauri/target/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Signing keys (NEVER commit!)
+.signing/
+*.key
+*.key.pub
+
+# Tauri build output
+dist/

@@ -52,7 +52,7 @@ const CHINESE_DESCRIPTIONS: Record<string, string> = {
   "chart-visualization":
     "将数据智能转化为可视化图表。从 26 种图表类型中自动选择最优方案，支持折线图、柱状图、饼图、雷达图、桑基图、热力图等。",
   "claude-to-kkoclaw":
-    "通过 HTTP API 与 KKOCLAW 平台交互。可发送消息进行深度研究分析、管理对话线程、列出模型/技能/智能体、管理记忆、上传文件等。",
+    "通过 HTTP API 与 OClaw 平台交互。可发送消息进行深度研究分析、管理对话线程、列出模型/技能/智能体、管理记忆、上传文件等。",
   "code-documentation":
     "为代码库、API、库或软件项目生成专业文档。支持 README、API 参考、内联注释、架构文档、变更日志和开发者指南等格式。",
   "consulting-analysis":

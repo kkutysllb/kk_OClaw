@@ -180,6 +180,12 @@ export const zhCN: Translations = {
     tokenUsage: "Token 用量",
   },
 
+  // Toolbar
+  toolbar: {
+    refresh: "刷新",
+    refreshing: "刷新中…",
+  },
+
   // Agents
   agents: {
     title: "智能体",

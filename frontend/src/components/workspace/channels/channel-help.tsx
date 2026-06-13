@@ -40,7 +40,7 @@ const GUIDE_CONTENT: Record<string, {
   links: { label: string; url: string }[];
 }> = {
   dingtalk: {
-    intro: "钉钉（DingTalk）是阿里巴巴集团打造的企业级智能移动办公平台。配置后用户可通过钉钉机器人或群聊与 KKOCLAW 交互。",
+    intro: "钉钉（DingTalk）是阿里巴巴集团打造的企业级智能移动办公平台。配置后用户可通过钉钉机器人或群聊与 OClaw 交互。",
     steps: [
       "登录钉钉开放平台（open.dingtalk.com），创建一个企业内部应用。",
       "在「凭证与基础信息」页面获取 Client ID（AppKey）和 Client Secret（AppSecret）。",
@@ -55,7 +55,7 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   discord: {
-    intro: "Discord 是全球广受欢迎的社区通讯平台。配置后可通过 Discord Bot 与 KKOCLAW 在频道或私信中对话。",
+    intro: "Discord 是全球广受欢迎的社区通讯平台。配置后可通过 Discord Bot 与 OClaw 在频道或私信中对话。",
     steps: [
       "访问 Discord Developer Portal（discord.com/developers/applications），创建一个新应用。",
       "在「Bot」页面点击「Add Bot」创建机器人，获取 Bot Token。",
@@ -71,7 +71,7 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   feishu: {
-    intro: "飞书（Feishu/Lark）是字节跳动旗下企业协作平台，支持流式响应。配置后用户可在飞书群聊或机器人中与 KKOCLAW 对话。",
+    intro: "飞书（Feishu/Lark）是字节跳动旗下企业协作平台，支持流式响应。配置后用户可在飞书群聊或机器人中与 OClaw 对话。",
     steps: [
       "登录飞书开放平台（open.feishu.cn），创建一个企业自建应用。",
       "在「凭证与基础信息」页面获取 App ID 和 App Secret。",
@@ -87,7 +87,7 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   slack: {
-    intro: "Slack 是全球流行的团队沟通工具。配置后可通过 Slack Bot 与 KKOCLAW 在频道或私信中对话。",
+    intro: "Slack 是全球流行的团队沟通工具。配置后可通过 Slack Bot 与 OClaw 在频道或私信中对话。",
     steps: [
       "访问 Slack API 控制台（api.slack.com/apps），创建一个新应用。",
       "选择「From scratch」，输入应用名称并选择工作区。",
@@ -104,7 +104,7 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   telegram: {
-    intro: "Telegram 是注重隐私与速度的即时通讯平台。配置后用户可通过 Telegram Bot 与 KKOCLAW 对话。",
+    intro: "Telegram 是注重隐私与速度的即时通讯平台。配置后用户可通过 Telegram Bot 与 OClaw 对话。",
     steps: [
       "在 Telegram 中搜索 @BotFather 并发送 /newbot 命令创建机器人。",
       "按提示设置机器人名称（显示名）和用户名（必须以 bot 结尾）。",
@@ -120,13 +120,13 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   wechat: {
-    intro: "微信（WeChat）是中国最广泛使用的即时通讯平台。配置后用户可通过微信公众号或企业微信与 KKOCLAW 交互。",
+    intro: "微信（WeChat）是中国最广泛使用的即时通讯平台。配置后用户可通过微信公众号或企业微信与 OClaw 交互。",
     steps: [
       "登录微信公众平台（mp.weixin.qq.com），注册并认证一个公众号（服务号或订阅号）。",
       "在「开发 → 基本配置」页面获取 AppID 和 AppSecret，并配置服务器 URL 和 Token。",
       "在「设置与开发 → 接口权限」中申请所需接口权限。",
       "将公众号的 Token 填入上方凭证字段。",
-      "配置服务器地址（URL）指向你的 KKOCLAW 实例。",
+      "配置服务器地址（URL）指向你的 OClaw 实例。",
       "启用渠道并保存配置，重启服务后即可生效。",
     ],
     links: [
@@ -135,7 +135,7 @@ const GUIDE_CONTENT: Record<string, {
     ],
   },
   wecom: {
-    intro: "企业微信（WeCom）是腾讯推出的专业企业通讯与办公平台。配置后用户可通过企业微信机器人或应用与 KKOCLAW 交互，支持流式响应。",
+    intro: "企业微信（WeCom）是腾讯推出的专业企业通讯与办公平台。配置后用户可通过企业微信机器人或应用与 OClaw 交互，支持流式响应。",
     steps: [
       "登录企业微信管理后台（work.weixin.qq.com），进入「应用管理」页面。",
       "创建一个自建应用或在已有应用中配置机器人。",

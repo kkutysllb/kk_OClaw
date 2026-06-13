@@ -38,11 +38,11 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           <div className="flex items-center justify-between gap-2">
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
               <Link href="/" className="ml-2 font-bold bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent text-lg">
-                KKOCLAW
+                OClaw
               </Link>
             ) : (
               <div className="ml-2 cursor-default font-bold bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent text-lg">
-                KKOCLAW
+                OClaw
               </div>
             )}
             <SidebarTrigger />

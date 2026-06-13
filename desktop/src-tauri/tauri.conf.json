@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OClaw",
+  "version": "0.1.0",
+  "identifier": "com.oclaw.desktop",
+  "build": {
+    "frontendDist": "../../frontend/out",
+    "devUrl": "http://localhost:8659",
+    "beforeDevCommand": "cd ../frontend && KKOCLAW_INTERNAL_GATEWAY_BASE_URL=http://127.0.0.1:9987 pnpm dev --port 8659",
+    "beforeBuildCommand": "cd ../frontend && node scripts/desktop-build.mjs"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "OClaw",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "OClaw Desktop",
+    "longDescription": "OClaw - AI-powered agent orchestration platform for autonomous research, coding, and content creation. This is the desktop client that runs the full stack locally.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk3RkI3MEQ4REZERDZFQTQKUldTa2J0M2YySEQ3bC9oYnBKVGJQd1EvWXN6aEdwRUZWV3JMMnVYLzdNUG9raHZybTEvWEhFQ2YK",
+      "endpoints": [
+        "https://github.com/kkutysllb/kk_OClaw/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

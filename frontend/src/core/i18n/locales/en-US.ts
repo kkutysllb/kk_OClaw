@@ -186,6 +186,12 @@ export const enUS: Translations = {
     tokenUsage: "Token Usage",
   },
 
+  // Toolbar
+  toolbar: {
+    refresh: "Refresh",
+    refreshing: "Refreshing…",
+  },
+
   // Agents
   agents: {
     title: "Agents",
