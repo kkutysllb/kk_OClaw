@@ -79,15 +79,24 @@ jobs:
         run: uv python install 3.12
 
       - name: Install backend dependencies
+        # Pin to Python 3.12 explicitly. Without this, `uv sync` picks the
+        # newest Python satisfying `requires-python >= 3.12` (currently 3.14
+        # on CI runners). PyInstaller 6.x has incomplete support for 3.14,
+        # causing collect_all("uvicorn") etc. to silently fail and ship a
+        # bundle missing all ASGI packages.
+        env:
+          UV_PYTHON: "3.12"
         run: |
-          uv sync
-          uv run pip install pyinstaller
+          uv sync --python 3.12
+          uv run --python 3.12 pip install pyinstaller
         working-directory: backend
 
       - name: Build Python backend (macOS/Linux)
         if: matrix.platform != 'windows-latest'
+        env:
+          UV_PYTHON: "3.12"
         run: |
-          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          uv run --python 3.12 pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
           mkdir -p ../desktop/src-tauri/resources/gateway
           cp -R dist/oclaw-gateway/* ../desktop/src-tauri/resources/gateway/
         working-directory: backend
@@ -95,8 +104,10 @@ jobs:
       - name: Build Python backend (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
+        env:
+          UV_PYTHON: "3.12"
         run: |
-          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          uv run --python 3.12 pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
           New-Item -ItemType Directory -Force -Path ../desktop/src-tauri/resources/gateway
           Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop/src-tauri/resources/gateway/ -Recurse -Force
         working-directory: backend
