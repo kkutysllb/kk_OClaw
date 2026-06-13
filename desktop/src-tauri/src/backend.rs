@@ -236,7 +236,10 @@ impl BackendManager {
             .resource_dir()
             .map_err(|e| format!("Failed to resolve resource directory: {}", e))?;
 
-        let embedded_config = resource_dir.join("gateway").join("_internal").join("config.embedded.yaml");
+        // Resolve the bundled gateway directory (handles Tauri 2.0 path nesting)
+        let gateway_dir = resolve_bundled_gateway_dir(&resource_dir);
+
+        let embedded_config = gateway_dir.join("_internal").join("config.embedded.yaml");
         let target_config = app_data.join("config.yaml");
 
         if embedded_config.exists() {
@@ -251,7 +254,7 @@ impl BackendManager {
         }
 
         // Copy bundled skills
-        let bundled_skills = resource_dir.join("gateway").join("_internal").join("skills").join("public");
+        let bundled_skills = gateway_dir.join("_internal").join("skills").join("public");
         if bundled_skills.is_dir() {
             let target_skills = app_data.join("skills").join("public");
             copy_dir_recursive(&bundled_skills, &target_skills)
@@ -284,11 +287,18 @@ impl BackendManager {
             .resource_dir()
             .map_err(|e| format!("Failed to resolve resource directory: {}", e))?;
 
-        // Try bundled gateway executable (production mode)
+        // Try bundled gateway executable (production mode).
+        //
+        // Tauri 2.0 preserves the relative path from the `resources` glob in
+        // tauri.conf.json, so a config of `"resources/gateway/**/*"` lands at
+        // `$RESOURCE_DIR/resources/gateway/`. resolve_bundled_gateway_dir()
+        // handles both layouts so we stay robust against config changes.
+        let gateway_dir = resolve_bundled_gateway_dir(&resource_dir);
+
         #[cfg(target_os = "windows")]
-        let gateway_exe = resource_dir.join("gateway").join("oclaw-gateway.exe");
+        let gateway_exe = gateway_dir.join("oclaw-gateway.exe");
         #[cfg(not(target_os = "windows"))]
-        let gateway_exe = resource_dir.join("gateway").join("oclaw-gateway");
+        let gateway_exe = gateway_dir.join("oclaw-gateway");
 
         if gateway_exe.is_file() {
             return Ok((
@@ -599,6 +609,26 @@ mod copy_dir_tests {
         assert_eq!(fs::read_to_string(dst.path().join("target").join("a.txt")).unwrap(), "hello");
         assert_eq!(fs::read_to_string(dst.path().join("target").join("subdir").join("b.txt")).unwrap(), "world");
     }
+}
+
+/// Resolve the bundled gateway directory inside the app resources.
+///
+/// Tauri 2.0 preserves the relative path prefix from the `resources` glob in
+/// tauri.conf.json. With `"resources/gateway/**/*"` the files land at
+/// `$RESOURCE_DIR/resources/gateway/`; without the prefix they'd be at
+/// `$RESOURCE_DIR/gateway/`. We check both so the code survives config edits.
+fn resolve_bundled_gateway_dir(resource_dir: &PathBuf) -> PathBuf {
+    let candidates = [
+        resource_dir.join("gateway"),
+        resource_dir.join("resources").join("gateway"),
+    ];
+    for c in &candidates {
+        if c.is_dir() {
+            return c.clone();
+        }
+    }
+    // Fall back to the legacy path so error messages remain intuitive.
+    candidates[0].clone()
 }
 
 /// Simple `which` implementation to find executables on PATH.

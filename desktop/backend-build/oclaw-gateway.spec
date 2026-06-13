@@ -30,6 +30,16 @@ SKILLS_DIR = REPO_ROOT / "skills"
 # LangChain/LangGraph ecosystem relies heavily on dynamic imports and
 # package-relative data files. collect_all() grabs everything.
 COLLECT_ALL_PACKAGES = [
+    # ASGI server — must be collected in full because gateway_main.py
+    # imports uvicorn lazily inside main(), which PyInstaller's static
+    # analyser misses. Without this, the frozen executable aborts with
+    # "ModuleNotFoundError: No module named 'uvicorn'" before it ever
+    # starts listening, causing the desktop splash screen to hang until
+    # the 120 s health-check timeout.
+    "uvicorn",
+    "starlette",
+    "fastapi",
+    "pydantic",
     # LangChain core & providers
     "langchain",
     "langchain_core",
