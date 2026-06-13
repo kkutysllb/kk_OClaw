@@ -116,6 +116,34 @@ impl BackendManager {
         ));
         self.status = BackendStatus::Starting;
 
+        // Redirect stdout/stderr to a log file instead of piping.
+        //
+        // Using Stdio::piped() without draining the pipe deadlocks the child
+        // once the OS pipe buffer (64 KB on macOS/Linux) fills up. The
+        // PyInstaller-bundled gateway emits thousands of lines during Python
+        // initialisation (LangChain/LangGraph imports, uvicorn startup, etc.),
+        // so it silently blocks on write() and never begins listening — the
+        // health check then loops until the 120 s timeout, leaving the UI
+        // stuck on "Starting OClaw / Initializing backend services".
+        //
+        // Redirecting to a file avoids the deadlock entirely and gives users
+        // a persistent log under <app_data>/logs/gateway.log.
+        let log_dir = app_data.join("logs");
+        fs::create_dir_all(&log_dir)
+            .map_err(|e| format!("Failed to create logs dir: {}", e))?;
+        let gateway_log_path = log_dir.join("gateway.log");
+        let gateway_log = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&gateway_log_path)
+            .map_err(|e| format!("Failed to open gateway log file: {}", e))?;
+        let gateway_err_log = gateway_log
+            .try_clone()
+            .map_err(|e| format!("Failed to clone gateway log handle: {}", e))?;
+
+        self.append_log(format!("Gateway output → {}", gateway_log_path.display()));
+
         // Build environment for the child process
         let mut command = std::process::Command::new(&cmd);
         command
@@ -126,8 +154,8 @@ impl BackendManager {
             .env("KKOCLAW_CONFIG_PATH", app_data.join("config.yaml"))
             .env("GATEWAY_PORT", self.port.to_string())
             .env("GATEWAY_HOST", "127.0.0.1")
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .stdout(std::process::Stdio::from(gateway_log))
+            .stderr(std::process::Stdio::from(gateway_err_log));
 
         // Inject .env variables
         for (key, value) in &env_vars {
