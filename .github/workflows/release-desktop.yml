@@ -78,39 +78,43 @@ jobs:
       - name: Install Python
         run: uv python install 3.12
 
-      - name: Install backend dependencies
-        # Pin to Python 3.12 explicitly. Without this, `uv sync` picks the
-        # newest Python satisfying `requires-python >= 3.12` (currently 3.14
-        # on CI runners). PyInstaller 6.x has incomplete support for 3.14,
-        # causing collect_all("uvicorn") etc. to silently fail and ship a
-        # bundle missing all ASGI packages.
-        env:
-          UV_PYTHON: "3.12"
-        run: |
-          uv sync --python 3.12
-          uv run --python 3.12 pip install pyinstaller
+      - name: Create Python 3.12 venv and install backend dependencies
+        # IMPORTANT: We must force-recreate the venv with Python 3.12.
+        # pyproject.toml declares requires-python >= 3.12 (no upper bound).
+        # uv's cache can preserve a .venv created with Python 3.14 (the latest
+        # version satisfying the constraint). When .venv already exists,
+        # `uv sync --python 3.12` silently reuses it instead of rebuilding.
+        # PyInstaller 6.x has incomplete support for Python 3.14, causing
+        # collect_all() to silently return empty results.
         working-directory: backend
+        run: |
+          rm -rf .venv
+          uv venv --python 3.12
+          uv sync
+          uv pip install pyinstaller
+          echo "=== Verify Python version ==="
+          uv run python --version
+          echo "=== Verify uvicorn is importable ==="
+          uv run python -c "import uvicorn; print('uvicorn', uvicorn.__version__)"
 
       - name: Build Python backend (macOS/Linux)
         if: matrix.platform != 'windows-latest'
-        env:
-          UV_PYTHON: "3.12"
+        working-directory: backend
         run: |
-          uv run --python 3.12 pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          uv run python --version
+          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
           mkdir -p ../desktop/src-tauri/resources/gateway
           cp -R dist/oclaw-gateway/* ../desktop/src-tauri/resources/gateway/
-        working-directory: backend
 
       - name: Build Python backend (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
-        env:
-          UV_PYTHON: "3.12"
+        working-directory: backend
         run: |
-          uv run --python 3.12 pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          uv run python --version
+          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
           New-Item -ItemType Directory -Force -Path ../desktop/src-tauri/resources/gateway
           Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop/src-tauri/resources/gateway/ -Recurse -Force
-        working-directory: backend
 
       # ════════════════════════════════════════════════════════════════
       # Verify the PyInstaller bundle contains all critical ASGI/server
