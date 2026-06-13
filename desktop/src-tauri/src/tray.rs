@@ -28,12 +28,12 @@ pub fn create_tray<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::E
                     }
                 }
                 "restart" => {
+                    let app_handle = app.clone();
                     let state = app.state::<AppState>();
-                    let project_root = std::path::PathBuf::from(".");
                     let backend = std::sync::Arc::clone(&state.backend);
                     tauri::async_runtime::spawn(async move {
                         let mut mgr = backend.lock().await;
-                        if let Err(e) = mgr.restart(&project_root).await {
+                        if let Err(e) = mgr.restart(&app_handle).await {
                             log::error!("Backend restart failed: {}", e);
                         }
                     });

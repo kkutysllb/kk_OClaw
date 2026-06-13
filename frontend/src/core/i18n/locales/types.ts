@@ -424,6 +424,7 @@ export interface Translations {
       skills: string;
       notification: string;
       tokenUsage: string;
+      config: string;
     };
     memory: {
       title: string;

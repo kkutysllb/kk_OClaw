@@ -37,7 +37,7 @@ describe("desktop integration — web mode (no Tauri)", () => {
   });
 
   test("startBackend returns null in web mode", async () => {
-    const result = await startBackend("/some/path");
+    const result = await startBackend();
     expect(result).toBeNull();
     expect(mockInvoke).not.toHaveBeenCalled();
   });
@@ -89,14 +89,12 @@ describe("desktop integration — Tauri mode", () => {
     warnSpy.mockRestore();
   });
 
-  test("startBackend passes projectRoot to invoke", async () => {
+  test("startBackend calls invoke without parameters", async () => {
     const mockStatus = { status: "running", port: 9987 };
     mockInvoke.mockResolvedValueOnce(mockStatus);
 
-    await startBackend("/custom/root");
-    expect(mockInvoke).toHaveBeenCalledWith("start_backend", {
-      projectRoot: "/custom/root",
-    });
+    await startBackend();
+    expect(mockInvoke).toHaveBeenCalledWith("start_backend");
   });
 
   test("stopBackend calls correct command", async () => {
@@ -108,9 +106,7 @@ describe("desktop integration — Tauri mode", () => {
   test("restartBackend calls correct command", async () => {
     mockInvoke.mockResolvedValueOnce({ status: "running", port: 9987 });
     await restartBackend();
-    expect(mockInvoke).toHaveBeenCalledWith("restart_backend", {
-      projectRoot: undefined,
-    });
+    expect(mockInvoke).toHaveBeenCalledWith("restart_backend");
   });
 
   test("getBackendLogs returns log array", async () => {

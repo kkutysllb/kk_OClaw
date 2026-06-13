@@ -495,6 +495,7 @@ export const enUS: Translations = {
       skills: "Skills",
       notification: "Notification",
       tokenUsage: "Token Usage",
+      config: "System Config",
     },
     memory: {
       title: "Memory",

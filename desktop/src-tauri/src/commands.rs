@@ -1,8 +1,7 @@
 use crate::AppState;
 use crate::backend::BackendStatus;
 use serde::Serialize;
-use std::path::PathBuf;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 /// Response payload for backend status queries.
 #[derive(Serialize)]
@@ -43,15 +42,11 @@ impl BackendStatusResponse {
 /// Start the embedded backend Gateway process.
 #[tauri::command]
 pub async fn start_backend(
+    app: AppHandle,
     state: State<'_, AppState>,
-    project_root: Option<String>,
 ) -> Result<BackendStatusResponse, String> {
-    let root = project_root
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-
     let mut mgr = state.backend.lock().await;
-    mgr.start(&root).await?;
+    mgr.start(&app).await?;
 
     Ok(BackendStatusResponse::from_backend(&mgr))
 }
@@ -82,15 +77,11 @@ pub async fn get_backend_logs(state: State<'_, AppState>) -> Result<Vec<String>,
 /// Restart the backend process.
 #[tauri::command]
 pub async fn restart_backend(
+    app: AppHandle,
     state: State<'_, AppState>,
-    project_root: Option<String>,
 ) -> Result<BackendStatusResponse, String> {
-    let root = project_root
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
-
     let mut mgr = state.backend.lock().await;
-    mgr.restart(&root).await?;
+    mgr.restart(&app).await?;
 
     Ok(BackendStatusResponse::from_backend(&mgr))
 }

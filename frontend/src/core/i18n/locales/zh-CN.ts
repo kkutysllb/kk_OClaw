@@ -480,6 +480,7 @@ export const zhCN: Translations = {
       skills: "技能",
       notification: "通知",
       tokenUsage: "Token 用量",
+      config: "系统配置",
     },
     memory: {
       title: "记忆",

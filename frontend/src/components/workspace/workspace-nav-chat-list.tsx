@@ -1,6 +1,6 @@
 "use client";
 
-import { BotIcon, ClockIcon, CoinsIcon, CpuIcon, MessageCircleIcon, MessagesSquare, SparklesIcon, TerminalIcon } from "lucide-react";
+import { BotIcon, ClockIcon, CoinsIcon, MessageCircleIcon, MessagesSquare, SparklesIcon, TerminalIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -34,17 +34,6 @@ export function WorkspaceNavChatList() {
             <Link className="text-muted-foreground" href="/workspace/agents">
               <BotIcon className="text-violet-500" />
               <span>{t.sidebar.agents}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname.startsWith("/workspace/models")}
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/models">
-              <CpuIcon className="text-emerald-500" />
-              <span>{t.sidebar.models}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

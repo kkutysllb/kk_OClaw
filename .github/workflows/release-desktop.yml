@@ -45,7 +45,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -58,8 +58,54 @@ jobs:
           workspaces: "./desktop/src-tauri -> target"
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
+
+      - name: Install desktop dependencies (Tauri CLI)
+        run: pnpm install --frozen-lockfile
+        working-directory: desktop
+
+      # ════════════════════════════════════════════════════════════════
+      # Build the Python backend into a standalone executable via PyInstaller.
+      # The output (dist/oclaw-gateway/) is copied into the Tauri resources
+      # directory so it gets bundled into the installer.
+      # ════════════════════════════════════════════════════════════════
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install backend dependencies
+        run: |
+          uv sync
+          uv run pip install pyinstaller
+        working-directory: backend
+
+      - name: Build Python backend (macOS/Linux)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          mkdir -p ../desktop/src-tauri/resources/gateway
+          cp -R dist/oclaw-gateway/* ../desktop/src-tauri/resources/gateway/
+        working-directory: backend
+
+      - name: Build Python backend (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
+          New-Item -ItemType Directory -Force -Path ../desktop/src-tauri/resources/gateway
+          Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop/src-tauri/resources/gateway/ -Recurse -Force
+        working-directory: backend
+
+      - name: Verify gateway binary exists
+        shell: bash
+        run: |
+          ls -la desktop/src-tauri/resources/gateway/oclaw-gateway* || true
+          test -f desktop/src-tauri/resources/gateway/oclaw-gateway || test -f desktop/src-tauri/resources/gateway/oclaw-gateway.exe
 
       # ════════════════════════════════════════════════════════════════
       # Build + sign the Tauri app.

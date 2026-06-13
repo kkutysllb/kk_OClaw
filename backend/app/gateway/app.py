@@ -18,6 +18,7 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     channels,
+    config as config_router,
     crons,
     feedback,
     mcp,
@@ -456,6 +457,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
     # Include routers
     # Models API is mounted at /api/models
     app.include_router(models.router)
+
+    # Generic Config API is mounted at /api/config
+    app.include_router(config_router.router)
 
     # MCP API is mounted at /api/mcp
     app.include_router(mcp.router)

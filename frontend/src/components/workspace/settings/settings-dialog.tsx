@@ -5,6 +5,7 @@ import {
   BrainIcon,
   PaletteIcon,
   SettingsIcon,
+  SlidersHorizontalIcon,
   UserIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AccountSettingsPage } from "@/components/workspace/settings/account-settings-page";
 import { AppearanceSettingsPage } from "@/components/workspace/settings/appearance-settings-page";
+import { ConfigSettingsPage } from "@/components/workspace/settings/config-settings-page";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
 import { ToolSettingsPage } from "@/components/workspace/settings/tool-settings-page";
@@ -28,6 +30,7 @@ import { cn } from "@/lib/utils";
 type SettingsSection =
   | "account"
   | "appearance"
+  | "config"
   | "memory"
   | "tools"
   | "notification";
@@ -68,6 +71,12 @@ const SECTION_COLORS: Record<string, { iconActive: string; iconInactive: string;
     bar: "from-rose-400 to-pink-500",
     bg: "bg-rose-500/10",
   },
+  config: {
+    iconActive: "text-cyan-400",
+    iconInactive: "text-cyan-500",
+    bar: "from-cyan-400 to-blue-500",
+    bg: "bg-cyan-500/10",
+  },
 };
 
 export function SettingsDialog(props: SettingsDialogProps) {
@@ -107,6 +116,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BrainIcon,
       },
       { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
+      { id: "config", label: t.settings.sections.config, icon: SlidersHorizontalIcon },
     ],
     [
       t.settings.sections.account,
@@ -114,6 +124,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.memory,
       t.settings.sections.tools,
       t.settings.sections.notification,
+      t.settings.sections.config,
     ],
   );
   return (
@@ -184,6 +195,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "tools" && <ToolSettingsPage />}
               {activeSection === "notification" && <NotificationSettingsPage />}
+              {activeSection === "config" && <ConfigSettingsPage />}
             </div>
           </ScrollArea>
         </div>

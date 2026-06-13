@@ -45,12 +45,11 @@ pub fn run() {
             // Auto-start the backend on launch
             let _state = app.state::<AppState>();
             let handle = app.handle().clone();
-            let project_root = find_project_root();
 
             tauri::async_runtime::spawn(async move {
                 let state_inner = handle.state::<AppState>();
                 let mut mgr = state_inner.backend.lock().await;
-                if let Err(e) = mgr.start(&project_root).await {
+                if let Err(e) = mgr.start(&handle).await {
                     log::error!("Failed to auto-start backend: {}", e);
                 }
             });
@@ -103,37 +102,4 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-/// Walk up from the executable's directory to find the project root
-/// (the directory containing `.env` and `backend/`).
-fn find_project_root() -> std::path::PathBuf {
-    // In development, use the workspace root (3 levels up from desktop/src-tauri/)
-    let exe_dir = std::env::current_exe().unwrap_or_default();
-    let mut dir = exe_dir.parent();
-
-    // Try walking up to find a directory with backend/ and .env
-    while let Some(d) = dir {
-        if d.join("backend").is_dir() && d.join(".env").is_file() {
-            return d.to_path_buf();
-        }
-        dir = d.parent();
-    }
-
-    // Fallback: try current working directory
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut d = cwd.as_path();
-        loop {
-            if d.join("backend").is_dir() && d.join(".env").is_file() {
-                return d.to_path_buf();
-            }
-            match d.parent() {
-                Some(p) => d = p,
-                None => break,
-            }
-        }
-    }
-
-    // Ultimate fallback
-    std::path::PathBuf::from(".")
 }

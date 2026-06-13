@@ -31,12 +31,10 @@ export async function getBackendStatus(): Promise<BackendStatus | null> {
 }
 
 /** Start the backend process. */
-export async function startBackend(
-  projectRoot?: string,
-): Promise<BackendStatus | null> {
+export async function startBackend(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("start_backend", { projectRoot });
+    return await invoke<BackendStatus>("start_backend");
   } catch (e) {
     console.warn("[desktop] startBackend failed:", e);
     return null;
@@ -55,12 +53,10 @@ export async function stopBackend(): Promise<BackendStatus | null> {
 }
 
 /** Restart the backend process. */
-export async function restartBackend(
-  projectRoot?: string,
-): Promise<BackendStatus | null> {
+export async function restartBackend(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("restart_backend", { projectRoot });
+    return await invoke<BackendStatus>("restart_backend");
   } catch (e) {
     console.warn("[desktop] restartBackend failed:", e);
     return null;

@@ -267,11 +267,22 @@ LANGSMITH_PROJECT=xxx
 
 ## 桌面端
 
-除了通过浏览器访问 Web 端，KKOCLAW 还提供了一个基于 **Tauri 2.0** 的跨平台桌面客户端（macOS / Linux / Windows），将前端、后端和 Python 运行时封装在一个原生应用中。
+KKOCLAW 提供了一个基于 **Tauri 2.0** 的跨平台桌面客户端（macOS / Linux / Windows）。
 
-桌面客户端启动时会自动拉起本地后端服务（Gateway + Frontend），用户无需手动执行 `start.sh`。关闭窗口时自动最小化到系统托盘，点击托盘图标即可恢复。
+### 两种使用方式
 
-### 桌面端开发环境搭建
+| 方式 | 适用人群 | 说明 |
+|------|---------|------|
+| **下载安装包**（推荐） | 普通用户 | 从 [Releases](https://github.com/kkutysllb/kk_OClaw/releases) 下载安装包，开箱即用，无需安装 Python / uv / Node.js 等依赖 |
+| **源码编译** | 开发者 | 克隆仓库后在本地编译运行，适用于二次开发和调试 |
+
+**下载安装包**方式下，Python 后端（Gateway + 所有依赖）通过 PyInstaller 打包为独立可执行文件，嵌入安装包中。用户下载安装即可使用，Docker 仅在使用代码沙箱功能时可选安装。
+
+桌面客户端启动时会自动拉起嵌入式后端服务（Gateway），关闭窗口时自动最小化到系统托盘，点击托盘图标即可恢复。
+
+### 桌面端开发环境搭建（源码编译）
+
+> 以下内容仅适用于需要从源码编译的开发者。普通用户请直接下载安装包。
 
 桌面端在原有 Web 端依赖的基础上，还需要 Rust 和 Tauri CLI。
 
@@ -318,7 +329,8 @@ node scripts/desktop-build.mjs
 
 | 特性 | 说明 |
 |------|------|
-| 后端自启 | 应用启动时自动拉起 Python 后端，无需手动 `start.sh` |
+| 嵌入式后端 | Python 后端通过 PyInstaller 打包嵌入，开箱即用无需外部依赖 |
+| 后端自启 | 应用启动时自动拉起嵌入式 Gateway，无需手动 `start.sh` |
 | 系统托盘 | 关闭窗口时最小化到托盘，托盘菜单支持查看后端状态、重启后端、退出 |
 | 全局快捷键 | `Cmd/Ctrl + Shift + O` 快速显示/隐藏主窗口 |
 | 原生文件拖拽 | 支持从系统拖拽文件到聊天窗口直接上传 |
@@ -333,7 +345,7 @@ node scripts/desktop-build.mjs
 - 发现新版本时弹出更新对话框，点击「立即更新」自动下载安装
 - 更新包使用 Tauri 签名密钥验证，确保安全性
 
-发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建 4 个平台的安装包并上传到 Release：
+发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建安装包。CI 会先通过 PyInstaller 打包 Python 后端，再编译 Tauri 应用，生成 macOS (ARM/x86)、Linux、Windows 四个平台的安装包并上传到 Release：
 
 ```bash
 # 更新 tauri.conf.json 中的 version
@@ -427,6 +439,14 @@ token_usage:
 
 ### 今日已完成
 
+- **配置面板与模型管理重构（2026-06-13）**
+  - 新增统一配置面板：`config-settings-page.tsx` 可视化编辑 `config.yaml` 所有顶层配置项，替代手动编辑 YAML
+  - 后端新增通用配置 CRUD API：`routers/config.py` 提供 `GET/PUT /api/config`（全量）和 `GET/PUT /api/config/{section}`（分区段）接口，敏感字段（api_key/secret/token）读取时自动脱敏
+  - 模型管理整合到配置面板：删除独立的模型管理页面，模型列表 CRUD 统一在配置面板的「模型」标签页内完成
+  - 10 个分区表单组件：日志级别、Token 用量、Sandbox、标题生成、摘要压缩、记忆、数据库、运行事件、定时任务、文件上传，均支持独立保存并显示后端返回的具体错误信息
+  - YAML 原始编辑器：支持直接编辑 `config.yaml` 原始内容，适合高级用户批量修改
+  - **统一「应用并重启」按钮**：配置保存后点击按钮即可重启后端使配置生效，桌面端通过 Tauri IPC `restart_backend` 管理，Web 端通过 `POST /api/config/restart`（detached watcher + `os._exit(0)` 自重启）+ 健康轮询实现
+  - **修复表单保存错误提示**：所有表单 catch 块改为显示 `e.message` 而非通用的「保存失败」，方便定位问题
 - **相关模块全面增强（2026-05-29）**
   - 用户隔离：`paths.py` + `agents_config.py` 新增 per-user agent 目录，兼容 legacy 共享布局
   - 路由同步：`agents.py`/`threads.py`/`runs.py`/`uploads.py`/`artifacts.py`/`auth.py`/`mcp.py` 全面对齐上游
