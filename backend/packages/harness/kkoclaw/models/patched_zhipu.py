@@ -36,12 +36,47 @@ from langchain_core.language_models import LanguageModelInput
 from langchain_openai import ChatOpenAI
 
 
+def _strip_non_text_content(payload: dict) -> None:
+    """Strip non-``text`` content blocks from all messages in *payload*.
+
+    The Zhipu GLM API only accepts ``messages.content.type = 'text'``.
+    Sending ``image_url`` (or any other non-text type) triggers error 1210::
+
+        messages.content.type 参数非法，取值范围 ['text']
+
+    This helper mutates *payload* **in-place**.
+    """
+    for msg in payload.get("messages", []):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        stripped = [
+            block
+            for block in content
+            if not (isinstance(block, dict) and block.get("type") != "text")
+        ]
+        if stripped:
+            msg["content"] = stripped
+        else:
+            # Every block was non-text (e.g. only image_url) — fall back to
+            # a plain-text placeholder so the message is still valid.
+            msg["content"] = [
+                {
+                    "type": "text",
+                    "text": "[Image content omitted — GLM API does not support image input]",
+                }
+            ]
+
+
 class PatchedChatZhipu(ChatOpenAI):
     """ChatOpenAI with Zhipu GLM API compatibility fixes.
 
-    Strips ``stream_options`` from the request payload to avoid error 1210.
-    The Zhipu API returns token usage in the final streaming chunk by default,
-    so usage tracking still works without ``stream_options``.
+    Strips ``stream_options`` and ``max_completion_tokens`` from the request
+    payload to avoid error 1210.  Also strips ``image_url`` (and any other
+    non-text content types) because the GLM API only accepts
+    ``messages.content.type = 'text'``.
     """
 
     def _get_request_payload(
@@ -75,5 +110,10 @@ class PatchedChatZhipu(ChatOpenAI):
         # in _get_request_payload, which the Zhipu API rejects with 1210.
         if "max_completion_tokens" in payload:
             payload["max_tokens"] = payload.pop("max_completion_tokens")
+
+        # Zhipu GLM only accepts content.type='text'.  Sending image_url
+        # (or any other non-text block) triggers error 1210:
+        #   messages.content.type 参数非法，取值范围 ['text']
+        _strip_non_text_content(payload)
 
         return payload
