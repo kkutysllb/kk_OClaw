@@ -101,6 +101,35 @@ jobs:
           Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop/src-tauri/resources/gateway/ -Recurse -Force
         working-directory: backend
 
+      # ════════════════════════════════════════════════════════════════
+      # Verify the PyInstaller bundle contains all critical ASGI/server
+      # packages. A previous build silently shipped a bundle missing
+      # uvicorn/fastapi/starlette because collect_all() had swallowed the
+      # ImportError, causing "ModuleNotFoundError: No module named 'uvicorn'"
+      # at runtime.
+      # ════════════════════════════════════════════════════════════════
+      - name: Verify gateway bundle contains critical packages
+        shell: bash
+        run: |
+          INTERNAL_DIR="desktop/src-tauri/resources/gateway/_internal"
+          if [ ! -d "$INTERNAL_DIR" ]; then
+            echo "ERROR: $INTERNAL_DIR does not exist — PyInstaller build likely failed"
+            exit 1
+          fi
+          MISSING=""
+          for pkg in uvicorn fastapi starlette pydantic; do
+            if [ ! -d "$INTERNAL_DIR/$pkg" ]; then
+              MISSING="$MISSING $pkg"
+            fi
+          done
+          if [ -n "$MISSING" ]; then
+            echo "FATAL: Critical packages missing from PyInstaller bundle:$MISSING"
+            echo "Contents of _internal/ (first 30 entries):"
+            ls "$INTERNAL_DIR" | head -30
+            exit 1
+          fi
+          echo "✓ All critical packages present in gateway bundle"
+
       - name: Verify gateway binary exists
         shell: bash
         run: |

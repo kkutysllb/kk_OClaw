@@ -106,15 +106,49 @@ datas = []
 binaries = []
 hiddenimports = []
 
+# Track which packages were successfully collected so we can fail loudly if
+# a critical ASGI/server package is missing — otherwise the build succeeds but
+# the frozen executable crashes at runtime with ModuleNotFoundError.
+_collected_ok = []
+_collected_failed = []
+
 for pkg in COLLECT_ALL_PACKAGES:
     try:
         pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
         datas += pkg_datas
         binaries += pkg_binaries
         hiddenimports += pkg_hiddenimports
-    except Exception:
-        # Some packages may not be installed on all platforms; skip silently
-        pass
+        _collected_ok.append(pkg)
+    except Exception as exc:
+        # Some packages may not be installed on all platforms; record but
+        # don't abort yet — we validate critical packages below.
+        _collected_failed.append((pkg, str(exc)))
+
+# Critical packages that MUST be present or the gateway will crash at runtime.
+# If any of these failed to collect, abort the build with a clear message
+# instead of shipping a broken bundle.
+_CRITICAL_PACKAGES = {"uvicorn", "starlette", "fastapi", "pydantic"}
+_missing_critical = [
+    (p, e) for p, e in _collected_failed if p in _CRITICAL_PACKAGES
+]
+if _missing_critical:
+    msg = "\n[FATAL] Critical packages failed to collect for PyInstaller bundle:\n"
+    for pkg, err in _missing_critical:
+        msg += f"  - {pkg}: {err}\n"
+    msg += (
+        "\nThese are required for the gateway to start. Ensure they are "
+        "installed in the build environment (check pyproject.toml / uv.lock) "
+        "before running PyInstaller.\n"
+    )
+    raise SystemExit(msg)
+
+# Log a summary so CI output shows what was collected.
+print(f"\n[PyInstaller spec] Collected {len(_collected_ok)} packages successfully.")
+if _collected_failed:
+    print(f"[PyInstaller spec] {len(_collected_failed)} packages skipped (non-critical):")
+    for pkg, err in _collected_failed:
+        print(f"  - {pkg}: {err[:80]}")
+print()
 
 # ── Explicit hidden imports for known dynamic-loading edge cases ────────────
 EXTRA_HIDDEN_IMPORTS = [
