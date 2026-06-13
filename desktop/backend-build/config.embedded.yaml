@@ -204,3 +204,18 @@ run_events:
 # ============================================================================
 cron_management:
   enabled: false
+
+# ============================================================================
+# Token Economy — token 优化系统（默认禁用）
+# ============================================================================
+# 包含简洁响应指令、历史工具结果压缩、同回合重复调用抑制（Storm Breaker）。
+# 启用后在模型调用前自动注入 token 节省策略。
+token_economy:
+  enabled: false
+  concise_responses: true
+  compress_history_tool_results: true
+  max_history_tool_result_chars: 2000
+  recent_tool_result_count: 4
+  storm_breaker_enabled: true
+  storm_breaker_threshold: 2
+  storm_breaker_window: 8

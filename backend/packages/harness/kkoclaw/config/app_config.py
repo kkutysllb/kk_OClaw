@@ -31,6 +31,7 @@ from kkoclaw.config.title_config import TitleConfig, load_title_config_from_dict
 from kkoclaw.config.token_usage_config import TokenUsageConfig
 from kkoclaw.config.tool_config import ToolConfig, ToolGroupConfig
 from kkoclaw.config.tool_output_config import ToolOutputConfig
+from kkoclaw.config.token_economy_config import TokenEconomyConfig
 from kkoclaw.config.tool_search_config import ToolSearchConfig, load_tool_search_config_from_dict
 
 load_dotenv()
@@ -106,6 +107,7 @@ class AppConfig(BaseModel):
     loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig, description="Loop detection middleware configuration")
     safety_finish_reason: SafetyFinishReasonConfig = Field(default_factory=SafetyFinishReasonConfig, description="Safety finish reason middleware configuration")
     tool_output: ToolOutputConfig = Field(default_factory=ToolOutputConfig, description="Tool output budget enforcement configuration")
+    token_economy: TokenEconomyConfig = Field(default_factory=TokenEconomyConfig, description="Token Economy system configuration (concise responses, history compression, storm breaker)")
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig, description="LLM circuit breaker configuration")
     model_config = ConfigDict(extra="allow")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Unified database backend configuration")

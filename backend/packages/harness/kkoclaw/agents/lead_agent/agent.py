@@ -19,6 +19,7 @@ from kkoclaw.agents.middlewares.todo_middleware import TodoMiddleware
 from kkoclaw.agents.middlewares.token_usage_middleware import TokenUsageMiddleware
 from kkoclaw.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
 from kkoclaw.agents.middlewares.tool_output_budget_middleware import ToolOutputBudgetMiddleware
+from kkoclaw.agents.middlewares.token_economy_middleware import TokenEconomyMiddleware
 from kkoclaw.agents.middlewares.view_image_middleware import ViewImageMiddleware
 from kkoclaw.agents.thread_state import RuntimeContext, ThreadState
 from kkoclaw.config.agents_config import load_agent_config, validate_agent_name
@@ -268,6 +269,12 @@ def _build_middlewares(
     tool_output_config = resolved_app_config.tool_output
     if tool_output_config.enabled:
         middlewares.append(ToolOutputBudgetMiddleware.from_app_config(resolved_app_config))
+
+    # TokenEconomyMiddleware — token-saving strategies (concise responses,
+    # historical tool-result compression). Disabled by default.
+    token_economy_config = resolved_app_config.token_economy
+    if token_economy_config.enabled:
+        middlewares.append(TokenEconomyMiddleware.from_app_config(resolved_app_config))
 
     # Add summarization middleware if enabled
     summarization_middleware = _create_summarization_middleware(app_config=resolved_app_config)

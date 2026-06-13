@@ -28,6 +28,7 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 ALLOWED_SECTIONS: set[str] = {
     "log_level",
     "token_usage",
+    "token_economy",
     "sandbox",
     "title",
     "summarization",

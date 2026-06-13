@@ -3,16 +3,20 @@
 P0 safety: prevents the agent from calling the same tool with the same
 arguments indefinitely until the recursion limit kills the run.
 
-Detection strategy (three layers):
+Detection strategy (four layers):
   1. **Hash-based**: After each model response, hash the tool calls
      (name + args).  If the same hash appears >= warn_threshold times,
      inject a warning; if >= hard_limit, strip all tool_calls.
   2. **Frequency-based**: Track per-tool-type cumulative call counts.
      Catches cross-file read loops that hash-based detection misses.
-  3. **Error-based convergence** (NEW): Scan recent tool results for
+  3. **Error-based convergence**: Scan recent tool results for
      persistent *unrecoverable* error patterns.  When the agent keeps
      hitting the same unfixable error, trigger forced stop earlier
      than the frequency-based limit would.
+  4. **Storm Breaker** (same-turn): Before executing a tool call,
+     check if the same tool+args was already called in this turn.
+     If the count exceeds the threshold, suppress the duplicate and
+     return an explanatory ToolMessage instead of executing the tool.
 """
 
 import hashlib
@@ -21,12 +25,18 @@ import logging
 import re
 import threading
 from collections import OrderedDict, defaultdict
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from typing import override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
+from langgraph.types import Command
+
+from kkoclaw.agents.middlewares.tool_storm_breaker import ToolStormBreaker
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +51,11 @@ _DEFAULT_TOOL_FREQ_HARD_LIMIT = 150  # force-stop after 150 calls to the same to
 # Layer 3: error-based early convergence defaults
 _DEFAULT_ERROR_ROUND_THRESHOLD = 8  # force-stop after N error rounds
 _DEFAULT_ERROR_ROUND_WINDOW = 15  # look back N rounds for error patterns
+
+# Layer 4: Storm Breaker defaults (same-turn duplicate suppression)
+_DEFAULT_STORM_BREAKER_ENABLED = True
+_DEFAULT_STORM_BREAKER_THRESHOLD = 2
+_DEFAULT_STORM_BREAKER_WINDOW = 8
 
 # Patterns that indicate a tool error cannot be recovered by retrying
 # (mirrored from tool_error_handling_middleware for Layer 3 detection)
@@ -161,12 +176,14 @@ _ERROR_CONVERGENCE_HARD_STOP_MSG = "[FORCED STOP] Persistent unrecoverable error
 class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
     """Detects and breaks repetitive tool call loops.
 
-    Three detection layers (checked in order):
+    Four detection layers (checked in order):
 
     1. **Hash-based**: identical tool call sets.
     2. **Frequency-based**: same tool type called too many times.
     3. **Error-based convergence**: persistent unrecoverable
        tool errors in recent rounds → early forced stop.
+    4. **Storm Breaker** (Layer 4): same-turn identical tool call
+       suppression via :class:`ToolStormBreaker`.
 
     Args:
         warn_threshold: Number of identical tool call sets before injecting
@@ -188,6 +205,12 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             Default: 8.
         error_round_window: Number of recent tool result rounds to scan
             for persistent error patterns. Default: 15.
+        storm_breaker_enabled: Enable Layer 4 (same-turn duplicate
+            suppression). Default: True.
+        storm_breaker_threshold: Identical calls before suppression.
+            Default: 2.
+        storm_breaker_window: Sliding window for Storm Breaker.
+            Default: 8.
     """
 
     def __init__(
@@ -200,6 +223,9 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         tool_freq_hard_limit: int = _DEFAULT_TOOL_FREQ_HARD_LIMIT,
         error_round_threshold: int = _DEFAULT_ERROR_ROUND_THRESHOLD,
         error_round_window: int = _DEFAULT_ERROR_ROUND_WINDOW,
+        storm_breaker_enabled: bool = _DEFAULT_STORM_BREAKER_ENABLED,
+        storm_breaker_threshold: int = _DEFAULT_STORM_BREAKER_THRESHOLD,
+        storm_breaker_window: int = _DEFAULT_STORM_BREAKER_WINDOW,
     ):
         super().__init__()
         self.warn_threshold = warn_threshold
@@ -210,7 +236,14 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         self.tool_freq_hard_limit = tool_freq_hard_limit
         self.error_round_threshold = error_round_threshold
         self.error_round_window = error_round_window
+        self.storm_breaker_enabled = storm_breaker_enabled
         self._lock = threading.Lock()
+        # Layer 4: Storm Breaker (per-thread, turn-scoped)
+        self._storm_breakers: dict[str, ToolStormBreaker] = {}
+        self._storm_breaker_config = {
+            "threshold": max(2, storm_breaker_threshold),
+            "window_size": max(1, storm_breaker_window),
+        }
         # Per-thread tracking using OrderedDict for LRU eviction
         self._history: OrderedDict[str, list[str]] = OrderedDict()
         self._warned: dict[str, set[str]] = defaultdict(set)
@@ -238,6 +271,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             self._tool_freq.pop(evicted_id, None)
             self._tool_freq_warned.pop(evicted_id, None)
             self._error_rounds.pop(evicted_id, None)
+            self._storm_breakers.pop(evicted_id, None)
             logger.debug("Evicted loop tracking for thread %s (LRU)", evicted_id)
 
     def _track_and_check(self, state: AgentState, runtime: Runtime) -> tuple[str | None, bool]:
@@ -499,6 +533,98 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
 
         return None
 
+    # ------------------------------------------------------------------
+    # Layer 4: Storm Breaker (same-turn duplicate suppression)
+    # ------------------------------------------------------------------
+
+    def _get_storm_breaker(self, thread_id: str) -> ToolStormBreaker:
+        """Get or create the Storm Breaker for *thread_id*."""
+        if thread_id not in self._storm_breakers:
+            self._storm_breakers[thread_id] = ToolStormBreaker(**self._storm_breaker_config)
+        return self._storm_breakers[thread_id]
+
+    @override
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command],
+    ) -> ToolMessage | Command:
+        """Layer 4: Storm Breaker — suppress same-turn duplicate calls."""
+        if not self.storm_breaker_enabled:
+            return handler(request)
+
+        tool_call = getattr(request, "tool_call", None)
+        if tool_call is None:
+            return handler(request)
+
+        tool_name = tool_call.get("name", "") if isinstance(tool_call, dict) else getattr(tool_call, "name", "")
+        tool_args = tool_call.get("args", {}) if isinstance(tool_call, dict) else getattr(tool_call, "args", {})
+        tool_call_id = tool_call.get("id", "") if isinstance(tool_call, dict) else getattr(tool_call, "id", "")
+
+        thread_id = self._get_thread_id_from_request(request)
+        breaker = self._get_storm_breaker(thread_id)
+        result = breaker.inspect(tool_name, tool_args)
+
+        if result.suppress:
+            logger.warning(
+                "Storm Breaker suppressed duplicate tool call: %s",
+                result.reason,
+                extra={"thread_id": thread_id, "tool_name": tool_name},
+            )
+            return ToolMessage(
+                content=result.reason or "Duplicate tool call suppressed by Storm Breaker.",
+                tool_call_id=tool_call_id,
+                name=tool_name,
+                status="error",
+            )
+
+        return handler(request)
+
+    @override
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        """Layer 4: Storm Breaker — async version."""
+        if not self.storm_breaker_enabled:
+            return await handler(request)
+
+        tool_call = getattr(request, "tool_call", None)
+        if tool_call is None:
+            return await handler(request)
+
+        tool_name = tool_call.get("name", "") if isinstance(tool_call, dict) else getattr(tool_call, "name", "")
+        tool_args = tool_call.get("args", {}) if isinstance(tool_call, dict) else getattr(tool_call, "args", {})
+        tool_call_id = tool_call.get("id", "") if isinstance(tool_call, dict) else getattr(tool_call, "id", "")
+
+        thread_id = self._get_thread_id_from_request(request)
+        breaker = self._get_storm_breaker(thread_id)
+        result = breaker.inspect(tool_name, tool_args)
+
+        if result.suppress:
+            logger.warning(
+                "Storm Breaker suppressed duplicate tool call: %s",
+                result.reason,
+                extra={"thread_id": thread_id, "tool_name": tool_name},
+            )
+            return ToolMessage(
+                content=result.reason or "Duplicate tool call suppressed by Storm Breaker.",
+                tool_call_id=tool_call_id,
+                name=tool_name,
+                status="error",
+            )
+
+        return await handler(request)
+
+    def _get_thread_id_from_request(self, request: ToolCallRequest) -> str:
+        """Extract thread_id from a ToolCallRequest's runtime context."""
+        runtime = getattr(request, "runtime", None)
+        if runtime is None:
+            return "default"
+        thread_id = runtime.context.get("thread_id") if runtime.context else None
+        return thread_id if thread_id else "default"
+
     @override
     def after_model(self, state: AgentState, runtime: Runtime) -> dict | None:
         return self._apply(state, runtime)
@@ -516,9 +642,15 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
                 self._tool_freq.pop(thread_id, None)
                 self._tool_freq_warned.pop(thread_id, None)
                 self._error_rounds.pop(thread_id, None)
+                sb = self._storm_breakers.pop(thread_id, None)
+                if sb is not None:
+                    sb.reset_turn()
             else:
                 self._history.clear()
                 self._warned.clear()
                 self._tool_freq.clear()
                 self._tool_freq_warned.clear()
                 self._error_rounds.clear()
+                for sb in self._storm_breakers.values():
+                    sb.reset_turn()
+                self._storm_breakers.clear()

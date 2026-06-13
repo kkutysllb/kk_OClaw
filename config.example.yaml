@@ -1055,6 +1055,27 @@ cron_management:
 #       key: value
 
 # ============================================================================
+# Token Economy 系统（Kun-inspired token 优化）
+# ============================================================================
+# 多层 token 经济机制，默认全部禁用。显式开启后激活：
+#   1. concise_responses: 注入 system-reminder 指示模型简洁回复
+#   2. compress_history_tool_results: 截断旧 ToolMessage 内容
+#      （head+tail 策略，保护代码块/URL/文件路径不被破坏）
+#   3. storm_breaker: 抑制同回合内完全相同的工具调用
+#
+# 注意：Storm Breaker 集成在 LoopDetectionMiddleware 中作为第四层检测，
+# 通过 storm_breaker_* 字段控制。
+# token_economy:
+#   enabled: false                          # 总开关，默认禁用
+#   concise_responses: true                 # 注入简洁响应指令
+#   compress_history_tool_results: true     # 压缩历史工具结果
+#   max_history_tool_result_chars: 2000     # 历史工具结果保留字符数
+#   recent_tool_result_count: 4             # 最近 N 条 ToolMessage 免压缩
+#   storm_breaker_enabled: true             # 启用同回合重复抑制
+#   storm_breaker_threshold: 2              # 相同调用出现 N 次后抑制
+#   storm_breaker_window: 8                 # 滑动窗口大小
+
+# ============================================================================
 # 熔断器配置
 # ============================================================================
 # Circuit breaker for LLM calls prevents repeated requests to a failing provider.
