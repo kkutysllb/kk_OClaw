@@ -109,15 +109,33 @@ jobs:
 
       # ════════════════════════════════════════════════════════════════
       # Build + sign the Tauri app.
-      # Signing keys come from GitHub Secrets:
-      #   TAURI_SIGNING_PRIVATE_KEY  — the .key file content
-      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — empty string for our key
+      # Signing keys come from GitHub Secrets (base64-encoded to survive
+      # GitHub UI newline mangling):
+      #   TAURI_SIGNING_PRIVATE_KEY  — base64-encoded minisign .key content
+      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the key
       # ════════════════════════════════════════════════════════════════
+      - name: Decode Tauri signing key
+        env:
+          TAURI_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_KEY_B64" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is empty"
+            exit 1
+          fi
+          # Decode base64 → raw minisign format, export via GITHUB_ENV
+          DECODED=$(echo "$TAURI_KEY_B64" | base64 -d)
+          {
+            echo 'TAURI_SIGNING_PRIVATE_KEY<<TAURI_KEY_EOF'
+            echo "$DECODED"
+            echo 'TAURI_KEY_EOF'
+          } >> "$GITHUB_ENV"
+          echo "Signing key decoded successfully"
+
       - name: Build and sign Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
