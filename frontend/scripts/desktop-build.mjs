@@ -93,6 +93,26 @@ export function WorkspaceContent({
 }
 `,
   },
+  {
+    // workspace/page.tsx originally does redirect("/workspace/chats/new"),
+    // but the [thread_id] dynamic route is moved aside for static export.
+    // Redirect to /workspace/chats (the list page) instead, which is a
+    // valid client component that survives static export.
+    file: join(APP_DIR, "workspace", "page.tsx"),
+    content: `"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+export default function WorkspacePage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/workspace/chats");
+  }, [router]);
+  return null;
+}
+`,
+  },
 ];
 
 
