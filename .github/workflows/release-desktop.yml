@@ -21,8 +21,10 @@ jobs:
             args: "--target aarch64-apple-darwin"
           - platform: macos-13
             args: "--target x86_64-apple-darwin"
+          # AppImage requires linuxdeploy + FUSE, which is flaky on CI runners.
+          # deb + rpm covers all major desktop distros.
           - platform: ubuntu-22.04
-            args: ""
+            args: "--bundles deb,rpm"
           - platform: windows-latest
             args: ""
 
