@@ -84,12 +84,12 @@ jobs:
         # uv's cache can preserve a .venv created with Python 3.14 (the latest
         # version satisfying the constraint). When .venv already exists,
         # `uv sync --python 3.12` silently reuses it instead of rebuilding.
+        # `uv venv --clear` wipes the old venv cross-platform (no rm -rf).
         # PyInstaller 6.x has incomplete support for Python 3.14, causing
         # collect_all() to silently return empty results.
         working-directory: backend
         run: |
-          rm -rf .venv
-          uv venv --python 3.12
+          uv venv --clear --python 3.12
           uv sync
           uv pip install pyinstaller
           echo "=== Verify Python version ==="
