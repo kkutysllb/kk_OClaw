@@ -40,20 +40,25 @@ export function BackendSplashScreen() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-6">
-        {/* Logo: OClaw knight */}
-        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-[#0f0f1a] shadow-lg">
-          <svg viewBox="0 0 200 200" className="h-16 w-16">
+        {/* Logo: OClaw octagonal O-ring */}
+        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-[#151527] shadow-lg">
+          <svg viewBox="0 0 100 100" className="h-16 w-16">
             <defs>
-              <linearGradient id="splashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{ stopColor: '#22d3ee' }} />
-                <stop offset="50%" style={{ stopColor: '#a855f7' }} />
-                <stop offset="100%" style={{ stopColor: '#ec4899' }} />
+              <linearGradient id="splashGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#FEF08A' }} />
+                <stop offset="42%" style={{ stopColor: '#FACC15' }} />
+                <stop offset="46%" style={{ stopColor: '#EAB308' }} />
+                <stop offset="54%" style={{ stopColor: '#4ADE80' }} />
+                <stop offset="100%" style={{ stopColor: '#16A34A' }} />
               </linearGradient>
             </defs>
-            <path fill="url(#splashGrad)" d="M130 55c-3-2-8-4-12-3-5 1-9 5-10 10-1 3 0 6 2 9l-8 3c-5 2-10 6-13 11l-14 28c-8 2-15 6-20 12l-12 22c-3 6-4 13-2 19l3 10c2 4 6 7 10 8l5 1c4 0 8-2 10-5l8-14c3-6 8-10 14-12l6 8c-3 5-4 10-3 16l5 18c2 5 6 9 11 10l5 1c4 0 8-2 11-5l7-8c3-3 7-5 11-5l10 2c4 1 8 0 11-2l10-6c9-5 15-14 17-24l3-16c1-5 0-10-3-14l-8-10c-3-4-8-7-13-8l-9 2c-5 1-10 0-14-3l4-12c2-6 1-13-3-18l-10-12c-4-5-10-8-16-9z"/>
-            <path fill="url(#splashGrad)" d="M110 30c-2-4-6-7-11-8l-10-1c-5 0-10 3-13 7l-6 10c-2 4-2 9 1 13l8 8c4 3 8 5 13 4l9-2c5-1 9-5 11-10l2-9c1-4 0-8-4-12z"/>
-            <path fill="url(#splashGrad)" d="M55 85l-8 6c-6 4-10 10-11 17l-2 15c-1 6 1 12 5 16l15 14 8-5c3-2 6-6 7-10l2-12c1-5-1-10-5-14l-11-11z"/>
-            <path fill="url(#splashGrad)" d="M30 130l-10 18c-3 6-4 13-2 20l3 12 12-3 5-6c2-3 3-7 2-11l-4-14c-2-5-4-9-6-16z"/>
+            <g transform="rotate(-35, 50, 50)">
+              <path
+                d="M 89,50 L 78,78 L 50,89 L 22,78 L 11,50 L 22,22 L 50,11 L 78,22 Z M 75,50 L 68,68 L 50,75 L 32,68 L 25,50 L 32,32 L 50,25 L 68,32 Z"
+                fill="url(#splashGrad)"
+                fillRule="evenodd"
+              />
+            </g>
           </svg>
         </div>
 

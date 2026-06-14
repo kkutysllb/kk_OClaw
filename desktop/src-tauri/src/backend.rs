@@ -31,10 +31,10 @@ const MAX_LOG_LINES: usize = 500;
 const DEFAULT_GATEWAY_PORT: u16 = 9987;
 
 /// Health check polling interval.
-const HEALTH_CHECK_INTERVAL_MS: u64 = 500;
+pub const HEALTH_CHECK_INTERVAL_MS: u64 = 500;
 
 /// Maximum time to wait for backend to become healthy (seconds).
-const HEALTH_CHECK_TIMEOUT_SECS: u64 = 120;
+pub const HEALTH_CHECK_TIMEOUT_SECS: u64 = 120;
 
 impl BackendManager {
     pub fn new() -> Self {
@@ -66,7 +66,18 @@ impl BackendManager {
         &self.log_buffer
     }
 
-    /// Start the backend Gateway process.
+    /// Launch the backend Gateway process (non-blocking).
+    ///
+    /// Performs all setup — port-conflict check, app-data initialisation,
+    /// resolving the executable, redirecting output to a log file, and
+    /// spawning the child — then returns immediately with status `Starting`.
+    ///
+    /// Health monitoring must be performed separately (see [`mark_running`]
+    /// and [`mark_error`]) so that the `BackendManager` mutex is not held
+    /// during the potentially long health-check polling window.  Holding the
+    /// mutex while waiting blocks `get_backend_status` queries from the
+    /// frontend, leaving the splash screen stuck on "Initializing backend
+    /// services" until the 120-second timeout.
     ///
     /// Uses the Tauri app handle to resolve:
     /// - App data directory (where config.yaml, .kkoclaw/, skills/ live)
@@ -74,7 +85,7 @@ impl BackendManager {
     ///
     /// In production (installed app), the bundled PyInstaller executable is used.
     /// In development (`tauri dev`), falls back to `uv run uvicorn` from the source tree.
-    pub async fn start<R: Runtime>(&mut self, app: &AppHandle<R>) -> Result<(), String> {
+    pub async fn launch<R: Runtime>(&mut self, app: &AppHandle<R>) -> Result<(), String> {
         if self.is_running() {
             return Err("Backend is already running".into());
         }
@@ -104,6 +115,21 @@ impl BackendManager {
 
         // Resolve the gateway executable path
         let (cmd, args, working_dir) = self.resolve_gateway_command(app)?;
+
+        // Development-mode detection: when the gateway runs from the source
+        // tree (no PyInstaller bundle), `working_dir` is the `backend/`
+        // directory and its parent is the project root containing `skills/`.
+        // In that case we point KKOCLAW_SKILLS_PATH at the source-tree skills
+        // directory so public skills are available without copying them into
+        // app_data.  In production `working_dir` is inside the resource dir
+        // and this check naturally returns None.
+        let dev_skills_path = working_dir
+            .parent()
+            .map(|root| root.join("skills"))
+            .filter(|p| p.is_dir());
+        if dev_skills_path.is_some() {
+            self.append_log("Development mode detected — using source-tree skills directory".into());
+        }
 
         // Load .env file for environment variables
         let env_vars = self.load_env_file(&app_data);
@@ -157,6 +183,11 @@ impl BackendManager {
             .stdout(std::process::Stdio::from(gateway_log))
             .stderr(std::process::Stdio::from(gateway_err_log));
 
+        // In development mode, load skills directly from the source tree.
+        if let Some(ref skills) = dev_skills_path {
+            command.env("KKOCLAW_SKILLS_PATH", skills);
+        }
+
         // Inject .env variables
         for (key, value) in &env_vars {
             command.env(key, value);
@@ -170,30 +201,88 @@ impl BackendManager {
 
         self.process = Some(child);
         self.append_log("Gateway process started, waiting for health check...".into());
+        Ok(())
+    }
+
+    /// Blocking start: launch + wait for health.
+    ///
+    /// Convenience wrapper that calls [`launch`] and then blocks until the
+    /// health check succeeds or times out.  In production code paths prefer
+    /// calling [`launch`] directly and monitoring health in a background task
+    /// so the mutex is not held during the (potentially long) polling window.
+    pub async fn start<R: Runtime>(&mut self, app: &AppHandle<R>) -> Result<(), String> {
+        self.launch(app).await?;
+
+        // If launch() reused an existing healthy gateway, we're done.
+        if self.status == BackendStatus::Running {
+            return Ok(());
+        }
 
         // Wait for health check
         match self.wait_for_health().await {
             Ok(()) => {
-                self.status = BackendStatus::Running;
-                self.append_log("Gateway is healthy and ready".into());
+                self.mark_running();
                 Ok(())
             }
             Err(e) => {
-                self.status = BackendStatus::Error(e.clone());
-                self.append_log(format!("Health check failed: {}", e));
-                // Try to kill the process
-                self.kill_process();
+                self.mark_error(e.clone());
                 Err(e)
             }
         }
     }
 
-    /// Restart the backend.
+    /// Mark the backend as running (called after successful health check).
+    pub fn mark_running(&mut self) {
+        self.status = BackendStatus::Running;
+        self.append_log("Gateway is healthy and ready".into());
+    }
+
+    /// Mark the backend as errored and kill the child process.
+    pub fn mark_error(&mut self, msg: String) {
+        self.status = BackendStatus::Error(msg.clone());
+        self.append_log(format!("Health check failed: {}", msg));
+        self.kill_process();
+    }
+
+    /// Get the PID of the spawned child process (if any).
+    ///
+    /// Used by the health-monitor loop to check whether the child is still
+    /// alive without holding the `BackendManager` mutex.
+    pub fn child_pid(&self) -> Option<u32> {
+        self.process.as_ref().map(|c| c.id())
+    }
+
+    /// Check whether the child process is still alive.
+    ///
+    /// If the child has exited, marks the backend as errored and returns `false`.
+    /// Returns `true` if the process is still running.  This is used by the
+    /// background health-monitor loop to detect early crashes without waiting
+    /// for the full health-check timeout.
+    pub fn check_alive(&mut self) -> bool {
+        if self.is_running() {
+            true
+        } else {
+            // Process has exited — mark as error if not already in an error state.
+            if !matches!(self.status, BackendStatus::Error(_)) {
+                self.status = BackendStatus::Error(
+                    "Gateway process exited unexpectedly".into(),
+                );
+                self.append_log("Gateway process exited unexpectedly".into());
+            }
+            false
+        }
+    }
+
+    /// Restart the backend (non-blocking).
+    ///
+    /// Stops the current process, waits briefly for the port to be freed,
+    /// then calls [`launch`](Self::launch).  Health monitoring must be
+    /// performed by the caller (e.g. via `crate::spawn_health_monitor`).
     pub async fn restart<R: Runtime>(&mut self, app: &AppHandle<R>) -> Result<(), String> {
         self.stop()?;
         // Give it a moment to fully release the port
         tokio::time::sleep(Duration::from_secs(1)).await;
-        self.start(app).await
+        self.launch(app).await
     }
 
     /// Initialize the app data directory on first run.
@@ -205,12 +294,47 @@ impl BackendManager {
         let initialized_marker = app_data.join(".initialized");
 
         if initialized_marker.exists() {
-            // Already initialized — just ensure subdirectories exist
+            // Already initialized — ensure subdirectories exist
             fs::create_dir_all(app_data.join(".kkoclaw")).map_err(|e| format!("Failed to create .kkoclaw dir: {}", e))?;
             fs::create_dir_all(app_data.join(".kkoclaw").join("data")).map_err(|e| format!("Failed to create data dir: {}", e))?;
             fs::create_dir_all(app_data.join("skills")).map_err(|e| format!("Failed to create skills dir: {}", e))?;
+            fs::create_dir_all(app_data.join("skills").join("public")).map_err(|e| format!("Failed to create public skills dir: {}", e))?;
             fs::create_dir_all(app_data.join("skills").join("custom")).map_err(|e| format!("Failed to create custom skills dir: {}", e))?;
             fs::create_dir_all(app_data.join("logs")).map_err(|e| format!("Failed to create logs dir: {}", e))?;
+
+            // Sync bundled public skills — copy any bundled skill that is
+            // missing from the user's skills/public directory.  This handles
+            // both first-run-with-old-version (all skills missing) and app
+            // upgrades (new skills added) without overwriting user changes.
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .map_err(|e| format!("Failed to resolve resource directory: {}", e))?;
+            let gateway_dir = resolve_bundled_gateway_dir(&resource_dir);
+            let bundled_skills = gateway_dir.join("_internal").join("skills").join("public");
+            let target_skills = app_data.join("skills").join("public");
+
+            if bundled_skills.is_dir() {
+                let mut synced = 0u32;
+                if let Ok(entries) = fs::read_dir(&bundled_skills) {
+                    for entry in entries.flatten() {
+                        let skill_name = entry.file_name();
+                        let dest = target_skills.join(&skill_name);
+                        if !dest.exists() {
+                            let src = entry.path();
+                            if let Err(e) = copy_dir_recursive(&src, &dest) {
+                                self.append_log(format!("Warning: failed to copy skill {:?}: {}", skill_name, e));
+                            } else {
+                                synced += 1;
+                            }
+                        }
+                    }
+                }
+                if synced > 0 {
+                    self.append_log(format!("Synced {} bundled public skill(s) to {}", synced, target_skills.display()));
+                }
+            }
+
             return Ok(());
         }
 
@@ -308,8 +432,8 @@ impl BackendManager {
             ));
         }
 
-        // Development fallback: use uv/python from the source tree
-        self.append_log("Bundled gateway not found, falling back to development mode (uv run uvicorn)".into());
+        // Development fallback: use the source tree.
+        self.append_log("Bundled gateway not found, falling back to development mode".into());
 
         // Find the project root by walking up to find backend/
         let exe_dir = std::env::current_exe().unwrap_or_default();
@@ -317,7 +441,46 @@ impl BackendManager {
         while let Some(d) = dir {
             if d.join("backend").is_dir() && d.join(".env").is_file() {
                 let backend_dir = d.join("backend");
-                let uv_path = which("uv").or_else(|| which("uvx"));
+
+                // Priority 1: use the project's virtualenv directly — this is
+                // the most reliable path because GUI apps launched from Finder
+                // or `cargo tauri build` inherit a minimal PATH that usually
+                // does NOT include ~/.local/bin (where `uv` lives).
+                #[cfg(unix)]
+                let venv_python = backend_dir.join(".venv").join("bin").join("python");
+                #[cfg(windows)]
+                let venv_python = backend_dir.join(".venv").join("Scripts").join("python.exe");
+
+                if venv_python.is_file() {
+                    self.append_log(format!("Using project venv: {}", venv_python.display()));
+                    return Ok((
+                        venv_python.to_string_lossy().into_owned(),
+                        vec![
+                            "-m".into(),
+                            "uvicorn".into(),
+                            "app.gateway.app:app".into(),
+                            "--host".into(),
+                            "127.0.0.1".into(),
+                            "--port".into(),
+                            self.port.to_string(),
+                        ],
+                        backend_dir,
+                    ));
+                }
+
+                // Priority 2: try `uv` from PATH, then from common install dirs.
+                let uv_path = which("uv")
+                    .or_else(|| which("uvx"))
+                    .or_else(|| {
+                        // GUI apps have a stripped PATH — check common uv locations.
+                        if let Some(home) = std::env::var_os("HOME") {
+                            let candidate = PathBuf::from(home).join(".local").join("bin").join("uv");
+                            if candidate.is_file() {
+                                return Some(candidate.to_string_lossy().into_owned());
+                            }
+                        }
+                        None
+                    });
 
                 let (cmd, args) = if let Some(uv) = uv_path {
                     (
@@ -334,7 +497,7 @@ impl BackendManager {
                     )
                 } else {
                     let python = which("python3").or_else(|| which("python")).ok_or_else(|| {
-                        String::from("Neither bundled gateway, 'uv', nor 'python3' found.")
+                        String::from("Neither bundled gateway, project venv, 'uv', nor 'python3' found.")
                     })?;
                     (
                         python,

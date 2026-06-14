@@ -73,53 +73,58 @@ export function BackendStatusIndicator() {
           : "Stopped";
 
   return (
-    <>
-      {/* Status pill */}
-      <div className="fixed bottom-3 left-3 z-50 flex items-center gap-2 rounded-full bg-background/80 px-3 py-1.5 text-xs shadow-md backdrop-blur-sm border">
-        <span className={`inline-block h-2 w-2 rounded-full ${statusColor}`} />
-        <span className="text-muted-foreground">
-          Backend: {statusText}
+    <div className="relative flex items-center">
+      {/* Log panel — opens downward from the bar */}
+      {showLogs && (
+        <div className="absolute top-full right-0 z-[100] mt-1 w-[560px] overflow-hidden rounded-md border bg-zinc-950/95 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
+            <span className="text-[11px] font-medium tracking-wide text-zinc-400 uppercase">
+              Backend Logs
+            </span>
+            <button
+              onClick={() => setShowLogs(false)}
+              className="text-zinc-600 transition-colors hover:text-zinc-300"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed text-green-400">
+            {logs.length === 0 ? (
+              <div className="text-zinc-600">No logs available</div>
+            ) : (
+              logs.map((line, i) => (
+                <div key={i} className="whitespace-pre-wrap">
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Status bar — long horizontal strip */}
+      <div className="flex h-7 items-center gap-2 rounded-md border bg-background/80 px-2.5 text-xs shadow-sm backdrop-blur-sm">
+        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusColor}`} />
+        <span className="whitespace-nowrap text-muted-foreground">
+          {statusText}
           {status?.port ? ` :${status.port}` : ""}
         </span>
         {status?.status === "error" && (
           <button
             onClick={handleRestart}
-            className="ml-1 rounded bg-primary px-2 py-0.5 text-primary-foreground text-[10px] hover:bg-primary/90"
+            className="ml-0.5 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-red-700"
           >
             Restart
           </button>
         )}
+        <span className="mx-0.5 h-3 w-px shrink-0 bg-border" />
         <button
           onClick={() => setShowLogs(!showLogs)}
-          className="ml-1 text-muted-foreground hover:text-foreground"
+          className="whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
         >
           {showLogs ? "Hide" : "Logs"}
         </button>
       </div>
-
-      {/* Log panel */}
-      {showLogs && (
-        <div className="fixed bottom-12 left-3 z-50 max-h-60 w-96 overflow-y-auto rounded-lg bg-black/90 p-3 text-xs font-mono text-green-400 shadow-lg backdrop-blur-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-gray-400">Backend Logs</span>
-            <button
-              onClick={() => setShowLogs(false)}
-              className="text-gray-500 hover:text-gray-300"
-            >
-              x
-            </button>
-          </div>
-          {logs.length === 0 ? (
-            <div className="text-gray-500">No logs available</div>
-          ) : (
-            logs.map((line, i) => (
-              <div key={i} className="whitespace-pre-wrap leading-5">
-                {line}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </>
+    </div>
   );
 }

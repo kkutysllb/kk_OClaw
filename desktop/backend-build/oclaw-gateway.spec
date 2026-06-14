@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # The spec file lives in desktop/backend-build/. We need:
@@ -112,13 +112,40 @@ hiddenimports = []
 _collected_ok = []
 _collected_failed = []
 
+# Some packages have optional sub-packages that pull in heavy or missing
+# dependencies not needed at runtime (e.g. mcp.cli imports typer). For those
+# we use targeted collection that skips the problematic sub-package instead
+# of the all-or-nothing collect_all().
+_PACKAGES_WITH_SKIP = {
+    "mcp": ("mcp.cli",),  # CLI not needed in the gateway; typer not installed
+}
+
 for pkg in COLLECT_ALL_PACKAGES:
     try:
-        pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
-        datas += pkg_datas
-        binaries += pkg_binaries
-        hiddenimports += pkg_hiddenimports
-        _collected_ok.append(pkg)
+        skip_prefixes = _PACKAGES_WITH_SKIP.get(pkg)
+        if skip_prefixes:
+            # Targeted collection: data files + filtered submodules
+            pkg_datas = collect_data_files(pkg, include_py_files=False)
+            try:
+                pkg_hiddenimports = collect_submodules(
+                    pkg,
+                    filter=lambda name, _sp=skip_prefixes: (
+                        not any(name == s or name.startswith(s + ".") for s in _sp)
+                    ),
+                )
+            except Exception:
+                pkg_hiddenimports = []
+            pkg_binaries = []
+            datas += pkg_datas
+            binaries += pkg_binaries
+            hiddenimports += pkg_hiddenimports
+            _collected_ok.append(pkg)
+        else:
+            pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
+            datas += pkg_datas
+            binaries += pkg_binaries
+            hiddenimports += pkg_hiddenimports
+            _collected_ok.append(pkg)
     except Exception as exc:
         # Some packages may not be installed on all platforms; record but
         # don't abort yet — we validate critical packages below.
@@ -293,6 +320,11 @@ excludes = [
     # Ollama (optional, can be added if user configures it)
     # NOTE: Keep commented out — user may configure Ollama
     # "langchain_ollama",
+    # MCP CLI (pulls in typer/rich which are not installed; the gateway
+    # never uses the CLI entry-point at runtime)
+    "mcp.cli",
+    "typer",
+    "rich",
 ]
 
 # ── Analysis ───────────────────────────────────────────────────────────────

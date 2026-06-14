@@ -7,7 +7,7 @@
     "frontendDist": "../../frontend/out",
     "devUrl": "http://localhost:8659",
     "beforeDevCommand": "cd ../frontend && KKOCLAW_INTERNAL_GATEWAY_BASE_URL=http://127.0.0.1:9987 pnpm dev --port 8659",
-    "beforeBuildCommand": "cd ../frontend && node scripts/desktop-build.mjs"
+    "beforeBuildCommand": "bash scripts/build-all.sh"
   },
   "app": {
     "withGlobalTauri": true,

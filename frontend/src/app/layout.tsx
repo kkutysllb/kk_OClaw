@@ -4,7 +4,6 @@ import "katex/dist/katex.min.css";
 import { type Metadata } from "next";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { BackendStatusIndicator } from "@/components/desktop";
 import { BackendSplashScreen } from "@/components/desktop";
 import { DesktopInit, UpdateChecker } from "@/components/desktop";
 import { I18nProvider } from "@/core/i18n/context";
@@ -31,7 +30,6 @@ export default async function RootLayout({
             <UpdateChecker />
             <BackendSplashScreen />
             {children}
-            <BackendStatusIndicator />
           </I18nProvider>
         </ThemeProvider>
       </body>

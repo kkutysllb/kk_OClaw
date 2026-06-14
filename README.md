@@ -489,6 +489,7 @@ token_usage:
 
 ### 后续待完成
 
+- 桌面端和coding能力一起发布
 - 池化 sandbox 资源以减少 sandbox 容器数量
 - 添加认证 / 授权层
 - 实现速率限制

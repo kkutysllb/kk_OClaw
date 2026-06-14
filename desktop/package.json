@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cargo tauri dev",
+    "build:gateway": "bash scripts/build-gateway.sh",
     "build": "cargo tauri build",
     "check": "cd src-tauri && cargo check",
     "clippy": "cd src-tauri && cargo clippy"

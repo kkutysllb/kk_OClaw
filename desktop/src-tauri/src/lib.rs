@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 use tauri::Manager;
@@ -13,6 +14,79 @@ mod updater;
 /// Application state shared across all commands.
 pub struct AppState {
     pub backend: Arc<Mutex<backend::BackendManager>>,
+}
+
+/// Spawn a background task that polls the gateway `/health` endpoint and
+/// updates the `BackendManager` status accordingly.
+///
+/// HTTP probes happen **without** holding the mutex; the lock is re-acquired
+/// only for brief status checks / updates between probes.  This keeps
+/// `get_backend_status` (called every second by the frontend splash screen)
+/// responsive at all times.
+///
+/// Used by:
+/// - `setup()` initial auto-start (after `launch()`)
+/// - `start_backend` / `restart_backend` commands
+pub fn spawn_health_monitor(backend: Arc<Mutex<backend::BackendManager>>) {
+    tauri::async_runtime::spawn(async move {
+        let port = {
+            let mgr = backend.lock().await;
+            mgr.port()
+        };
+
+        let health_url = format!("http://127.0.0.1:{}/health", port);
+        let client = reqwest::Client::new();
+        let deadline =
+            std::time::Instant::now() + Duration::from_secs(backend::HEALTH_CHECK_TIMEOUT_SECS);
+
+        loop {
+            tokio::time::sleep(Duration::from_millis(backend::HEALTH_CHECK_INTERVAL_MS)).await;
+
+            // Brief lock: check if the child process crashed or if someone
+            // else already finalised the status.
+            let alive = {
+                let mut mgr = backend.lock().await;
+                if matches!(
+                    mgr.status(),
+                    backend::BackendStatus::Running | backend::BackendStatus::Error(_)
+                ) {
+                    return;
+                }
+                mgr.check_alive()
+            };
+            if !alive {
+                log::error!("Backend process exited unexpectedly during startup");
+                return;
+            }
+
+            // Timeout check (no lock needed).
+            if std::time::Instant::now() > deadline {
+                let mut mgr = backend.lock().await;
+                mgr.mark_error(format!(
+                    "Backend did not become healthy within {} seconds",
+                    backend::HEALTH_CHECK_TIMEOUT_SECS
+                ));
+                log::error!("Backend health check timed out");
+                return;
+            }
+
+            // HTTP health probe — NO lock held.
+            let healthy = client
+                .get(&health_url)
+                .timeout(Duration::from_secs(2))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false);
+
+            if healthy {
+                let mut mgr = backend.lock().await;
+                mgr.mark_running();
+                log::info!("Backend is healthy and ready");
+                return;
+            }
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -42,16 +116,46 @@ pub fn run() {
                 log::warn!("Failed to register shortcuts: {}", e);
             }
 
-            // Auto-start the backend on launch
-            let _state = app.state::<AppState>();
+            // Auto-start the backend on launch (two-phase, non-blocking).
+            //
+            // Phase 1 — `launch()`: spawn the child process and set status to
+            //   Starting.  Only a brief lock is held.
+            //
+            // Phase 2 — `spawn_health_monitor()`: poll /health in a background
+            //   task.  HTTP probes happen *without* the lock; the lock is
+            //   re-acquired only for brief status checks between probes.
+            //
+            // This is critical because the frontend calls `get_backend_status`
+            // every second.  If the lock were held throughout `start()` (which
+            // waits up to 120 s), those queries would block indefinitely and
+            // the UI would be stuck on "Initializing backend services".
             let handle = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
-                let state_inner = handle.state::<AppState>();
-                let mut mgr = state_inner.backend.lock().await;
-                if let Err(e) = mgr.start(&handle).await {
-                    log::error!("Failed to auto-start backend: {}", e);
+                let state = handle.state::<AppState>();
+
+                // Phase 1: Launch the child process (short lock).
+                {
+                    let mut mgr = state.backend.lock().await;
+                    match mgr.launch(&handle).await {
+                        Ok(()) => {
+                            // If launch() found an already-healthy gateway on
+                            // the port, status is Running — nothing more to do.
+                            if matches!(mgr.status(), backend::BackendStatus::Running) {
+                                log::info!("Backend already running, reused existing process");
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to launch backend: {}", e);
+                            return;
+                        }
+                    }
                 }
+                // Mutex released — get_backend_status is now responsive.
+
+                // Phase 2: Background health monitor (lock-free HTTP probes).
+                spawn_health_monitor(state.backend.clone());
             });
 
             Ok(())
