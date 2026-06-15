@@ -1,7 +1,7 @@
 "use client";
 
 import { BotIcon, PlusSquare } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -33,14 +33,27 @@ import { textOfMessage } from "@/core/threads/utils";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
+function parseAgentNameFromPath(pathname: string | null): string {
+  if (!pathname) return "";
+  const match = pathname.match(/\/workspace\/agents\/([^/]+)\//);
+  const raw = match?.[1];
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export default function AgentChatPage() {
   const { t } = useI18n();
   const [showFollowups, setShowFollowups] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
-  const { agent_name } = useParams<{
-    agent_name: string;
-  }>();
+  // In the Electron desktop build, useParams() returns stale values from the
+  // pre-rendered new.html RSC payload. Parse agent_name from the real URL.
+  const agent_name = parseAgentNameFromPath(pathname);
 
   const { agent } = useAgent(agent_name);
 

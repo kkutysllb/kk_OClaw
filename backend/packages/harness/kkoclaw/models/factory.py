@@ -4,6 +4,7 @@ from langchain.chat_models import BaseChatModel
 
 from kkoclaw.config import get_app_config
 from kkoclaw.config.app_config import AppConfig
+from kkoclaw.models.config_validation import should_validate_resolved_model_class, validate_model_credentials
 from kkoclaw.reflection import resolve_class
 from kkoclaw.tracing import build_tracing_callbacks
 
@@ -76,6 +77,8 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     if model_config is None:
         raise ValueError(f"Model {name} not found in config") from None
     model_class = resolve_class(model_config.use, BaseChatModel)
+    if should_validate_resolved_model_class(model_config.use, model_class):
+        validate_model_credentials(model_config.model_dump(exclude_none=True))
     model_settings_from_config = model_config.model_dump(
         exclude_none=True,
         exclude={

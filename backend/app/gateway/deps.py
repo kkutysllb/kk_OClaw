@@ -202,6 +202,21 @@ _cached_local_provider: LocalAuthProvider | None = None
 _cached_repo: SQLiteUserRepository | None = None
 
 
+def get_access_token_from_request(request: Request) -> str | None:
+    """Return the session token from cookie or Authorization bearer header."""
+    cookies = getattr(request, "cookies", {})
+    access_token = cookies.get("access_token")
+    if access_token:
+        return access_token
+
+    headers = getattr(request, "headers", {})
+    authorization = headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer" and token.strip():
+        return token.strip()
+    return None
+
+
 def get_local_provider() -> LocalAuthProvider:
     """Get or create the cached LocalAuthProvider singleton.
 
@@ -232,7 +247,7 @@ async def get_current_user_from_request(request: Request):
     from app.gateway.auth import decode_token
     from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse, TokenError, token_error_to_code
 
-    access_token = request.cookies.get("access_token")
+    access_token = get_access_token_from_request(request)
     if not access_token:
         raise HTTPException(
             status_code=401,

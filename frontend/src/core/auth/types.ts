@@ -11,6 +11,12 @@ export const userSchema = z.object({
 
 export type User = z.infer<typeof userSchema>;
 
+export interface LoginResponse {
+  expires_in: number;
+  needs_setup?: boolean;
+  access_token?: string;
+}
+
 // ── SSR auth result (tagged union) ────────────────────────────────
 
 export type AuthResult =

@@ -1,0 +1,88 @@
+# electron-builder configuration for OClaw Desktop.
+#
+# Build:  pnpm --dir desktop-electron run build:app[:full]
+# Output: desktop-electron/release/
+#
+# The Python gateway (PyInstaller bundle) is bundled via `extraResources`
+# and resolved at runtime as `process.resourcesPath/gateway`.
+
+appId: com.oclaw.desktop
+productName: OClaw
+copyright: Copyright © OClaw
+
+directories:
+  output: release
+  buildResources: build
+
+# Entry point + compiled preload (relative to desktop-electron/).
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+
+# Ship the PyInstaller gateway bundle and the static frontend export.
+extraResources:
+  - from: resources/gateway
+    to: gateway
+    filter: ["**/*"]
+  - from: ../frontend/out
+    to: frontend-out
+    filter: ["**/*"]
+
+# ── macOS ─────────────────────────────────────────────────────────────────
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # Skip code signing for local builds. Apple's timestamp service is often
+  # unreachable from China, and unsigned DMGs work fine for local testing.
+  # For distribution, set CSC_LINK + APPLE_ID env vars to enable signing.
+  identity: null
+  entitlements: build/Entitlements.plist
+  entitlementsInherit: build/Entitlements.plist
+  icon: build/icon.icns
+
+dmg:
+  title: "${productName} ${version}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ── Windows ───────────────────────────────────────────────────────────────
+win:
+  target:
+    - nsis
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+# ── Linux ─────────────────────────────────────────────────────────────────
+# AppImage is skipped (matches the prior CI config which only built deb+rpm).
+linux:
+  category: Development
+  target:
+    - deb
+    - rpm
+  icon: build/icons
+  maintainer: OClaw
+
+# ── Auto-update ───────────────────────────────────────────────────────────
+# electron-updater checks these providers for release artifacts.
+publish:
+  provider: github
+  owner: kkutysllb
+  repo: kk_OClaw
+  releaseType: release

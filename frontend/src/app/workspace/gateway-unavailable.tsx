@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { fetch } from "@/core/api/fetcher";
+import { clearDesktopSessionToken } from "@/core/auth/session";
+import { getBackendBaseURL } from "@/core/config";
+
 export function GatewayUnavailable() {
   const router = useRouter();
 
   const handleLogout = async () => {
+    clearDesktopSessionToken();
     try {
-      await fetch("/api/v1/auth/logout", {
+      await fetch(`${getBackendBaseURL()}/api/v1/auth/logout`, {
         method: "POST",
         credentials: "include",
       });

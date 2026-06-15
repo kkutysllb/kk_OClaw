@@ -1,29 +1,38 @@
 /**
- * Desktop (Tauri) integration utilities.
+ * Desktop (Electron) integration utilities.
  *
- * Provides a thin abstraction layer over Tauri APIs so the rest of the
- * frontend can import from a single location without worrying about
- * whether `window.__TAURI_INTERNALS__` exists.
+ * Provides a thin abstraction layer over the Electron preload bridge so the
+ * rest of the frontend can import from a single location without worrying
+ * about whether `window.oclawDesktop` exists.
+ *
+ * Every function has a browser fallback (no-op / native browser behaviour)
+ * so the same code path runs unchanged in the web build.
  */
 
-import { invoke } from "@tauri-apps/api/core";
 import { isDesktop } from "../config";
 
-// ── Types ────────────────────────────────────────────────────────────────
+export type {
+  BackendStatus,
+  BackendStatusKind,
+  FileDialogOptions,
+  GatewayConfig,
+  PickedFile,
+  UpdateInfo,
+} from "./types";
 
-export interface BackendStatus {
-  status: "stopped" | "starting" | "running" | "error";
-  port: number;
-  error?: string;
-}
+import type {
+  BackendStatus,
+  FileDialogOptions,
+  PickedFile,
+} from "./types";
 
 // ── Backend management ───────────────────────────────────────────────────
 
-/** Get the current backend status via Tauri IPC. */
+/** Get the current backend status via Electron IPC. */
 export async function getBackendStatus(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("get_backend_status");
+    return await window.oclawDesktop!.getBackendStatus();
   } catch (e) {
     console.warn("[desktop] getBackendStatus failed:", e);
     return null;
@@ -34,7 +43,7 @@ export async function getBackendStatus(): Promise<BackendStatus | null> {
 export async function startBackend(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("start_backend");
+    return await window.oclawDesktop!.startBackend();
   } catch (e) {
     console.warn("[desktop] startBackend failed:", e);
     return null;
@@ -45,7 +54,7 @@ export async function startBackend(): Promise<BackendStatus | null> {
 export async function stopBackend(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("stop_backend");
+    return await window.oclawDesktop!.stopBackend();
   } catch (e) {
     console.warn("[desktop] stopBackend failed:", e);
     return null;
@@ -56,7 +65,7 @@ export async function stopBackend(): Promise<BackendStatus | null> {
 export async function restartBackend(): Promise<BackendStatus | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<BackendStatus>("restart_backend");
+    return await window.oclawDesktop!.restartBackend();
   } catch (e) {
     console.warn("[desktop] restartBackend failed:", e);
     return null;
@@ -67,7 +76,7 @@ export async function restartBackend(): Promise<BackendStatus | null> {
 export async function getBackendLogs(): Promise<string[]> {
   if (!isDesktop()) return [];
   try {
-    return await invoke<string[]>("get_backend_logs");
+    return await window.oclawDesktop!.getBackendLogs();
   } catch (e) {
     console.warn("[desktop] getBackendLogs failed:", e);
     return [];
@@ -76,15 +85,9 @@ export async function getBackendLogs(): Promise<string[]> {
 
 // ── File dialog ──────────────────────────────────────────────────────────
 
-export interface FileDialogOptions {
-  multiple?: boolean;
-  filters?: { name: string; extensions: string[] }[];
-  title?: string;
-}
-
 /**
  * Open a native file dialog and return selected files as File objects.
- * Falls back to a hidden <input type="file"> when not in desktop mode.
+ * Falls back to a hidden `<input type="file">` when not in desktop mode.
  */
 export async function openFilePicker(
   options: FileDialogOptions = {},
@@ -94,28 +97,15 @@ export async function openFilePicker(
   }
 
   try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const { readFile } = await import("@tauri-apps/plugin-fs");
-
-    const selected = await open({
-      multiple: options.multiple ?? false,
-      filters: options.filters,
-      title: options.title ?? "Select file",
+    const picked: PickedFile[] =
+      await window.oclawDesktop!.pickFiles(options);
+    return picked.map((p) => {
+      // Copy into a fresh ArrayBuffer-backed buffer so TS accepts it as a
+      // BlobPart (the IPC bridge may hand back a SharedArrayBuffer-backed view).
+      const buf = new Uint8Array(p.data).slice();
+      const blob = new Blob([buf], { type: p.type });
+      return new File([blob], p.name, { type: p.type });
     });
-
-    if (!selected) return [];
-
-    const paths = Array.isArray(selected) ? selected : [selected];
-
-    const files = await Promise.all(
-      paths.map(async (filePath) => {
-        const data = await readFile(filePath);
-        const name = filePath.split("/").pop() ?? "file";
-        return new File([data], name);
-      }),
-    );
-
-    return files;
   } catch (e) {
     console.warn(
       "[desktop] openFilePicker failed, falling back to browser:",
@@ -125,7 +115,9 @@ export async function openFilePicker(
   }
 }
 
-function openBrowserFilePicker(options: FileDialogOptions): Promise<File[]> {
+function openBrowserFilePicker(
+  options: FileDialogOptions,
+): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -143,18 +135,6 @@ function openBrowserFilePicker(options: FileDialogOptions): Promise<File[]> {
   });
 }
 
-// ── System integration ───────────────────────────────────────────────────
-
-/** Open a URL in the system's default browser. */
-export async function openExternalUrl(url: string): Promise<void> {
-  if (!isDesktop()) {
-    window.open(url, "_blank");
-    return;
-  }
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    window.open(url, "_blank");
-  }
-}
+// Re-export system-integration helpers kept in dedicated modules.
+export { openExternalUrl } from "./external-links";
+export { initDragDrop, onDesktopFileDrop } from "./dnd";

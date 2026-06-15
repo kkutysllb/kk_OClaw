@@ -10,6 +10,9 @@ import React, {
   type ReactNode,
 } from "react";
 
+import { getBackendBaseURL } from "../config";
+
+import { clearDesktopSessionToken, getDesktopSessionToken } from "./session";
 import { type User, buildLoginUrl } from "./types";
 
 // Re-export for consumers
@@ -56,16 +59,30 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const refreshUser = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("/api/v1/auth/me", {
+      const desktopToken = getDesktopSessionToken();
+      const headers = desktopToken
+        ? { Authorization: `Bearer ${desktopToken}` }
+        : undefined;
+
+      // DIAG: trace the /auth/me request
+      console.log("[DIAG:refreshUser] desktopTokenPresent=", !!desktopToken, "hasAuthHeader=", !!headers, "baseUrl=", getBackendBaseURL());
+
+      const res = await fetch(`${getBackendBaseURL()}/api/v1/auth/me`, {
+        headers,
         credentials: "include",
       });
 
+      console.log("[DIAG:refreshUser] /auth/me status=", res.status);
+
       if (res.ok) {
         const data = await res.json();
+        console.log("[DIAG:refreshUser] user fetched:", data?.email);
         setUser(data);
       } else if (res.status === 401) {
         // Session expired or invalid
+        console.log("[DIAG:refreshUser] 401 — clearing session, pathname=", pathname);
         setUser(null);
+        clearDesktopSessionToken();
         // Redirect to login if on a protected route
         if (pathname?.startsWith("/workspace")) {
           router.push(buildLoginUrl(pathname));
@@ -86,10 +103,16 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const logout = useCallback(async () => {
     // Immediately clear local state to prevent UI flicker
     setUser(null);
+    const desktopToken = getDesktopSessionToken();
+    clearDesktopSessionToken();
 
     try {
-      await fetch("/api/v1/auth/logout", {
+      const headers = desktopToken
+        ? { Authorization: `Bearer ${desktopToken}` }
+        : undefined;
+      await fetch(`${getBackendBaseURL()}/api/v1/auth/logout`, {
         method: "POST",
+        headers,
         credentials: "include",
       });
     } catch (err) {

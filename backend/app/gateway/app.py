@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.config import get_gateway_config
 from app.gateway.csrf_middleware import CSRFMiddleware
+from app.gateway.request_logging_middleware import RequestLoggingMiddleware
 from app.gateway.deps import langgraph_runtime
 from app.gateway.routers import (
     agents,
@@ -453,6 +454,12 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
+
+    # Diagnostic request logger — registered LAST so it is the OUTERMOST
+    # middleware (executes first on request, last on response). This lets
+    # it see CORS preflight (OPTIONS) probes and the final status code
+    # after auth/CSRF processing. Used for desktop login-loop debugging.
+    app.add_middleware(RequestLoggingMiddleware)
 
     # Include routers
     # Models API is mounted at /api/models

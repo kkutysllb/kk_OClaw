@@ -17,6 +17,13 @@ export class AgentNameCheckError extends Error {
 
 export async function listAgents(): Promise<Agent[]> {
   const res = await fetch(`${getBackendBaseURL()}/api/agents`);
+  if (res.status === 403) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    if (err.detail?.includes("agents_api.enabled=true")) {
+      return [];
+    }
+    throw new Error(err.detail ?? `Failed to load agents: ${res.statusText}`);
+  }
   if (!res.ok) throw new Error(`Failed to load agents: ${res.statusText}`);
   const data = (await res.json()) as { agents: Agent[] };
   return data.agents;

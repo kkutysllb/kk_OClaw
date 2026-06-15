@@ -71,8 +71,9 @@ export async function saveFullConfig(data: ConfigData): Promise<ConfigData> {
 /**
  * Trigger a gateway restart so config changes take effect.
  *
- * In desktop mode, the caller should use `restartBackend()` from
- * `@/core/desktop` instead — Tauri manages the process lifecycle.
+ * In packaged desktop mode, the caller should use `restartBackend()` from
+ * `@/core/desktop` instead because Electron manages the process lifecycle.
+ * Desktop dev uses this API path so the dev launcher can respawn the gateway.
  */
 export async function restartGateway(): Promise<void> {
   const res = await fetch(`${getBackendBaseURL()}/api/config/restart`, {

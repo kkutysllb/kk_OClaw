@@ -1,25 +1,19 @@
 /**
  * Auto-updater utilities for the desktop app.
  *
- * Wraps the Tauri updater commands so the frontend can check for
- * and install application updates.
+ * Wraps the Electron `electron-updater` channels so the frontend can check
+ * for and install application updates without importing any Electron code.
  */
 
-import { invoke } from "@tauri-apps/api/core";
 import { isDesktop } from "../config";
 
-export interface UpdateInfo {
-  available: boolean;
-  version?: string;
-  date?: string;
-  body?: string;
-}
+import type { UpdateInfo } from "./types";
 
 /** Check if an application update is available. */
 export async function checkForUpdates(): Promise<UpdateInfo | null> {
   if (!isDesktop()) return null;
   try {
-    return await invoke<UpdateInfo>("check_for_updates");
+    return await window.oclawDesktop!.checkForUpdates();
   } catch (e) {
     console.warn("[desktop] checkForUpdates failed:", e);
     return null;
@@ -30,8 +24,7 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 export async function installUpdate(): Promise<boolean> {
   if (!isDesktop()) return false;
   try {
-    await invoke("install_update");
-    return true;
+    return await window.oclawDesktop!.installUpdate();
   } catch (e) {
     console.warn("[desktop] installUpdate failed:", e);
     return false;

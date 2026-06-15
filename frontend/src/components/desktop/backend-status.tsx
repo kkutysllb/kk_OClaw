@@ -1,20 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { isDesktopBackendManagedMode } from "@/core/config";
 import {
+  getBackendLogs,
   getBackendStatus,
   restartBackend,
-  getBackendLogs,
   type BackendStatus,
 } from "@/core/desktop";
-import { isDesktop } from "@/core/config";
 
 /**
  * Backend status indicator for the desktop app.
  *
  * Shows a small pill in the bottom-left corner indicating whether the
  * embedded Python gateway is running, starting, stopped, or errored.
- * Only rendered when running inside Tauri.
+ * Only rendered when running inside Electron.
  */
 export function BackendStatusIndicator() {
   const [status, setStatus] = useState<BackendStatus | null>(null);
@@ -22,12 +23,13 @@ export function BackendStatusIndicator() {
   const [logs, setLogs] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
+    if (!isDesktopBackendManagedMode()) return;
     const s = await getBackendStatus();
     setStatus(s);
   }, []);
 
   useEffect(() => {
-    if (!isDesktop()) return;
+    if (!isDesktopBackendManagedMode()) return;
 
     // Poll status every 3 seconds
     void refresh();
@@ -36,9 +38,9 @@ export function BackendStatusIndicator() {
   }, [refresh]);
 
   useEffect(() => {
-    if (!showLogs || !isDesktop()) return;
+    if (!showLogs || !isDesktopBackendManagedMode()) return;
     let alive = true;
-    getBackendLogs().then((l) => {
+    void getBackendLogs().then((l) => {
       if (alive) setLogs(l);
     });
     return () => {
@@ -51,8 +53,8 @@ export function BackendStatusIndicator() {
     setTimeout(() => void refresh(), 1000);
   };
 
-  // Don't render anything outside Tauri
-  if (!isDesktop()) return null;
+  // Don't render anything outside Electron
+  if (!isDesktopBackendManagedMode()) return null;
 
   const statusColor =
     status?.status === "running"

@@ -164,9 +164,10 @@ async def replace_full_config(body: FullConfigUpdate) -> FullConfigResponse:
 async def restart_gateway() -> dict:
     """Trigger a graceful self-restart.
 
-    In desktop mode, Tauri's BackendManager detects the exit and respawns.
-    In web/server mode, a detached watcher process re-execs uvicorn after
-    a short delay (allowing the port to be released).
+    In packaged desktop mode, Electron's BackendManager detects the exit and
+    respawns. In desktop dev mode, desktop-electron/scripts/dev.mjs owns the
+    gateway and respawns it. In web/server mode, a detached watcher process
+    re-execs uvicorn after a short delay (allowing the port to be released).
     """
     logger.info("Gateway restart requested")
 
@@ -253,14 +254,19 @@ def _spawn_watcher_process() -> None:
     release the port), then launches a fresh uvicorn instance with the same
     host/port configuration.
 
-    In PyInstaller frozen mode (desktop), this is a no-op because Tauri's
-    BackendManager detects the exit and respawns automatically.
+    In PyInstaller frozen mode (packaged desktop), this is a no-op because
+    Electron's BackendManager detects the exit and respawns automatically.
+    In desktop dev mode, the Electron dev launcher owns and respawns the
+    gateway process, so no detached watcher is needed.
     """
     is_frozen = getattr(sys, "frozen", False)
 
     if is_frozen:
-        # Desktop mode: Tauri's BackendManager will respawn us. No watcher needed.
-        logger.info("Frozen mode: skipping watcher (Tauri will respawn)")
+        logger.info("Frozen mode: skipping watcher (Electron will respawn)")
+        return
+
+    if os.environ.get("KKOCLAW_DESKTOP_DEV") == "1":
+        logger.info("Desktop dev mode: skipping watcher (dev launcher will respawn)")
         return
 
     host = os.environ.get("GATEWAY_HOST", "0.0.0.0")

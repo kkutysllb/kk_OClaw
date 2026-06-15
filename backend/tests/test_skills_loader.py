@@ -80,6 +80,30 @@ def test_load_skills_skips_hidden_directories(tmp_path: Path):
     assert "secret-skill" not in names
 
 
+def test_load_skills_supports_public_only_desktop_root(tmp_path: Path):
+    """Desktop may expose only public skills and omit the custom directory."""
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / "public" / "desktop-skill", "desktop-skill", "Desktop public skill")
+
+    skills = get_or_new_skill_storage(skills_path=skills_root).load_skills(enabled_only=False)
+
+    assert [skill.name for skill in skills] == ["desktop-skill"]
+    assert skills[0].category == "public"
+
+
+def test_load_skills_can_ignore_custom_skills_for_desktop(tmp_path: Path, monkeypatch):
+    """Desktop public-only mode must ignore stale custom skills already on disk."""
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root / "public" / "desktop-skill", "desktop-skill", "Desktop public skill")
+    _write_skill(skills_root / "custom" / "stale-skill", "stale-skill", "Stale custom skill")
+    monkeypatch.setenv("KKOCLAW_PUBLIC_SKILLS_ONLY", "1")
+
+    skills = get_or_new_skill_storage(skills_path=skills_root).load_skills(enabled_only=False)
+
+    assert [skill.name for skill in skills] == ["desktop-skill"]
+    assert skills[0].category == "public"
+
+
 def test_load_skills_prefers_custom_over_public_with_same_name(tmp_path: Path):
     skills_root = tmp_path / "skills"
     _write_skill(skills_root / "public" / "shared-skill", "shared-skill", "Public version")

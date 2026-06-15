@@ -1,12 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-// Mock Tauri invoke
-const mockInvoke = vi.fn();
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
-}));
-
 import {
   getBackendStatus,
   getBackendLogs,
@@ -14,116 +8,127 @@ import {
   stopBackend,
   restartBackend,
 } from "@/core/desktop";
+import type { BackendStatus, DesktopBridge } from "@/core/desktop/types";
 
-// Helper to toggle desktop mode
-function setDesktopMode(enabled: boolean) {
-  if (enabled) {
-    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+/** A minimal Electron bridge stub used to drive the desktop code path. */
+function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
+  const stopped: BackendStatus = { status: "stopped", port: 19987 };
+  const starting: BackendStatus = { status: "starting", port: 19987 };
+  return {
+    gatewayPort: 19987,
+    getGatewayConfig: vi.fn(async () => ({ port: 19987 })),
+    getBackendStatus: vi.fn(async (): Promise<BackendStatus> => stopped),
+    startBackend: vi.fn(async (): Promise<BackendStatus> => starting),
+    stopBackend: vi.fn(async (): Promise<BackendStatus> => stopped),
+    restartBackend: vi.fn(async (): Promise<BackendStatus> => starting),
+    getBackendLogs: vi.fn(async (): Promise<string[]> => []),
+    pickFiles: vi.fn(async () => []),
+    openExternal: vi.fn(async (_url: string) => undefined),
+    onFileDrop: vi.fn(() => () => {}),
+    checkForUpdates: vi.fn(async () => ({ available: false })),
+    installUpdate: vi.fn(async () => true),
+    ...overrides,
+  };
+}
+
+function setDesktopMode(enabled: boolean, bridge?: DesktopBridge) {
+  const w = window as unknown as Record<string, unknown>;
+  if (enabled && bridge) {
+    w.oclawDesktop = bridge;
   } else {
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    delete w.oclawDesktop;
   }
 }
 
-describe("desktop integration — web mode (no Tauri)", () => {
+const STOPPED: BackendStatus = { status: "stopped", port: 19987 };
+const STARTING: BackendStatus = { status: "starting", port: 19987 };
+
+describe("desktop integration — web mode (no Electron bridge)", () => {
   beforeEach(() => {
     setDesktopMode(false);
-    mockInvoke.mockReset();
   });
 
   test("getBackendStatus returns null in web mode", async () => {
-    const result = await getBackendStatus();
-    expect(result).toBeNull();
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(await getBackendStatus()).toBeNull();
   });
 
   test("startBackend returns null in web mode", async () => {
-    const result = await startBackend();
-    expect(result).toBeNull();
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(await startBackend()).toBeNull();
   });
 
   test("stopBackend returns null in web mode", async () => {
-    const result = await stopBackend();
-    expect(result).toBeNull();
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(await stopBackend()).toBeNull();
   });
 
   test("restartBackend returns null in web mode", async () => {
-    const result = await restartBackend();
-    expect(result).toBeNull();
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(await restartBackend()).toBeNull();
   });
 
   test("getBackendLogs returns empty array in web mode", async () => {
-    const result = await getBackendLogs();
-    expect(result).toEqual([]);
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(await getBackendLogs()).toEqual([]);
   });
 });
 
-describe("desktop integration — Tauri mode", () => {
+describe("desktop integration — Electron mode", () => {
+  let bridge: DesktopBridge;
+
   beforeEach(() => {
-    setDesktopMode(true);
-    mockInvoke.mockReset();
+    bridge = makeBridge();
+    setDesktopMode(true, bridge);
   });
 
   afterEach(() => {
     setDesktopMode(false);
   });
 
-  test("getBackendStatus calls invoke and returns data", async () => {
-    const mockStatus = { status: "running", port: 9987 };
-    mockInvoke.mockResolvedValueOnce(mockStatus);
-
+  test("getBackendStatus calls the bridge and returns data", async () => {
+    (bridge.getBackendStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      STOPPED,
+    );
     const result = await getBackendStatus();
-    expect(mockInvoke).toHaveBeenCalledWith("get_backend_status");
-    expect(result).toEqual(mockStatus);
+    expect(bridge.getBackendStatus).toHaveBeenCalled();
+    expect(result).toEqual(STOPPED);
   });
 
-  test("getBackendStatus returns null on invoke error", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("IPC error"));
+  test("getBackendStatus returns null on bridge error", async () => {
+    (bridge.getBackendStatus as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("IPC error"),
+    );
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const result = await getBackendStatus();
-    expect(result).toBeNull();
+    expect(await getBackendStatus()).toBeNull();
     warnSpy.mockRestore();
   });
 
-  test("startBackend calls invoke without parameters", async () => {
-    const mockStatus = { status: "running", port: 9987 };
-    mockInvoke.mockResolvedValueOnce(mockStatus);
-
-    await startBackend();
-    expect(mockInvoke).toHaveBeenCalledWith("start_backend");
+  test("startBackend calls the bridge", async () => {
+    (bridge.startBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      STARTING,
+    );
+    expect(await startBackend()).toEqual(STARTING);
+    expect(bridge.startBackend).toHaveBeenCalled();
   });
 
-  test("stopBackend calls correct command", async () => {
-    mockInvoke.mockResolvedValueOnce({ status: "stopped", port: 9987 });
-    await stopBackend();
-    expect(mockInvoke).toHaveBeenCalledWith("stop_backend");
+  test("stopBackend calls the bridge", async () => {
+    (bridge.stopBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      STOPPED,
+    );
+    expect(await stopBackend()).toEqual(STOPPED);
+    expect(bridge.stopBackend).toHaveBeenCalled();
   });
 
-  test("restartBackend calls correct command", async () => {
-    mockInvoke.mockResolvedValueOnce({ status: "running", port: 9987 });
-    await restartBackend();
-    expect(mockInvoke).toHaveBeenCalledWith("restart_backend");
+  test("restartBackend calls the bridge", async () => {
+    (bridge.restartBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      STARTING,
+    );
+    expect(await restartBackend()).toEqual(STARTING);
+    expect(bridge.restartBackend).toHaveBeenCalled();
   });
 
-  test("getBackendLogs returns log array", async () => {
-    const mockLogs = ["[INFO] line 1", "[WARN] line 2"];
-    mockInvoke.mockResolvedValueOnce(mockLogs);
-
-    const result = await getBackendLogs();
-    expect(mockInvoke).toHaveBeenCalledWith("get_backend_logs");
-    expect(result).toEqual(mockLogs);
-  });
-
-  test("getBackendLogs returns empty array on error", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("IPC error"));
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const result = await getBackendLogs();
-    expect(result).toEqual([]);
-    warnSpy.mockRestore();
+  test("getBackendLogs calls the bridge", async () => {
+    (bridge.getBackendLogs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      "line1",
+      "line2",
+    ]);
+    expect(await getBackendLogs()).toEqual(["line1", "line2"]);
+    expect(bridge.getBackendLogs).toHaveBeenCalled();
   });
 });

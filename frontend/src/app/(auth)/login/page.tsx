@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { ShineBorder } from "@/components/ui/shine-border";
 import SpotlightCard from "@/components/ui/spotlight-card";
 import { useAuth } from "@/core/auth/AuthProvider";
-import { parseAuthError } from "@/core/auth/types";
+import { getDesktopAuthHeaders, setDesktopSessionToken } from "@/core/auth/session";
+import { type LoginResponse, parseAuthError } from "@/core/auth/types";
+import { getBackendBaseURL, isDesktop } from "@/core/config";
 
 /**
  * Validate next parameter
@@ -49,7 +51,7 @@ function validateNextParam(next: string | null): string | null {
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, refreshUser } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +81,7 @@ function LoginPageInner() {
 
     let cancelled = false;
 
-    void fetch("/api/v1/auth/setup-status")
+    void fetch(`${getBackendBaseURL()}/api/v1/auth/setup-status`)
       .then((r) => r.json())
       .then((data: { needs_setup?: boolean }) => {
         if (!cancelled && data.needs_setup) {
@@ -108,25 +110,46 @@ function LoginPageInner() {
         ? `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
         : JSON.stringify({ email, password });
 
+      const desktopHeaders = getDesktopAuthHeaders();
       const headers: HeadersInit = isLogin
-        ? { "Content-Type": "application/x-www-form-urlencoded" }
-        : { "Content-Type": "application/json" };
+        ? {
+            "Content-Type": "application/x-www-form-urlencoded",
+            ...desktopHeaders,
+          }
+        : { "Content-Type": "application/json", ...desktopHeaders };
 
-      const res = await fetch(endpoint, {
+      // DIAG: trace the desktop auth request construction
+      console.log("[DIAG:login] isDesktop=", isDesktop(), "baseUrl=", getBackendBaseURL(), "endpoint=", endpoint, "desktopHeaders=", JSON.stringify(desktopHeaders));
+
+      const res = await fetch(`${getBackendBaseURL()}${endpoint}`, {
         method: "POST",
         headers,
         body,
         credentials: "include", // Important: include HttpOnly cookie
       });
 
+      console.log("[DIAG:login] response status=", res.status, "ok=", res.ok);
+
       if (!res.ok) {
         const data = await res.json();
+        console.log("[DIAG:login] error response body=", JSON.stringify(data));
         const authError = parseAuthError(data);
         setError(authError.message);
         return;
       }
 
+      const data = (await res.json()) as LoginResponse;
+      console.log("[DIAG:login] success body has access_token=", !!data.access_token, "needs_setup=", data.needs_setup);
+      if (isDesktop() && data.access_token) {
+        setDesktopSessionToken(data.access_token);
+        console.log("[DIAG:login] desktop session token stored");
+      } else {
+        console.log("[DIAG:login] desktop token NOT stored: isDesktop=", isDesktop(), "hasToken=", !!data.access_token);
+      }
+
       // Both login and register set a cookie — redirect to workspace
+      await refreshUser();
+      router.refresh();
       router.push(redirectPath);
     } catch {
       setError("网络错误，请重试。");

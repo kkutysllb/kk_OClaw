@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -58,15 +58,39 @@ import { pathOfThread, titleOfThread } from "@/core/threads/utils";
 import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
+function parseThreadIdFromPath(pathname: string | null): string {
+  if (!pathname) return "new";
+  const match = pathname.match(/\/chats\/([^/?#]+)/);
+  const raw = match?.[1];
+  if (!raw) return "new";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function parseAgentNameFromPath(pathname: string | null): string | undefined {
+  if (!pathname) return undefined;
+  const match = pathname.match(/\/workspace\/agents\/([^/]+)\//);
+  const raw = match?.[1];
+  if (!raw) return undefined;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export function RecentChatList() {
   const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
-  const { thread_id: threadIdFromPath, agent_name: agentNameFromPath } =
-    useParams<{
-      thread_id: string;
-      agent_name?: string;
-    }>();
+  // In the Electron desktop build, useParams() returns stale values from the
+  // pre-rendered new.html RSC payload. Parse thread_id and agent_name from
+  // the real URL pathname instead.
+  const threadIdFromPath = parseThreadIdFromPath(pathname);
+  const agentNameFromPath = parseAgentNameFromPath(pathname);
   const { data: threads = [] } = useThreads();
   const { mutate: deleteThread } = useDeleteThread();
   const { mutate: renameThread } = useRenameThread();

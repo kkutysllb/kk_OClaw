@@ -34,6 +34,7 @@ import {
   upsertFeedback,
   type FeedbackData,
 } from "@/core/api/feedback";
+import { useAuthenticatedArtifactObjectUrl } from "@/core/artifacts/authenticated-url";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -192,6 +193,13 @@ function MessageImage({
   threadId: string;
   maxWidth?: string;
 }) {
+  const artifactUrl =
+    typeof src === "string" && src.startsWith("/mnt/")
+      ? resolveArtifactURL(src, threadId)
+      : typeof src === "string"
+        ? src
+        : null;
+  const displayUrl = useAuthenticatedArtifactObjectUrl(artifactUrl);
   if (!src) return null;
 
   const imgClassName = cn("overflow-hidden rounded-lg", `max-w-[${maxWidth}]`);
@@ -200,12 +208,32 @@ function MessageImage({
     return <img className={imgClassName} src={src} alt={alt} {...props} />;
   }
 
-  const url = src.startsWith("/mnt/") ? resolveArtifactURL(src, threadId) : src;
+  if (!displayUrl) return null;
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
-      <img className={imgClassName} src={url} alt={alt} {...props} />
+    <a href={displayUrl} target="_blank" rel="noopener noreferrer">
+      <img className={imgClassName} src={displayUrl} alt={alt} {...props} />
     </a>
+  );
+}
+
+function MessageArtifactLink({
+  href,
+  threadId,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  threadId: string;
+}) {
+  const url = href?.startsWith("/mnt/") ? resolveArtifactURL(href, threadId) : href;
+  const displayUrl = useAuthenticatedArtifactObjectUrl(url);
+
+  return (
+    <a
+      {...props}
+      href={displayUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+    />
   );
 }
 
@@ -231,13 +259,11 @@ function MessageContent_({
       ),
       a: ({ href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) => {
         if (href?.startsWith("/mnt/")) {
-          const url = resolveArtifactURL(href, threadId);
           return (
-            <a
+            <MessageArtifactLink
               {...props}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={href}
+              threadId={threadId}
             />
           );
         }
@@ -439,6 +465,8 @@ function RichFileCard({
   const { t } = useI18n();
   const isUploading = file.status === "uploading";
   const isImage = isImageFile(file.filename);
+  const fileUrl = file.path ? resolveArtifactURL(file.path, threadId) : null;
+  const displayFileUrl = useAuthenticatedArtifactObjectUrl(fileUrl);
 
   if (isUploading) {
     return (
@@ -469,18 +497,17 @@ function RichFileCard({
 
   if (!file.path) return null;
 
-  const fileUrl = resolveArtifactURL(file.path, threadId);
-
   if (isImage) {
+    if (!displayFileUrl) return null;
     return (
       <a
-        href={fileUrl}
+        href={displayFileUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="group border-border/40 relative block overflow-hidden rounded-lg border"
       >
         <img
-          src={fileUrl}
+          src={displayFileUrl}
           alt={file.filename}
           className="h-32 w-auto max-w-60 object-cover transition-transform group-hover:scale-105"
         />

@@ -29,6 +29,11 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CodeEditor } from "@/components/workspace/code-editor";
+import {
+  downloadArtifactUrl,
+  openArtifactUrl,
+  useAuthenticatedArtifactObjectUrl,
+} from "@/core/artifacts/authenticated-url";
 import { useArtifactContent } from "@/core/artifacts/hooks";
 import { urlOfArtifact } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
@@ -55,6 +60,7 @@ export function ArtifactFileDetail({
 }) {
   const { t } = useI18n();
   const { artifacts, setOpen, select } = useArtifacts();
+  const { isMock } = useThread();
   const isWriteFile = useMemo(() => {
     return filepathFromProps.startsWith("write-file:");
   }, [filepathFromProps]);
@@ -88,12 +94,18 @@ export function ArtifactFileDetail({
     filepath: filepathFromProps,
     enabled: isCodeFile && !isWriteFile,
   });
+  const artifactUrl = useMemo(
+    () =>
+      !isWriteFile ? urlOfArtifact({ filepath, threadId, isMock }) : null,
+    [filepath, isMock, isWriteFile, threadId],
+  );
+  const authenticatedArtifactUrl =
+    useAuthenticatedArtifactObjectUrl(artifactUrl);
 
   const displayContent = content ?? "";
 
   const [viewMode, setViewMode] = useState<"code" | "preview">("code");
   const [isInstalling, setIsInstalling] = useState(false);
-  const { isMock } = useThread();
   useEffect(() => {
     if (isSupportPreview) {
       setViewMode("preview");
@@ -193,12 +205,10 @@ export function ArtifactFileDetail({
                 label={t.common.openInNewWindow}
                 tooltip={t.common.openInNewWindow}
                 onClick={() => {
-                  const w = window.open(
+                  void openArtifactUrl(
                     urlOfArtifact({ filepath, threadId, isMock }),
-                    "_blank",
-                    "noopener,noreferrer",
+                    getFileName(filepath),
                   );
-                  if (w) w.opener = null;
                 }}
               />
             )}
@@ -225,17 +235,15 @@ export function ArtifactFileDetail({
                 label={t.common.download}
                 tooltip={t.common.download}
                 onClick={() => {
-                  const w = window.open(
+                  void downloadArtifactUrl(
                     urlOfArtifact({
                       filepath,
                       threadId,
                       download: true,
                       isMock,
                     }),
-                    "_blank",
-                    "noopener,noreferrer",
+                    getFileName(filepath),
                   );
-                  if (w) w.opener = null;
                 }}
               />
             )}
@@ -267,7 +275,7 @@ export function ArtifactFileDetail({
         {!isCodeFile && (
           <iframe
             className="size-full"
-            src={urlOfArtifact({ filepath, threadId, isMock })}
+            src={authenticatedArtifactUrl}
           />
         )}
       </ArtifactContent>

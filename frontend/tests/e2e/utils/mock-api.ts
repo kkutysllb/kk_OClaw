@@ -33,9 +33,20 @@ export type MockAgent = {
   system_prompt?: string;
 };
 
+export type MockModel = {
+  id: string;
+  name: string;
+  use: string;
+  model: string;
+  display_name: string;
+  supports_thinking?: boolean;
+  supports_vision?: boolean;
+};
+
 export type MockAPIOptions = {
   threads?: MockThread[];
   agents?: MockAgent[];
+  models?: MockModel[];
 };
 
 // ---------------------------------------------------------------------------
@@ -50,6 +61,7 @@ export type MockAPIOptions = {
 export function mockLangGraphAPI(page: Page, options?: MockAPIOptions) {
   const threads = options?.threads ?? [];
   const agents = options?.agents ?? [];
+  const models = options?.models ?? [];
 
   // Thread search — sidebar thread list & chats list page
   void page.route("**/api/langgraph/threads/search", (route) => {
@@ -203,7 +215,7 @@ export function mockLangGraphAPI(page: Page, options?: MockAPIOptions) {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          models: [],
+          models,
           token_usage: { enabled: false },
         }),
       });

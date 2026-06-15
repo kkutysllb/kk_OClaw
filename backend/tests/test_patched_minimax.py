@@ -12,12 +12,37 @@ def _make_model(**kwargs) -> PatchedChatMiniMax:
     )
 
 
-def test_get_request_payload_preserves_thinking_and_forces_reasoning_split():
+def test_get_request_payload_preserves_disabled_thinking_without_reasoning_split():
+    """When thinking is disabled, reasoning_split must NOT be injected.
+
+    MiniMax returns 2013 ("invalid chat setting") when reasoning_split is
+    sent without an active thinking configuration.
+    """
     model = _make_model(extra_body={"thinking": {"type": "disabled"}})
 
     payload = model._get_request_payload([HumanMessage(content="hello")])
 
     assert payload["extra_body"]["thinking"]["type"] == "disabled"
+    assert "reasoning_split" not in payload["extra_body"]
+
+
+def test_get_request_payload_adaptive_thinking_forces_reasoning_split():
+    """MiniMax's current API uses 'adaptive' instead of 'enabled'."""
+    model = _make_model(extra_body={"thinking": {"type": "adaptive"}})
+
+    payload = model._get_request_payload([HumanMessage(content="hello")])
+
+    assert payload["extra_body"]["thinking"]["type"] == "adaptive"
+    assert payload["extra_body"]["reasoning_split"] is True
+
+
+def test_get_request_payload_enabled_thinking_still_works():
+    """Legacy 'enabled' format from older configs should still trigger reasoning_split."""
+    model = _make_model(extra_body={"thinking": {"type": "enabled"}})
+
+    payload = model._get_request_payload([HumanMessage(content="hello")])
+
+    assert payload["extra_body"]["thinking"]["type"] == "enabled"
     assert payload["extra_body"]["reasoning_split"] is True
 
 

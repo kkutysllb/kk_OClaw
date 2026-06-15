@@ -9,7 +9,7 @@ import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 
 import { getAPIClient } from "../api";
 import { fetch } from "../api/fetcher";
-import { getBackendBaseURL } from "../config";
+import { getBackendBaseURL, isDesktop } from "../config";
 import { useI18n } from "../i18n/hooks";
 import type { FileInMessage } from "../messages/utils";
 import type { LocalSettings } from "../settings";
@@ -464,6 +464,10 @@ export function useThreadStream({
             threadId: threadId,
             streamSubgraphs: true,
             streamResumable: true,
+            // Desktop: keep the task running even if the SSE connection drops
+            // (e.g. macOS App Nap throttling, window switching).  The frontend
+            // will rejoin the stream when it reconnects.
+            onDisconnect: isDesktop() ? "continue" : undefined,
             config: {
               recursion_limit: 10000,
             },

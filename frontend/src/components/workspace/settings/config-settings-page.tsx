@@ -27,7 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { isDesktop } from "@/core/config";
+import { isDesktopBackendManagedMode } from "@/core/config";
 import { restartBackend } from "@/core/desktop";
 import { restartGateway, waitForGateway } from "@/core/settings-config/api";
 import { cn } from "@/lib/utils";
@@ -77,27 +77,21 @@ export function ConfigSettingsPage() {
   const [restarting, setRestarting] = useState(false);
 
   const handleApplyAndRestart = async () => {
-    if (
-      !confirm(
-        "确定要重启后端便配置生效吗？重启期间服务将短暂不可用。",
-      )
-    )
+    if (!confirm("确定要重启后端便配置生效吗？重启期间服务将短暂不可用。"))
       return;
 
     setRestarting(true);
-    const desktop = isDesktop();
 
     try {
-      if (desktop) {
-        // Desktop: Tauri manages process lifecycle
+      if (isDesktopBackendManagedMode()) {
         const result = await restartBackend();
-        if (result?.status === "running") {
+        if (result) {
           toast.success("后端已重启，配置已生效");
         } else {
           toast.error("重启失败，请查看托盘菜单手动重启");
         }
       } else {
-        // Web: backend self-restart via API + health polling
+        // Web and desktop dev: backend self-restart via API + health polling.
         toast.info("正在重启后端…");
         try {
           await restartGateway();
@@ -113,9 +107,7 @@ export function ConfigSettingsPage() {
         }
       }
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "重启失败",
-      );
+      toast.error(e instanceof Error ? e.message : "重启失败");
     } finally {
       setRestarting(false);
     }
@@ -159,15 +151,15 @@ export function ConfigSettingsPage() {
   ];
 
   return (
-    <div className="flex min-h-[500px] flex-col gap-4">
-      <div className="flex items-center justify-between gap-2 border-b pb-3">
-        <div className="flex items-center gap-2">
+    <div className="flex min-h-[500px] min-w-0 flex-col gap-4">
+      <div className="flex flex-col gap-3 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500">
             <Settings2Icon className="size-4" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="text-base font-semibold">系统配置</h3>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               管理 config.yaml 中的所有配置项，修改后点击「应用并重启」生效
             </p>
           </div>
@@ -176,7 +168,7 @@ export function ConfigSettingsPage() {
           size="sm"
           onClick={handleApplyAndRestart}
           disabled={restarting}
-          className="gap-1.5"
+          className="w-fit gap-1.5 self-start sm:self-auto"
         >
           {restarting ? (
             <>
@@ -192,17 +184,17 @@ export function ConfigSettingsPage() {
         </Button>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex min-w-0 gap-4">
         {/* Left: sub-navigation */}
         <nav className="w-44 shrink-0 space-y-1">
           {groups.map((group) => (
             <Collapsible key={group.title} defaultOpen>
-              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 hover:bg-muted/50">
+              <CollapsibleTrigger className="text-muted-foreground/70 hover:bg-muted/50 flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-semibold tracking-wider uppercase">
                 <span>{group.title}</span>
                 <ChevronDown className="size-3.5 shrink-0 transition-transform [[data-state=closed]_&]:rotate-180" />
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <ul className="space-y-0.5 pb-1 pt-1">
+                <ul className="space-y-0.5 pt-1 pb-1">
                   {group.items.map((item) => {
                     const isActive = active === item.id;
                     const Icon = item.icon;
@@ -231,8 +223,8 @@ export function ConfigSettingsPage() {
         </nav>
 
         {/* Right: form content */}
-        <ScrollArea className="h-[calc(75vh-10rem)] min-h-[400px] flex-1 rounded-lg border">
-          <div className="p-5">
+        <ScrollArea className="h-[calc(75vh-10rem)] min-h-[400px] min-w-0 flex-1 rounded-lg border">
+          <div className="min-w-0 p-5">
             {active === "models" && <ModelConfigSection />}
             {active === "sandbox" && <SandboxForm />}
             {active === "database" && <DatabaseForm />}

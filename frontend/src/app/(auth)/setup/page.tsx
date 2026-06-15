@@ -9,15 +9,17 @@ import Galaxy from "@/components/ui/galaxy";
 import { Input } from "@/components/ui/input";
 import { ShineBorder } from "@/components/ui/shine-border";
 import SpotlightCard from "@/components/ui/spotlight-card";
-import { getCsrfHeaders } from "@/core/api/fetcher";
+import { fetch, getCsrfHeaders } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
-import { parseAuthError } from "@/core/auth/types";
+import { getDesktopAuthHeaders, setDesktopSessionToken } from "@/core/auth/session";
+import { type LoginResponse, parseAuthError } from "@/core/auth/types";
+import { getBackendBaseURL, isDesktop } from "@/core/config";
 
 type SetupMode = "loading" | "init_admin" | "change_password";
 
 export default function SetupPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
   const [mode, setMode] = useState<SetupMode>("loading");
 
   // --- Shared state ---
@@ -37,7 +39,7 @@ export default function SetupPage() {
       setMode("change_password");
     } else if (!isAuthenticated) {
       // Check if the system has no users yet
-      void fetch("/api/v1/auth/setup-status")
+      void fetch(`${getBackendBaseURL()}/api/v1/auth/setup-status`)
         .then((r) => r.json())
         .then((data: { needs_setup?: boolean }) => {
           if (cancelled) return;
@@ -73,9 +75,9 @@ export default function SetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/auth/initialize", {
+      const res = await fetch(`${getBackendBaseURL()}/api/v1/auth/initialize`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getDesktopAuthHeaders() },
         credentials: "include",
         body: JSON.stringify({
           email,
@@ -90,6 +92,13 @@ export default function SetupPage() {
         return;
       }
 
+      const data = (await res.json()) as LoginResponse;
+      if (isDesktop() && data.access_token) {
+        setDesktopSessionToken(data.access_token);
+      }
+
+      await refreshUser();
+      router.refresh();
       router.push("/workspace");
     } catch {
       setError("网络错误，请重试。");
@@ -114,11 +123,12 @@ export default function SetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/auth/change-password", {
+      const res = await fetch(`${getBackendBaseURL()}/api/v1/auth/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...getCsrfHeaders(),
+          ...getDesktopAuthHeaders(),
         },
         credentials: "include",
         body: JSON.stringify({
@@ -135,6 +145,13 @@ export default function SetupPage() {
         return;
       }
 
+      const data = (await res.json()) as LoginResponse;
+      if (isDesktop() && data.access_token) {
+        setDesktopSessionToken(data.access_token);
+      }
+
+      await refreshUser();
+      router.refresh();
       router.push("/workspace");
     } catch {
       setError("网络错误，请重试。");

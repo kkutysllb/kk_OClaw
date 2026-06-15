@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fetch, getCsrfHeaders } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
-import { parseAuthError } from "@/core/auth/types";
+import { setDesktopSessionToken } from "@/core/auth/session";
+import { type LoginResponse, parseAuthError } from "@/core/auth/types";
+import { getBackendBaseURL, isDesktop } from "@/core/config";
 
 import { SettingsSection } from "./settings-section";
 
 export function AccountSettingsPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,7 +38,7 @@ export function AccountSettingsPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/auth/change-password", {
+      const res = await fetch(`${getBackendBaseURL()}/api/v1/auth/change-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -54,6 +56,12 @@ export function AccountSettingsPage() {
         setError(authError.message);
         return;
       }
+
+      const data = (await res.json()) as LoginResponse;
+      if (isDesktop() && data.access_token) {
+        setDesktopSessionToken(data.access_token);
+      }
+      await refreshUser();
 
       setMessage("密码修改成功");
       setCurrentPassword("");

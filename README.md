@@ -267,7 +267,7 @@ LANGSMITH_PROJECT=xxx
 
 ## 桌面端
 
-KKOCLAW 提供了一个基于 **Tauri 2.0** 的跨平台桌面客户端（macOS / Linux / Windows）。
+KKOCLAW 提供了一个基于 **Electron 33+** 的跨平台桌面客户端（macOS / Linux / Windows），由 `desktop-electron/` 目录承载。
 
 ### 两种使用方式
 
@@ -276,79 +276,89 @@ KKOCLAW 提供了一个基于 **Tauri 2.0** 的跨平台桌面客户端（macOS 
 | **下载安装包**（推荐） | 普通用户 | 从 [Releases](https://github.com/kkutysllb/kk_OClaw/releases) 下载安装包，开箱即用，无需安装 Python / uv / Node.js 等依赖 |
 | **源码编译** | 开发者 | 克隆仓库后在本地编译运行，适用于二次开发和调试 |
 
-**下载安装包**方式下，Python 后端（Gateway + 所有依赖）通过 PyInstaller 打包为独立可执行文件，嵌入安装包中。用户下载安装即可使用，Docker 仅在使用代码沙箱功能时可选安装。
+**下载安装包**方式下，Python 后端（Gateway + 所有依赖）通过 PyInstaller 打包为独立可执行文件（`oclaw-gateway`），嵌入安装包作为 `extraResources` 资源；前端由 `next build --webpack` 静态导出为 `frontend/out/`，打包时一并嵌入。用户下载安装即可使用，Docker 仅在使用代码沙箱功能时可选安装。
 
-桌面客户端启动时会自动拉起嵌入式后端服务（Gateway），关闭窗口时自动最小化到系统托盘，点击托盘图标即可恢复。
+桌面客户端启动时会自动拉起嵌入式后端服务（Gateway，默认端口 `19987`），关闭窗口时自动最小化到系统托盘，点击托盘图标即可恢复。
 
 ### 桌面端开发环境搭建（源码编译）
 
 > 以下内容仅适用于需要从源码编译的开发者。普通用户请直接下载安装包。
 
-桌面端在原有 Web 端依赖的基础上，还需要 Rust 和 Tauri CLI。
+桌面端在 Web 端依赖（Node.js 22+、pnpm、Python 3.12+、uv）的基础上，还需要 **Electron** 和 **electron-builder**（桌面端根目录的 `devDependencies` 中已声明，`pnpm install` 时自动安装）。
 
 ```bash
-# 进入 desktop 目录
-./setup.sh         # macOS / Linux
-setup.bat          # Windows
-
-# 或仅检查前置依赖
-./setup.sh --check
+# 一次性安装所有依赖（根目录 + frontend + desktop-electron + backend）
+make install
 ```
 
-`setup.sh` 会自动检查并安装以下依赖：
+或单独安装桌面端：
+
+```bash
+cd desktop-electron
+pnpm install --frozen-lockfile
+```
 
 | 依赖 | 版本要求 | 说明 |
 |------|---------|------|
-| Rust | stable | Tauri 2.0 编译需要 |
-| Tauri CLI | latest | `cargo install tauri-cli` |
+| Node.js | 22+ | Electron 与前端构建运行时 |
+| pnpm | latest | Node 包管理 |
 | Python | 3.12+ | 后端运行时 |
 | uv | latest | Python 包管理 |
-| pnpm | latest | 前端包管理 |
+| Electron | 33.x | 由 `desktop-electron/package.json` 管理，pnpm 安装时自动拉取 |
+| electron-builder | 25.x | 桌面端打包工具，pnpm 安装时自动拉取 |
 
-> Linux 用户还需要安装 `libwebkit2gtk-4.1-dev`、`libgtk-3-dev`、`libayatana-appindicator3-dev`、`librsvg2-dev` 等系统依赖。
+> Linux 用户无需安装 `libwebkit2gtk` 等系统依赖，Electron 自带 Chromium 运行时；只需保证系统能运行 Electron 即可。
 
 ### 桌面端运行命令
 
 ```bash
-cd desktop
+cd desktop-electron
 
-# 开发模式（热重载，前端运行在 8659 端口）
-pnpm dev
+# 一键开发模式（同时拉起后端 Gateway + Next.js 开发服务器 + Electron 主进程）
+pnpm run dev
 
-# 构建生产版本
-cargo tauri build
+# 生产构建（TS 编译 + PyInstaller 打包 Gateway + 前端静态导出 + electron-builder 打包 DMG/NSIS/deb/rpm）
+pnpm run build:app
 
-# 仅构建前端（Next.js 静态导出）
-cd ../frontend
-node scripts/desktop-build.mjs
+# 仅构建前端静态导出（Next.js → frontend/out/）
+pnpm --dir ../frontend run build:desktop
+
+# 仅打包 Python Gateway（PyInstaller 输出到 desktop-electron/resources/gateway/）
+pnpm run build:gateway
 ```
 
-开发模式下，桌面端会连接 `http://localhost:8659` 的前端开发服务器，同时自动启动后端 Gateway（端口 9987）。
+开发模式（`pnpm run dev`）会按以下顺序拉起三个进程并通过 `desktop-electron/scripts/dev.mjs` 统一管理：
+
+1. **Python Gateway**：`uv run uvicorn`（`backend/` venv，默认端口 `19987`）
+2. **Next.js 开发服务器**：端口 `18659`
+3. **Electron 主进程**：通过 `OCLAW_DEV_SERVER=1` 连接开发服务器
 
 ### 桌面端特性
 
 | 特性 | 说明 |
 |------|------|
-| 嵌入式后端 | Python 后端通过 PyInstaller 打包嵌入，开箱即用无需外部依赖 |
-| 后端自启 | 应用启动时自动拉起嵌入式 Gateway，无需手动 `start.sh` |
+| 嵌入式后端 | Python 后端通过 PyInstaller 打包为 `oclaw-gateway` 独立可执行文件，嵌入安装包，开箱即用无需外部依赖 |
+| 后端自启 | 应用启动时自动拉起嵌入式 Gateway（IPC `start_backend`），无需手动 `start.sh` |
+| 后端热重启 | 通过「应用并重启」按钮或 IPC `restart_backend` 主动重启 Gateway |
 | 系统托盘 | 关闭窗口时最小化到托盘，托盘菜单支持查看后端状态、重启后端、退出 |
 | 全局快捷键 | `Cmd/Ctrl + Shift + O` 快速显示/隐藏主窗口 |
-| 原生文件拖拽 | 支持从系统拖拽文件到聊天窗口直接上传 |
+| 原生文件拖拽 | 支持从系统拖拽文件到聊天窗口直接上传（preload 暴露 `window.oclawDesktop`） |
+| 自定义协议 | 主进程注册 `app://` 协议，所有静态资源走 `frontend-protocol.ts`，避免 `file://` 与 ChunkLoad 路径问题 |
 | 中文菜单栏 | macOS 原生菜单栏完全中文化（关于/编辑/视图/窗口/帮助） |
 | 自适应图标 | 跟随系统主题的八角形 O-Claw 图标 |
 
 ### 桌面端自动更新
 
-桌面客户端内置了基于 **GitHub Releases** 的自动更新功能：
+桌面客户端内置了基于 **GitHub Releases** 的自动更新功能（`electron-updater`）：
 
 - 应用启动 5 秒后自动检查新版本
 - 发现新版本时弹出更新对话框，点击「立即更新」自动下载安装
-- 更新包使用 Tauri 签名密钥验证，确保安全性
+- 更新包通过 `electron-updater` 校验发布工件签名，确保安全性
 
-发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建安装包。CI 会先通过 PyInstaller 打包 Python 后端，再编译 Tauri 应用，生成 macOS (ARM/x86)、Linux、Windows 四个平台的安装包并上传到 Release：
+发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建安装包。CI 会先通过 PyInstaller 打包 Python 后端，再用 electron-builder 生成 macOS (arm64 / x64)、Linux (deb / rpm)、Windows (NSIS) 安装包并上传到 Release：
 
 ```bash
-# 更新 tauri.conf.json 中的 version
+# 更新 desktop-electron/package.json 中的 version
 git tag v0.x.0
 git push origin main --tags
 ```
@@ -455,7 +465,7 @@ token_usage:
   - 模型管理整合到配置面板：删除独立的模型管理页面，模型列表 CRUD 统一在配置面板的「模型」标签页内完成
   - 10 个分区表单组件：日志级别、Token 用量、Sandbox、标题生成、摘要压缩、记忆、数据库、运行事件、定时任务、文件上传，均支持独立保存并显示后端返回的具体错误信息
   - YAML 原始编辑器：支持直接编辑 `config.yaml` 原始内容，适合高级用户批量修改
-  - **统一「应用并重启」按钮**：配置保存后点击按钮即可重启后端使配置生效，桌面端通过 Tauri IPC `restart_backend` 管理，Web 端通过 `POST /api/config/restart`（detached watcher + `os._exit(0)` 自重启）+ 健康轮询实现
+  - **统一「应用并重启」按钮**：配置保存后点击按钮即可重启后端使配置生效，桌面端通过 Electron preload 暴露的 IPC `restart_backend`（`window.oclawDesktop`）管理，Web 端通过 `POST /api/config/restart`（detached watcher + `os._exit(0)` 自重启）+ 健康轮询实现
   - **修复表单保存错误提示**：所有表单 catch 块改为显示 `e.message` 而非通用的「保存失败」，方便定位问题
 - **相关模块全面增强（2026-05-29）**
   - 用户隔离：`paths.py` + `agents_config.py` 新增 per-user agent 目录，兼容 legacy 共享布局

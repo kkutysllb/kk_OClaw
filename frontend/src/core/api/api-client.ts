@@ -2,7 +2,9 @@
 
 import { Client as LangGraphClient } from "@langchain/langgraph-sdk/client";
 
+import { getDesktopSessionToken } from "../auth/session";
 import { getLangGraphBaseURL } from "../config";
+import { isDesktop } from "../config";
 
 import { isStateChangingMethod, readCsrfCookie } from "./fetcher";
 import { sanitizeRunStreamOptions } from "./stream-mode";
@@ -31,12 +33,36 @@ function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
   return { ...init, headers };
 }
 
+function injectDesktopAuthorization(init: RequestInit): RequestInit {
+  const isDesktopProduction =
+    isDesktop() &&
+    typeof window !== "undefined" &&
+    window.location.port !== "18659";
+  if (!isDesktopProduction) return init;
+
+  const token = getDesktopSessionToken();
+  if (!token) {
+    console.warn("[DIAG:api-client] isDesktopProduction=true but no session token in localStorage");
+    return init;
+  }
+
+  const headers = new Headers(init.headers);
+  if (!headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return { ...init, headers };
+}
+
+export function prepareLangGraphRequest(url: URL, init: RequestInit): RequestInit {
+  return injectDesktopAuthorization(injectCsrfHeader(url, init));
+}
+
 function createCompatibleClient(isMock?: boolean): LangGraphClient {
   const apiUrl = getLangGraphBaseURL(isMock);
   console.log(`Creating API client with base URL: ${apiUrl}`);
   const client = new LangGraphClient({
     apiUrl,
-    onRequest: injectCsrfHeader,
+    onRequest: prepareLangGraphRequest,
   });
 
   const originalRunStream = client.runs.stream.bind(client.runs);

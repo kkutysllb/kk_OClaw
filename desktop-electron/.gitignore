@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Compiled main/preload
+dist/
+
+# electron-builder output
+release/
+
+# PyInstaller gateway bundle (built by scripts/build-gateway.sh)
+resources/gateway/*
+!resources/gateway/.gitkeep
+
+# Build-time assets
+#   icon-source.svg  — committed (source)
+#   icon.{icns,ico,png}, icons/ — committed (generated, needed by CI without rsvg-convert)
+#   Entitlements.plist — committed
+build/.gitkeep
+
+# Logs
+*.log

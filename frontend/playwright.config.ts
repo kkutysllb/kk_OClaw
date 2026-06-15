@@ -17,7 +17,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], channel: "chrome" },
     },
   ],
 
@@ -28,7 +28,8 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       SKIP_ENV_VALIDATION: "1",
-      KKOCLAW_AUTH_DISABLED: "1"
+      KKOCLAW_AUTH_DISABLED: "1",
+      PORT: "9192",
     },
   },
 });

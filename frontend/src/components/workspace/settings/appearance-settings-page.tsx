@@ -171,16 +171,16 @@ function ThemePreviewCard({
           <div className="h-2 w-10 rounded-full bg-current/20" />
           <div className="h-2 w-6 rounded-full bg-current/15" />
         </div>
-        <div className="grid grid-cols-[1fr_240px] gap-3 px-3 py-3">
-          <div className="space-y-2">
+        <div className="grid min-w-0 grid-cols-[1fr_1.4fr] gap-3 px-3 py-3">
+          <div className="min-w-0 space-y-2">
             <div className="h-3 w-3/4 rounded-full bg-current/15" />
             <div className="h-3 w-1/2 rounded-full bg-current/10" />
             <div className="h-[90px] rounded-md border border-current/10 bg-current/5" />
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-md bg-current/10" />
-              <div className="space-y-2">
+              <div className="size-8 shrink-0 rounded-md bg-current/10" />
+              <div className="min-w-0 space-y-2">
                 <div className="h-2 w-14 rounded-full bg-current/15" />
                 <div className="h-2 w-10 rounded-full bg-current/10" />
               </div>

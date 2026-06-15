@@ -1,22 +1,25 @@
 /**
  * Desktop build script — produces a static export of the Next.js frontend
- * for use as Tauri's frontendDist.
+ * for use as the Electron `BrowserWindow.loadFile` target.
  *
- * Next.js `output: "export"` is incompatible with several app features.
- * This script temporarily patches them, runs the build, then restores
- * everything to its original state.
+ * Next.js `output: "export"` is incompatible with several app features
+ * (server routes, i18n dynamic segments, SSR auth guards). This script
+ * temporarily patches them, runs the build, then restores everything to
+ * its original state in a `finally` block.
  */
 
 import { execSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
-  renameSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
-import { resolve, join } from "node:path";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const APP_DIR = join(ROOT, "src", "app");
@@ -27,17 +30,170 @@ const BACKUP_DIR = join(ROOT, ".desktop-build-backup");
 // mock/ — server-only mock data routes
 // [lang]/ — i18n dynamic segment (no generateStaticParams for static export)
 // workspace/agents/[agent_name]/chats/[thread_id]/ — dynamic route, client component
-// workspace/chats/[thread_id]/ — dynamic route, client component
+//   (kept out of build; agent chat URLs fall back to chats/new.html via
+//   the Electron protocol handler in frontend-protocol.ts)
+//
+// NOTE: workspace/chats/[thread_id]/ is NOT moved aside — it is kept and
+// patched via LAYOUT_PATCHES below to export generateStaticParams, which
+// pre-renders /workspace/chats/new. Other thread IDs are handled at runtime
+// by the Electron protocol handler fallback + client-side useParams().
 const CONFLICT_DIRS = [
   "api",
   "mock",
   "[lang]",
   "workspace/agents/[agent_name]/chats/[thread_id]",
-  "workspace/chats/[thread_id]",
+];
+
+// ── Files to move aside (incompatible with static export) ──────────────────
+// (none currently — using --webpack avoids the Turbopack _global-error bug)
+const CONFLICT_FILES = [];
+
+// ── Temporary files to create for the build, then remove afterwards ────────
+// These files don't exist in the source tree; they are generated specifically
+// for the desktop static export build and deleted in the finally block.
+const NEW_FILES = [
+  {
+    // Client-component wrapper for the chat providers. The [thread_id] layout
+    // must be a server component to export generateStaticParams, but the
+    // providers (SubtasksProvider, ArtifactsProvider, PromptInputProvider)
+    // live in files without "use client" directives. A server component
+    // cannot import them directly — this wrapper establishes the client
+    // boundary.
+    file: join(APP_DIR, "workspace", "chats", "[thread_id]", "_chat-providers.tsx"),
+    content: `"use client";
+
+import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
+import { ArtifactsProvider } from "@/components/workspace/artifacts";
+import { SubtasksProvider } from "@/core/tasks/context";
+
+export function ChatProviders({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SubtasksProvider>
+      <ArtifactsProvider>
+        <PromptInputProvider>{children}</PromptInputProvider>
+      </ArtifactsProvider>
+    </SubtasksProvider>
+  );
+}
+`,
+  },
+];
+
+// ── Other source files to patch for static export compatibility ──────────
+const SOURCE_PATCHES = [
+  {
+    // Header contains a docs link to `/${lang}/docs` which is a [lang] dynamic
+    // route — moved aside during desktop build (no generateStaticParams).
+    // Replace with an external link to the GitHub repo so the landing page
+    // still shows a "Docs" entry without hitting a non-existent route.
+    file: join(ROOT, "src", "components", "landing", "header.tsx"),
+    content: `import { GitHubLogoIcon } from "@radix-ui/react-icons";
+
+import { cn } from "@/lib/utils";
+
+export type HeaderProps = {
+  className?: string;
+  homeURL?: string;
+};
+
+export async function Header({ className, homeURL }: HeaderProps) {
+  return (
+    <header
+      className={cn(
+        "container-md fixed top-0 right-0 left-0 z-20 mx-auto flex h-16 items-center justify-between backdrop-blur-xs",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-6">
+        <a href={homeURL ?? "/"}>
+          <h1 className="font-serif text-xl">
+            <span className="bg-gradient-to-r from-pink-500 via-amber-400 via-yellow-300 to-cyan-400 bg-clip-text text-transparent font-extrabold tracking-wider">
+              KK
+            </span>
+            <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+              OClaw
+            </span>
+          </h1>
+        </a>
+      </div>
+      <nav className="mr-8 ml-auto flex items-center gap-8 text-sm font-medium">
+        <a
+          href="https://github.com/kkutysllb/kk_OClaw"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-secondary-foreground hover:text-foreground transition-colors"
+        >
+          Docs
+        </a>
+        <a
+          href="https://github.com/kkutysllb/kk_OClaw"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-secondary-foreground hover:text-foreground transition-colors"
+        >
+          <GitHubLogoIcon className="size-5" />
+        </a>
+      </nav>
+      <hr className="from-border/0 via-border/70 to-border/0 absolute top-16 right-0 left-0 z-10 m-0 h-px w-full border-none bg-linear-to-r" />
+    </header>
+  );
+}
+`,
+  },
+  {
+    // ThemeProvider calls usePathname() to force dark theme on the landing
+    // page. During `output: "export"` prerendering in Next.js 16 Turbopack,
+    // usePathname() returns null and next-themes' internal useContext throws.
+    // Desktop doesn't need the forced-theme-on-landing logic, so strip it.
+    file: join(ROOT, "src", "components", "theme-provider.tsx"),
+    content: `"use client";
+
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+
+export function ThemeProvider({
+  children,
+  ...props
+}: React.ComponentProps<typeof NextThemesProvider>) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
+`,
+  },
 ];
 
 // ── Layouts to replace with static versions ───────────────────────────────
 const LAYOUT_PATCHES = [
+  {
+    // Root layout for desktop static export. The original wraps children in
+    // ThemeProvider (next-themes) and I18nProvider, both of which call
+    // useContext/usePathname and crash during Next.js 16 `output: "export"`
+    // prerendering. Desktop pages are client-rendered, so we mount the
+    // providers inside a client component (DesktopProviders) that defers
+    // context setup to the browser — it renders children directly during SSR.
+    file: join(APP_DIR, "layout.tsx"),
+    content: `import "@/styles/globals.css";
+import "katex/dist/katex.min.css";
+
+import { type ReactNode } from "react";
+
+import { DesktopProviders } from "@/components/desktop/providers";
+
+export default function RootLayout({
+  children,
+}: Readonly<{ children: ReactNode }>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <DesktopProviders>{children}</DesktopProviders>
+      </body>
+    </html>
+  );
+}
+`,
+  },
   {
     file: join(APP_DIR, "(auth)", "layout.tsx"),
     content: `import { type ReactNode } from "react";
@@ -53,7 +209,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     // Desktop static export: replicate web SSR auth guard on the client.
     // The web version (app/workspace/layout.tsx) calls getServerSideUser()
     // and redirects unauthenticated users to /login, needs_setup to /setup,
-    // etc. With `output: export` we have no server, so we perform the same
+    // etc. With \`output: export\` we have no server, so we perform the same
     // checks client-side against /api/v1/auth/me and /api/v1/auth/setup-status,
     // preserving identical behaviour to the web build.
     file: join(APP_DIR, "workspace", "layout.tsx"),
@@ -63,7 +219,9 @@ import { type ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { AuthProvider } from "@/core/auth/AuthProvider";
+import { getDesktopSessionToken } from "@/core/auth/session";
 import { buildLoginUrl, type User } from "@/core/auth/types";
+import { getBackendBaseURL } from "@/core/config";
 
 import { GatewayUnavailable } from "./gateway-unavailable";
 import { WorkspaceContent } from "./workspace-content";
@@ -86,9 +244,11 @@ export default function WorkspaceLayout({
     let cancelled = false;
 
     async function check() {
+      const base = getBackendBaseURL();
       try {
-        const meRes = await fetch("/api/v1/auth/me", {
-          credentials: "include",
+        const token = getDesktopSessionToken();
+        const meRes = await fetch(\`\${base}/api/v1/auth/me\`, {
+          headers: token ? { Authorization: \`Bearer \${token}\` } : undefined,
           cache: "no-store",
         });
 
@@ -106,7 +266,7 @@ export default function WorkspaceLayout({
         if (meRes.status === 401 || meRes.status === 403) {
           // No session — check whether the system still needs setup.
           try {
-            const setupRes = await fetch("/api/v1/auth/setup-status", {
+            const setupRes = await fetch(\`\${base}/api/v1/auth/setup-status\`, {
               cache: "no-store",
             });
             if (setupRes.ok) {
@@ -187,9 +347,36 @@ export function WorkspaceContent({
 }
 `,
   },
+  {
+    // Desktop static export: convert the chat layout from "use client" to a
+    // server component so it can export generateStaticParams. The providers
+    // (SubtasksProvider, ArtifactsProvider, PromptInputProvider) are client
+    // components — rendering them from a server component is the standard
+    // Next.js App Router pattern.
+    //
+    // generateStaticParams returns only "new" because:
+    //   1. /workspace/chats/new is the initial redirect target after login
+    //   2. When a new thread is created, history.replaceState updates the URL
+    //      without triggering a page navigation
+    //   3. Direct navigation to existing chats falls back to chats/new.html
+    //      via the Electron protocol handler (frontend-protocol.ts)
+    file: join(APP_DIR, "workspace", "chats", "[thread_id]", "layout.tsx"),
+    content: `import { ChatProviders } from "./_chat-providers";
+
+export function generateStaticParams() {
+  return [{ thread_id: "new" }];
+}
+
+export default function ChatLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <ChatProviders>{children}</ChatProviders>;
+}
+`,
+  },
 ];
-
-
 
 // ── Build logic ───────────────────────────────────────────────────────────
 
@@ -198,7 +385,21 @@ function main() {
 
   const outDir = join(ROOT, "out");
   if (existsSync(outDir)) {
-    execSync(`rm -rf "${outDir}"`);
+    rmSync(outDir, { recursive: true, force: true });
+  }
+
+  // Clear the Next.js build cache to avoid stale type/route conflicts (e.g.
+  // `.next/dev` types from a prior `next dev` run mismatching the production
+  // `.next/types`), which break the build worker's type-check step.
+  const nextDir = join(ROOT, ".next");
+  if (existsSync(nextDir)) {
+    console.log("[desktop-build] Clearing stale .next cache...");
+    rmSync(nextDir, { recursive: true, force: true });
+  }
+
+  if (existsSync(BACKUP_DIR)) {
+    console.log("[desktop-build] Removing stale backup directory...");
+    rmSync(BACKUP_DIR, { recursive: true, force: true });
   }
 
   if (!existsSync(BACKUP_DIR)) {
@@ -207,6 +408,7 @@ function main() {
 
   // Track all modifications for restoration
   const movedDirs = [];
+  const movedFiles = [];
   const patchedLayouts = [];
 
   // 1. Move conflicting directories
@@ -222,6 +424,18 @@ function main() {
     }
   }
 
+  // 1b. Move conflicting files
+  for (const file of CONFLICT_FILES) {
+    const src = join(APP_DIR, file);
+    const dst = join(BACKUP_DIR, file);
+    if (existsSync(src)) {
+      mkdirSync(join(dst, ".."), { recursive: true });
+      console.log(`[desktop-build] Backing up app/${file}`);
+      renameSync(src, dst);
+      movedFiles.push(file);
+    }
+  }
+
   // 2. Patch layouts
   for (const patch of LAYOUT_PATCHES) {
     if (!existsSync(patch.file)) continue;
@@ -231,17 +445,70 @@ function main() {
     writeFileSync(patch.file, patch.content, "utf-8");
   }
 
+  // 2b. Patch other source files (ThemeProvider, etc.)
+  const patchedSources = [];
+  for (const patch of SOURCE_PATCHES) {
+    if (!existsSync(patch.file)) continue;
+    const original = readFileSync(patch.file, "utf-8");
+    patchedSources.push({ file: patch.file, content: original });
+    console.log(`[desktop-build] Patching source: ${patch.file}`);
+    writeFileSync(patch.file, patch.content, "utf-8");
+  }
+
+  // 2c. Create temporary new files needed by patched layouts
+  const createdFiles = [];
+  for (const entry of NEW_FILES) {
+    console.log(`[desktop-build] Creating temp file: ${entry.file}`);
+    mkdirSync(join(entry.file, ".."), { recursive: true });
+    writeFileSync(entry.file, entry.content, "utf-8");
+    createdFiles.push(entry.file);
+  }
+
   try {
-    console.log("[desktop-build] Running next build with DESKTOP_BUILD=true...");
-    execSync("npx next build", {
-      cwd: ROOT,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        DESKTOP_BUILD: "true",
-        SKIP_ENV_VALIDATION: "1",
-      },
-    });
+    console.log("[desktop-build] Running next build --webpack with DESKTOP_BUILD=true...");
+    try {
+      execSync("npx next build --webpack", {
+        cwd: ROOT,
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          // Force production mode — the shell may export NODE_ENV=development
+          // (common in dev profiles), which breaks Next.js 16's prerendering
+          // of internal routes like /_global-error (see vercel/next.js#87719).
+          NODE_ENV: "production",
+          DESKTOP_BUILD: "true",
+          SKIP_ENV_VALIDATION: "1",
+          // Point the frontend at the embedded gateway port (19987).
+          NEXT_PUBLIC_BACKEND_BASE_URL: "http://127.0.0.1:19987",
+          NEXT_PUBLIC_LANGGRAPH_BASE_URL: "http://127.0.0.1:19987/api",
+          GATEWAY_PORT: "19987",
+        },
+      });
+    } catch (buildErr) {
+      // execSync with stdio:"inherit" swallows the child's output on failure.
+      // Re-run capturing stderr so we can show the real Next.js error.
+      console.error("[desktop-build] next build failed. Re-running to capture error...");
+      let stderr = "";
+      try {
+        execSync("npx next build --webpack", {
+          cwd: ROOT,
+          stdio: "pipe",
+          env: {
+            ...process.env,
+            NODE_ENV: "production",
+            DESKTOP_BUILD: "true",
+            SKIP_ENV_VALIDATION: "1",
+            NEXT_PUBLIC_BACKEND_BASE_URL: "http://127.0.0.1:19987",
+            NEXT_PUBLIC_LANGGRAPH_BASE_URL: "http://127.0.0.1:19987/api",
+            GATEWAY_PORT: "19987",
+          },
+        });
+      } catch (e2) {
+        stderr = (e2.stdout?.toString() ?? "") + (e2.stderr?.toString() ?? "");
+      }
+      console.error(stderr.slice(-3000));
+      throw buildErr;
+    }
 
     if (!existsSync(outDir)) {
       throw new Error("Build completed but out/ directory was not created");
@@ -254,9 +521,21 @@ function main() {
       `[desktop-build] Top-level output: ${topFiles.slice(0, 15).join(", ")}...`,
     );
   } finally {
+    // Delete temporary new files
+    for (const file of createdFiles) {
+      console.log(`[desktop-build] Removing temp file: ${file}`);
+      rmSync(file, { force: true });
+    }
+
     // Restore patched layouts
     for (const { file, content } of patchedLayouts) {
       console.log(`[desktop-build] Restoring: ${file}`);
+      writeFileSync(file, content, "utf-8");
+    }
+
+    // Restore patched source files
+    for (const { file, content } of patchedSources) {
+      console.log(`[desktop-build] Restoring source: ${file}`);
       writeFileSync(file, content, "utf-8");
     }
 
@@ -271,11 +550,10 @@ function main() {
         mkdirSync(join(dst, ".."), { recursive: true });
         renameSync(src, dst);
       } catch (e) {
-        console.error(`[desktop-build] Failed to restore ${dir}: ${e.message}`);
         // Try copy as fallback
         try {
-          execSync(`cp -r "${src}" "${dst}"`);
-          execSync(`rm -rf "${src}"`);
+          cpSync(src, dst, { recursive: true });
+          rmSync(src, { recursive: true, force: true });
           console.log(`[desktop-build] Restored via copy: ${dir}`);
         } catch (e2) {
           console.error(`[desktop-build] Copy also failed for ${dir}: ${e2.message}`);
@@ -283,8 +561,21 @@ function main() {
       }
     }
 
+    // Restore moved files
+    for (const file of movedFiles) {
+      const src = join(BACKUP_DIR, file);
+      const dst = join(APP_DIR, file);
+      console.log(`[desktop-build] Restoring app/${file}`);
+      try {
+        mkdirSync(join(dst, ".."), { recursive: true });
+        renameSync(src, dst);
+      } catch (e) {
+        console.error(`[desktop-build] Failed to restore ${file}: ${e.message}`);
+      }
+    }
+
     // Clean backup dir
-    execSync(`rm -rf "${BACKUP_DIR}"`);
+    rmSync(BACKUP_DIR, { recursive: true, force: true });
   }
 }
 

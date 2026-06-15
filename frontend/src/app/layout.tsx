@@ -3,9 +3,8 @@ import "katex/dist/katex.min.css";
 
 import { type Metadata } from "next";
 
+import { BackendSplashScreen, DesktopInit, UpdateChecker } from "@/components/desktop";
 import { ThemeProvider } from "@/components/theme-provider";
-import { BackendSplashScreen } from "@/components/desktop";
-import { DesktopInit, UpdateChecker } from "@/components/desktop";
 import { I18nProvider } from "@/core/i18n/context";
 import { detectLocaleServer } from "@/core/i18n/server";
 
@@ -27,8 +26,8 @@ export default async function RootLayout({
         <ThemeProvider attribute="class" enableSystem disableTransitionOnChange>
           <I18nProvider initialLocale={locale}>
             <DesktopInit />
-            <UpdateChecker />
             <BackendSplashScreen />
+            <UpdateChecker />
             {children}
           </I18nProvider>
         </ThemeProvider>

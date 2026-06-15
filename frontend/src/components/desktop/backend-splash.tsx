@@ -1,19 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
+import { isDesktopBackendManagedMode } from "@/core/config";
 import { getBackendStatus, type BackendStatus } from "@/core/desktop";
-import { isDesktop } from "@/core/config";
+
+export function shouldShowBackendSplash(
+  status: BackendStatus | null,
+  desktop: boolean,
+): boolean {
+  return desktop && status?.status === "starting";
+}
 
 /**
  * Splash screen shown while the backend is starting up.
- * Only rendered in desktop (Tauri) mode while backend status is "starting".
+ * Only rendered in desktop (Electron) mode while backend status is "starting".
  */
 export function BackendSplashScreen() {
   const [status, setStatus] = useState<BackendStatus | null>(null);
   const [dots, setDots] = useState(0);
 
   useEffect(() => {
-    if (!isDesktop()) return;
+    if (!isDesktopBackendManagedMode()) return;
 
     const check = async () => {
       const s = await getBackendStatus();
@@ -31,11 +39,7 @@ export function BackendSplashScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  // Don't show splash if not in desktop mode, or if backend is already running/stopped
-  if (!isDesktop()) return null;
-  if (status?.status === "running") return null;
-  if (status?.status === "error") return null;
-  // Also don't show if we haven't checked yet and it might be running
+  if (!shouldShowBackendSplash(status, isDesktopBackendManagedMode())) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background">

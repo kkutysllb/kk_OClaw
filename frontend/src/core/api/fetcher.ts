@@ -1,4 +1,5 @@
 import { buildLoginUrl } from "@/core/auth/types";
+import { getDesktopSessionToken } from "@/core/auth/session";
 import { isDesktop } from "@/core/config";
 
 /** HTTP methods that the gateway's CSRFMiddleware checks. */
@@ -75,14 +76,33 @@ export async function fetch(
     }
   }
 
+  const desktopToken = isDesktop() && typeof window !== "undefined" && window.location.port !== "18659"
+    ? getDesktopSessionToken()
+    : null;
+  const mergedHeaders = new Headers(headers);
+  if (desktopToken && !mergedHeaders.has("Authorization")) {
+    mergedHeaders.set("Authorization", `Bearer ${desktopToken}`);
+  }
+
+  // DIAG: trace Authorization header injection for desktop API calls
+  if (typeof url === "string" && url.includes("/api/")) {
+    console.log(
+      `[DIAG:fetcher] ${init?.method ?? "GET"} ${url}`,
+      `isDesktop=${isDesktop()} port=${typeof window !== "undefined" ? window.location.port : "<ssr>"}`,
+      `tokenPresent=${!!desktopToken} authzHeader=${!!mergedHeaders.get("Authorization")}`,
+    );
+  }
+
   const res = await globalThis.fetch(url, {
     ...init,
-    headers,
+    headers: mergedHeaders,
     // In desktop production (static dist), no cookies needed (direct gateway).
     // In desktop dev mode, cookies ARE needed for auth (proxied via Next.js).
-    ...(isDesktop() && typeof window !== "undefined" && window.location.port !== "8659"
+    ...(desktopToken
       ? {}
-      : { credentials: "include" as RequestCredentials }),
+      : isDesktop() && typeof window !== "undefined" && window.location.port !== "18659"
+        ? {}
+        : { credentials: "include" as RequestCredentials }),
   });
 
   if (res.status === 401 && !isDesktop()) {

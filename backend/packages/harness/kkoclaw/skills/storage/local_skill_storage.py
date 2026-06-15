@@ -64,7 +64,10 @@ class LocalSkillStorage(SkillStorage):
     def _iter_skill_files(self) -> Iterable[tuple[SkillCategory, Path, Path]]:
         if not self._host_root.exists():
             return
+        public_only = os.getenv("KKOCLAW_PUBLIC_SKILLS_ONLY") == "1"
         for category in SkillCategory:
+            if public_only and category != SkillCategory.PUBLIC:
+                continue
             category_path = self._host_root / category.value
             if not category_path.exists() or not category_path.is_dir():
                 continue

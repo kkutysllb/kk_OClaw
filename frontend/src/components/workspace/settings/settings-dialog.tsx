@@ -40,7 +40,10 @@ type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
 };
 
 // Per-section color theme for the nav icons
-const SECTION_COLORS: Record<string, { iconActive: string; iconInactive: string; bar: string; bg: string }> = {
+const SECTION_COLORS: Record<
+  string,
+  { iconActive: string; iconInactive: string; bar: string; bg: string }
+> = {
   account: {
     iconActive: "text-sky-400",
     iconInactive: "text-sky-500",
@@ -116,7 +119,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BrainIcon,
       },
       { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
-      { id: "config", label: t.settings.sections.config, icon: SlidersHorizontalIcon },
+      {
+        id: "config",
+        label: t.settings.sections.config,
+        icon: SlidersHorizontalIcon,
+      },
     ],
     [
       t.settings.sections.account,
@@ -149,7 +156,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-4 px-6 pb-6 md:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-4 px-6 pb-6 md:grid-cols-[220px_minmax(0,1fr)]">
           <nav className="bg-sidebar min-h-0 overflow-y-auto rounded-lg border p-2">
             <ul className="space-y-1 pr-1">
               {sections.map(({ id, label, icon: Icon }) => {
@@ -159,7 +166,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <li key={id} className="relative">
                     {/* Active left bar indicator */}
                     {active && colors && (
-                      <div className={`absolute left-0 top-1 bottom-1 w-1 rounded-full bg-gradient-to-b ${colors.bar}`} />
+                      <div
+                        className={`absolute top-1 bottom-1 left-0 w-1 rounded-full bg-gradient-to-b ${colors.bar}`}
+                      />
                     )}
                     <button
                       type="button"
@@ -188,8 +197,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
               })}
             </ul>
           </nav>
-          <ScrollArea className="h-full min-h-0 rounded-lg border">
-            <div className="space-y-8 p-6">
+          <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
+            <div className="min-w-0 space-y-8 p-6">
               {activeSection === "account" && <AccountSettingsPage />}
               {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config
 from kkoclaw.config.app_config import AppConfig
+from kkoclaw.models.config_validation import validate_model_credentials
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["models"])
@@ -157,6 +158,13 @@ def _request_to_config_dict(req: ModelRequest) -> dict:
     return d
 
 
+def _validate_model_dict(model_dict: dict) -> None:
+    try:
+        validate_model_credentials(model_dict)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -212,6 +220,7 @@ async def create_model(req: ModelRequest, config: AppConfig = Depends(get_config
         config_data = _load_config_yaml()
         models_list: list[dict] = config_data.setdefault("models", [])
         model_dict = _request_to_config_dict(req)
+        _validate_model_dict(model_dict)
         models_list.append(model_dict)
         config_data["models"] = models_list
         _save_config_yaml(config_data)
@@ -253,6 +262,7 @@ async def update_model(model_name: str, req: ModelRequest, config: AppConfig = D
         for k, v in existing.items():
             if k not in model_dict and k != "name":
                 model_dict[k] = v
+        _validate_model_dict(model_dict)
         models_list[target_idx] = model_dict
         _save_config_yaml(config_data)
         return ModelResponse(**model_dict)

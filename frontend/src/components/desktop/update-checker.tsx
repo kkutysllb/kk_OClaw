@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { checkForUpdates, installUpdate, type UpdateInfo } from "@/core/desktop/updater";
 import { isDesktop } from "@/core/config";
+import { checkForUpdates, installUpdate } from "@/core/desktop/updater";
 
 /**
  * Desktop auto-update checker.
@@ -24,18 +24,17 @@ import { isDesktop } from "@/core/config";
  * Renders nothing in web mode.
  */
 export function UpdateChecker() {
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [update, setUpdate] = useState<Awaited<ReturnType<typeof checkForUpdates>> | null>(null);
   const [installing, setInstalling] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     if (!isDesktop()) return;
 
-    const timer = setTimeout(async () => {
-      const info = await checkForUpdates();
-      if (info?.available) {
-        setUpdate(info);
-      }
+    const timer = setTimeout(() => {
+      void checkForUpdates().then((info) => {
+        if (info?.available) setUpdate(info);
+      });
     }, 5000);
 
     return () => clearTimeout(timer);
@@ -68,7 +67,11 @@ export function UpdateChecker() {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setDismissed(true)} disabled={installing}>
+          <Button
+            variant="ghost"
+            onClick={() => setDismissed(true)}
+            disabled={installing}
+          >
             稍后再说
           </Button>
           <Button onClick={handleInstall} disabled={installing}>

@@ -135,8 +135,10 @@ class PatchedChatMiniMax(ChatOpenAI):
         # Only add reasoning_split when thinking is enabled.
         # MiniMax returns 2013 ("invalid chat setting") when reasoning_split
         # is sent without an active thinking configuration.
+        # Accept both "enabled" (legacy/Anthropic style) and "adaptive"
+        # (current MiniMax API format) so config.yaml migrations don't break.
         thinking_cfg = extra_body.get("thinking") if isinstance(extra_body, dict) else None
-        if isinstance(thinking_cfg, dict) and thinking_cfg.get("type") == "enabled":
+        if isinstance(thinking_cfg, dict) and thinking_cfg.get("type") in ("enabled", "adaptive"):
             payload["extra_body"] = {
                 **extra_body,
                 "reasoning_split": True,

@@ -916,6 +916,30 @@ def test_stream_usage_injected_for_openai_compatible_model(monkeypatch):
     assert captured.get("stream_usage") is True
 
 
+def test_openai_compatible_model_without_api_key_fails_before_provider_init(monkeypatch):
+    """Misconfigured persisted models should fail with an actionable config error."""
+    cfg = _make_app_config(
+        [
+            ModelConfig(
+                name="deepseek-v4-flash",
+                display_name="DeepSeek",
+                description=None,
+                use="kkoclaw.models.patched_deepseek:PatchedChatDeepSeek",
+                model="deepseek-v4-flash",
+                base_url="https://api.vectorengine.ai/v1",
+                supports_thinking=False,
+                supports_vision=False,
+            )
+        ]
+    )
+    monkeypatch.setattr(factory_module, "build_tracing_callbacks", lambda: [])
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
+        factory_module.create_chat_model(name="deepseek-v4-flash", app_config=cfg)
+
+
 def test_stream_usage_not_injected_for_non_openai_model(monkeypatch):
     """Factory should NOT inject stream_usage for models without the field."""
     cfg = _make_app_config([_make_model("claude", use="langchain_anthropic:ChatAnthropic")])

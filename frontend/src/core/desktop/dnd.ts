@@ -1,14 +1,16 @@
 /**
  * Native drag-and-drop file handling for the desktop app.
  *
- * Tauri emits `tauri://drag-drop` events when files are dragged onto the
- * window. This module listens for those events and converts the dropped
- * paths into File objects, then dispatches a custom DOM event so existing
- * UI components can react without coupling directly to Tauri.
+ * In Electron, OS file drops arrive as standard HTML5 drag/drop events on the
+ * renderer (the main process prevents the default file-navigation via
+ * `will-navigate`). This module listens for those events, converts the
+ * dropped files into `File` objects, and re-dispatches them as a custom DOM
+ * event so existing UI components can react without duplicating the wiring.
+ *
+ * The custom-event API (`DESKTOP_DROP_EVENT` / `onDesktopFileDrop`) is kept
+ * identical to the previous bridge-based implementation.
  */
 
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { isDesktop } from "../config";
 
 export const DESKTOP_DROP_EVENT = "oclaw:desktop-file-drop";
@@ -18,57 +20,46 @@ export interface DroppedFilesDetail {
 }
 
 let initialized = false;
-let unlisten: UnlistenFn | null = null;
 
 /**
- * Start listening for native drag-drop events.
+ * Start listening for OS file-drop events on the current window.
  *
  * Safe to call multiple times — only the first call registers the listener.
- * Should be called from a top-level client component on mount.
+ * Returns a cleanup function that removes the handlers.
  */
 export async function initDragDrop(): Promise<() => void> {
-  if (!isDesktop()) {
+  if (!isDesktop() || typeof window === "undefined") {
+    return () => {};
+  }
+  if (initialized) {
     return () => {};
   }
 
-  if (initialized && unlisten) {
-    return () => {
-      unlisten?.();
-      unlisten = null;
-      initialized = false;
-    };
-  }
+  // Prevent the browser default (which would navigate to the dropped file).
+  const onDragOver = (e: DragEvent) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+    }
+  };
 
-  try {
-    unlisten = await listen<{ paths: string[] }>(
-      "tauri://file-drop",
-      async (event) => {
-        const paths = event.payload?.paths ?? [];
-        if (paths.length === 0) return;
-
-        const files = await Promise.all(
-          paths.map(async (filePath) => {
-            const data = await readFile(filePath);
-            const name = filePath.split("/").pop() ?? filePath.split("\\").pop() ?? "file";
-            return new File([data], name);
-          }),
-        );
-
-        window.dispatchEvent(
-          new CustomEvent(DESKTOP_DROP_EVENT, {
-            detail: { files } satisfies DroppedFilesDetail,
-          }),
-        );
-      },
+  const onDrop = (e: DragEvent) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files);
+    window.dispatchEvent(
+      new CustomEvent(DESKTOP_DROP_EVENT, {
+        detail: { files } satisfies DroppedFilesDetail,
+      }),
     );
-    initialized = true;
-  } catch (e) {
-    console.warn("[desktop] initDragDrop failed:", e);
-  }
+  };
+
+  window.addEventListener("dragover", onDragOver);
+  window.addEventListener("drop", onDrop);
+  initialized = true;
 
   return () => {
-    unlisten?.();
-    unlisten = null;
+    window.removeEventListener("dragover", onDragOver);
+    window.removeEventListener("drop", onDrop);
     initialized = false;
   };
 }

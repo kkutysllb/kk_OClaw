@@ -12,19 +12,30 @@ function getInternalServiceURL(envKey, fallbackURL) {
 }
 import nextra from "nextra";
 
-const withNextra = nextra({});
-
 const isDesktopBuild = process.env.DESKTOP_BUILD === "true" || process.env.DESKTOP_BUILD === "1";
+const desktopDevOrigins = ["127.0.0.1", "localhost"];
+
+// Nextra injects documentation routes and its own _global-error handling that
+// are incompatible with `output: "export"` (causes LayoutRouterContext null
+// errors during prerendering). Skip the Nextra wrapper entirely for desktop
+// static-export builds — the desktop app doesn't include the docs site.
+const withNextra = isDesktopBuild
+  ? (config) => config
+  : nextra({});
 
 /** @type {import("next").NextConfig} */
 const config = {
+  allowedDevOrigins: desktopDevOrigins,
   // Desktop production builds use static export (no server, no SSR).
   // i18n and rewrites are incompatible with output: "export".
   ...(isDesktopBuild
     ? {
         output: "export",
         images: { unoptimized: true },
-        // No trailingSlash to keep paths simple for Tauri WebView
+        // Use relative asset paths so Electron's loadFile (file:// protocol)
+        // can resolve _next/static/... correctly. Absolute paths (/_next/...)
+        // would resolve to the filesystem root and cause a blank screen.
+        assetPrefix: "./",
       }
     : {
         i18n: {
@@ -50,6 +61,10 @@ const config = {
           }
 
           if (!process.env.NEXT_PUBLIC_BACKEND_BASE_URL) {
+            rewrites.push({
+              source: "/health",
+              destination: `${gatewayURL}/health`,
+            });
             rewrites.push({
               source: "/api/agents",
               destination: `${gatewayURL}/api/agents`,

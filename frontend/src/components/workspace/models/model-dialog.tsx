@@ -7,7 +7,6 @@ import {
   EyeIcon,
   EyeOffIcon,
   GlobeIcon,
-  KeyIcon,
   Settings2Icon,
   ZapIcon,
 } from "lucide-react";
@@ -44,6 +43,45 @@ const labelCls = "text-sm font-medium leading-none peer-disabled:cursor-not-allo
 const hintCls = "text-muted-foreground text-xs";
 const sectionTitleCls = "text-xs font-semibold uppercase tracking-wider text-muted-foreground/70";
 
+interface ApiKeyInputState {
+  nextInputValue: string;
+  showApiKey: boolean;
+}
+
+export function getNextApiKeyInputState({
+  nextInputValue,
+  showApiKey,
+}: ApiKeyInputState): { apiKey: string; showApiKey: boolean } {
+  if (!showApiKey) {
+    return {
+      apiKey: nextInputValue,
+      showApiKey: true,
+    };
+  }
+  return {
+    apiKey: nextInputValue,
+    showApiKey,
+  };
+}
+
+interface ApiKeyRequestValueInput {
+  apiKey: string;
+  originalApiKey: string;
+  showApiKey: boolean;
+}
+
+export function toApiKeyRequestValue({
+  apiKey,
+  originalApiKey,
+  showApiKey,
+}: ApiKeyRequestValueInput): string | null {
+  const trimmed = apiKey.trim();
+  if (!showApiKey && trimmed === originalApiKey.trim()) {
+    return null;
+  }
+  return trimmed || null;
+}
+
 /** Mask an API key: show first 7 and last 4 chars, obscure the middle. */
 function maskApiKey(key: string | null | undefined): string {
   if (!key || key.trim().length === 0) return "";
@@ -69,6 +107,7 @@ export function ModelDialog({
   const [useVal, setUseVal] = useState("");
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [originalApiKey, setOriginalApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [maxTokens, setMaxTokens] = useState("");
   const [temperature, setTemperature] = useState("");
@@ -92,6 +131,7 @@ export function ModelDialog({
         setUseVal(model.use || "");
         setModelId(model.model || "");
         setApiKey(model.api_key || "");
+        setOriginalApiKey(model.api_key || "");
         setBaseUrl(model.base_url || "");
         setMaxTokens(model.max_tokens != null ? String(model.max_tokens) : "");
         setTemperature(
@@ -120,6 +160,7 @@ export function ModelDialog({
         setUseVal("");
         setModelId("");
         setApiKey("");
+        setOriginalApiKey("");
         setBaseUrl("");
         setMaxTokens("");
         setTemperature("");
@@ -173,7 +214,11 @@ export function ModelDialog({
         display_name: displayName.trim() || null,
         use: useVal.trim(),
         model: modelId.trim(),
-        api_key: apiKey.trim() || null,
+        api_key: toApiKeyRequestValue({
+          apiKey,
+          originalApiKey,
+          showApiKey,
+        }),
         base_url: baseUrl.trim() || null,
         max_tokens: maxTokens ? Number(maxTokens) : null,
         temperature: temperature ? Number(temperature) : null,
@@ -301,13 +346,12 @@ export function ModelDialog({
                     type={showApiKey ? "text" : "password"}
                     value={displayApiKey}
                     onChange={(e) => {
-                      if (!showApiKey) {
-                        // User is editing masked value — start fresh
-                        setShowApiKey(true);
-                        setApiKey("");
-                        return;
-                      }
-                      setApiKey(e.target.value);
+                      const next = getNextApiKeyInputState({
+                        nextInputValue: e.target.value,
+                        showApiKey,
+                      });
+                      setShowApiKey(next.showApiKey);
+                      setApiKey(next.apiKey);
                     }}
                     onFocus={() => {
                       if (apiKey && !showApiKey) {

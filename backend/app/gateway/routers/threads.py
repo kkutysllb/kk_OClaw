@@ -144,14 +144,28 @@ class ThreadStateUpdateRequest(BaseModel):
 
 
 class HistoryEntry(BaseModel):
-    """Single checkpoint history entry."""
+    """Single checkpoint history entry.
 
-    checkpoint_id: str
+    The ``checkpoint`` and ``parent_checkpoint`` nested dicts are required
+    by the LangGraph SDK's branching logic (``getBranchContext``), which
+    reads ``state.checkpoint?.checkpoint_id`` and
+    ``state.parent_checkpoint?.checkpoint_id`` to build the checkpoint
+    tree and locate the ``threadHead``. Without these nested fields the
+    SDK cannot find any history entries, resulting in an empty message
+    list when reopening a thread.
+    """
+
+    # Nested checkpoint refs (LangGraph SDK format)
+    checkpoint: dict[str, Any]
+    parent_checkpoint: dict[str, Any] | None = None
+    # Flat aliases for backward compatibility
+    checkpoint_id: str = ""
     parent_checkpoint_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     values: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None
     next: list[str] = Field(default_factory=list)
+    tasks: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ThreadHistoryRequest(BaseModel):
@@ -632,14 +646,37 @@ async def get_thread_history(thread_id: str, body: ThreadHistoryRequest, request
             if "step" in metadata:
                 user_meta["step"] = metadata["step"]
 
+            # Build task dicts (SDK reads threadHead.tasks.at(-1).error)
+            task_dicts: list[dict[str, Any]] = []
+            for t in tasks_raw:
+                task_dict: dict[str, Any] = {"name": getattr(t, "name", "")}
+                if hasattr(t, "interrupt") and t.interrupt:
+                    task_dict["interrupt"] = t.interrupt
+                task_dicts.append(task_dict)
+
             entries.append(
                 HistoryEntry(
+                    checkpoint={
+                        "checkpoint_id": checkpoint_id,
+                        "thread_id": thread_id,
+                        "checkpoint_ns": "",
+                    },
+                    parent_checkpoint=(
+                        {
+                            "checkpoint_id": parent_id,
+                            "thread_id": thread_id,
+                            "checkpoint_ns": "",
+                        }
+                        if parent_id
+                        else None
+                    ),
                     checkpoint_id=checkpoint_id,
                     parent_checkpoint_id=parent_id,
                     metadata=user_meta,
                     values=values,
                     created_at=coerce_iso(metadata.get("created_at", "")),
                     next=next_tasks,
+                    tasks=task_dicts,
                 )
             )
     except Exception:

@@ -28,10 +28,16 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 class LoginResponse(BaseModel):
-    """Response model for login — token only lives in HttpOnly cookie."""
+    """Response model for login.
+
+    Web clients use the HttpOnly cookie. The Electron desktop shell runs from
+    app:// and cannot rely on SameSite cookies for cross-site XHR, so desktop
+    auth responses also include a bearer token.
+    """
 
     expires_in: int  # seconds
     needs_setup: bool = False
+    access_token: str | None = None
 
 
 # Top common-password blocklist. Drawn from the public SecLists "10k worst
@@ -129,6 +135,12 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class DesktopAuthUserResponse(UserResponse):
+    """User response that may include a desktop bearer token."""
+
+    access_token: str | None = None
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 
@@ -144,6 +156,15 @@ def _set_session_cookie(response: Response, token: str, request: Request) -> Non
         samesite="lax",
         max_age=config.token_expiry_days * 24 * 3600 if is_https else None,
     )
+
+
+def _is_desktop_auth_request(request: Request) -> bool:
+    """Return true for Electron renderer auth requests from the app:// origin."""
+    return request.headers.get("origin") == "app://-" or request.headers.get("x-oclaw-desktop") == "1"
+
+
+def _desktop_access_token(request: Request, token: str) -> str | None:
+    return token if _is_desktop_auth_request(request) else None
 
 
 # ── Rate Limiting ────────────────────────────────────────────────────────
@@ -273,7 +294,7 @@ def _record_login_success(ip: str) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 
-@router.post("/login/local", response_model=LoginResponse)
+@router.post("/login/local", response_model=LoginResponse, response_model_exclude_none=True)
 async def login_local(
     request: Request,
     response: Response,
@@ -296,13 +317,25 @@ async def login_local(
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request)
 
+    is_desktop = _is_desktop_auth_request(request)
+    desktop_token = _desktop_access_token(request, token)
+    logger.info(
+        "[DIAG] login_local: user=%s is_desktop_req=%s origin=%s x_oclaw_desktop=%s access_token_returned=%s",
+        user.email,
+        is_desktop,
+        request.headers.get("origin", "<missing>"),
+        request.headers.get("x-oclaw-desktop", "<missing>"),
+        desktop_token is not None,
+    )
+
     return LoginResponse(
         expires_in=get_auth_config().token_expiry_days * 24 * 3600,
         needs_setup=user.needs_setup,
+        access_token=desktop_token,
     )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=DesktopAuthUserResponse, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
 async def register(request: Request, response: Response, body: RegisterRequest):
     """Register a new user account (always 'user' role).
 
@@ -320,7 +353,18 @@ async def register(request: Request, response: Response, body: RegisterRequest):
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role)
+    is_desktop = _is_desktop_auth_request(request)
+    desktop_token = _desktop_access_token(request, token)
+    logger.info(
+        "[DIAG] register: user=%s is_desktop_req=%s origin=%s x_oclaw_desktop=%s access_token_returned=%s",
+        user.email,
+        is_desktop,
+        request.headers.get("origin", "<missing>"),
+        request.headers.get("x-oclaw-desktop", "<missing>"),
+        desktop_token is not None,
+    )
+
+    return DesktopAuthUserResponse(id=str(user.id), email=user.email, system_role=user.system_role, access_token=desktop_token)
 
 
 @router.post("/logout", response_model=MessageResponse)
@@ -330,7 +374,7 @@ async def logout(request: Request, response: Response):
     return MessageResponse(message="Successfully logged out")
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password", response_model=LoginResponse, response_model_exclude_none=True)
 async def change_password(request: Request, response: Response, body: ChangePasswordRequest):
     """Change password for the currently authenticated user.
 
@@ -373,12 +417,27 @@ async def change_password(request: Request, response: Response, body: ChangePass
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request)
 
-    return MessageResponse(message="Password changed successfully")
+    return LoginResponse(
+        expires_in=get_auth_config().token_expiry_days * 24 * 3600,
+        needs_setup=user.needs_setup,
+        access_token=_desktop_access_token(request, token),
+    )
 
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(request: Request):
     """Get current authenticated user info."""
+    from app.gateway.deps import get_access_token_from_request
+
+    raw_token = get_access_token_from_request(request)
+    has_cookie = "access_token" in request.cookies
+    authz = request.headers.get("authorization", "")
+    logger.info(
+        "[DIAG] /auth/me: cookie_present=%s authorization_header=%s token_extracted=%s",
+        has_cookie,
+        f"PRESENT({len(authz)})" if authz else "MISSING",
+        bool(raw_token),
+    )
     user = await get_current_user_from_request(request)
     return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role, needs_setup=user.needs_setup)
 
@@ -392,6 +451,8 @@ _SETUP_STATUS_CACHE_TTL_SECONDS = 60
 _MAX_TRACKED_SETUP_STATUS_IPS = 10000
 _SETUP_STATUS_INFLIGHT: dict[str, asyncio.Task[dict]] = {}
 _SETUP_STATUS_INFLIGHT_GUARD = asyncio.Lock()
+# Backward-compatible alias for existing tests and callers.
+_SETUP_STATUS_COOLDOWN = _SETUP_STATUS_CACHE
 
 
 @router.get("/setup-status")
@@ -460,7 +521,7 @@ class InitializeAdminRequest(BaseModel):
     _strong_password = field_validator("password")(classmethod(lambda cls, v: _validate_strong_password(v)))
 
 
-@router.post("/initialize", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/initialize", response_model=DesktopAuthUserResponse, response_model_exclude_none=True, status_code=status.HTTP_201_CREATED)
 async def initialize_admin(request: Request, response: Response, body: InitializeAdminRequest):
     """Create the first admin account on initial system setup.
 
@@ -489,7 +550,7 @@ async def initialize_admin(request: Request, response: Response, body: Initializ
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request)
 
-    return UserResponse(id=str(user.id), email=user.email, system_role=user.system_role)
+    return DesktopAuthUserResponse(id=str(user.id), email=user.email, system_role=user.system_role, access_token=_desktop_access_token(request, token))
 
 
 # ── OAuth Endpoints (Future/Placeholder) ─────────────────────────────────

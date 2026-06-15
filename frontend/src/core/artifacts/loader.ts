@@ -1,5 +1,6 @@
 import type { BaseStream } from "@langchain/langgraph-sdk/react";
 
+import { fetch } from "../api/fetcher";
 import type { AgentThreadState } from "../threads";
 
 import { urlOfArtifact } from "./utils";

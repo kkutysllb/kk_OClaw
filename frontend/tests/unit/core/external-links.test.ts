@@ -1,0 +1,50 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, test, vi } from "vitest";
+
+import type { DesktopBridge } from "@/core/desktop/types";
+import { openExternalUrl } from "@/core/desktop/external-links";
+
+function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
+  const w = window as unknown as Record<string, unknown>;
+  if (bridge) {
+    w.oclawDesktop = {
+      gatewayPort: 19987,
+      getGatewayConfig: vi.fn(),
+      getBackendStatus: vi.fn(),
+      startBackend: vi.fn(),
+      stopBackend: vi.fn(),
+      restartBackend: vi.fn(),
+      getBackendLogs: vi.fn(),
+      pickFiles: vi.fn(),
+      openExternal: vi.fn(),
+      onFileDrop: vi.fn(),
+      checkForUpdates: vi.fn(),
+      installUpdate: vi.fn(),
+      ...bridge,
+    } satisfies DesktopBridge;
+  } else {
+    delete w.oclawDesktop;
+  }
+}
+
+describe("desktop external links", () => {
+  afterEach(() => {
+    setDesktopBridge();
+    vi.restoreAllMocks();
+  });
+
+  test("does not fall back to window.open when desktop bridge rejects", async () => {
+    const openSpy = vi
+      .spyOn(window, "open")
+      .mockImplementation(() => null);
+    setDesktopBridge({
+      openExternal: vi.fn(async () => {
+        throw new Error("blocked");
+      }),
+    });
+
+    await openExternalUrl("file:///tmp/secret.txt");
+
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+});

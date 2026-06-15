@@ -1,0 +1,93 @@
+/**
+ * Electron preload script.
+ *
+ * Runs in an isolated context with Node access and exposes a typed
+ * `window.oclawDesktop` bridge to the renderer via `contextBridge`. The
+ * renderer never imports Electron directly — it only calls these methods,
+ * which forward to the corresponding `ipcMain.handle` channels.
+ *
+ * The bridge shape is mirrored by `frontend/src/core/desktop/types.ts`.
+ */
+
+import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron";
+
+// ── Payload types (kept structurally identical to the frontend's) ────────
+
+interface FileDialogOptions {
+  multiple?: boolean;
+  filters?: { name: string; extensions: string[] }[];
+  title?: string;
+}
+
+interface PickedFile {
+  name: string;
+  data: Uint8Array;
+  type?: string;
+}
+
+interface GatewayConfig {
+  port: number;
+}
+
+interface BackendStatus {
+  status: "stopped" | "starting" | "running" | "error";
+  port: number;
+  error?: string;
+}
+
+interface UpdateInfo {
+  available: boolean;
+  version?: string;
+  date?: string;
+  body?: string;
+}
+
+// The renderer reads `gatewayPort` synchronously at module load to resolve
+// the gateway base URL. We default it to the standard desktop port (19987);
+// the renderer's `initGatewayPort()` refreshes it asynchronously once the
+// main process responds.
+const DEFAULT_GATEWAY_PORT = 19987;
+
+contextBridge.exposeInMainWorld("oclawDesktop", {
+  gatewayPort: DEFAULT_GATEWAY_PORT,
+
+  // ── Backend lifecycle ──────────────────────────────────────────────
+  getGatewayConfig: (): Promise<GatewayConfig> =>
+    ipcRenderer.invoke("backend:get-gateway-config"),
+  getBackendStatus: (): Promise<BackendStatus> =>
+    ipcRenderer.invoke("backend:get-status"),
+  startBackend: (): Promise<BackendStatus> =>
+    ipcRenderer.invoke("backend:start"),
+  stopBackend: (): Promise<BackendStatus> =>
+    ipcRenderer.invoke("backend:stop"),
+  restartBackend: (): Promise<BackendStatus> =>
+    ipcRenderer.invoke("backend:restart"),
+  getBackendLogs: (): Promise<string[]> =>
+    ipcRenderer.invoke("backend:get-logs"),
+
+  // ── Native file dialog ──────────────────────────────────────────────
+  pickFiles: (options?: FileDialogOptions): Promise<PickedFile[]> =>
+    ipcRenderer.invoke("dialog:pick-files", options ?? {}),
+
+  // ── System integration ──────────────────────────────────────────────
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke("shell:open-external", url),
+  onFileDrop: (handler: (files: PickedFile[]) => void): (() => void) => {
+    const listener = (
+      _evt: IpcRendererEvent,
+      files: PickedFile[],
+    ): void => {
+      handler(files);
+    };
+    ipcRenderer.on("desktop:file-drop", listener);
+    return () => {
+      ipcRenderer.removeListener("desktop:file-drop", listener);
+    };
+  },
+
+  // ── Auto-update ─────────────────────────────────────────────────────
+  checkForUpdates: (): Promise<UpdateInfo> =>
+    ipcRenderer.invoke("updater:check"),
+  installUpdate: (): Promise<boolean> =>
+    ipcRenderer.invoke("updater:install"),
+});

@@ -1,8 +1,9 @@
 name: Release Desktop App
 
 # Triggered when a version tag (v*) is pushed.
-# Builds + signs the Tauri app for macOS/Windows/Linux, then publishes
-# the artifacts and latest.json to a GitHub Release for auto-updates.
+# Builds + publishes the Electron desktop app (macOS / Windows / Linux) via
+# electron-builder, then uploads the artifacts and latest-*.yml update
+# manifests to a GitHub Release for electron-updater auto-updates.
 on:
   push:
     tags:
@@ -18,59 +19,40 @@ jobs:
       matrix:
         include:
           - platform: macos-14
-            args: "--target aarch64-apple-darwin"
           - platform: macos-13
-            args: "--target x86_64-apple-darwin"
-          # AppImage requires linuxdeploy + FUSE, which is flaky on CI runners.
-          # deb + rpm covers all major desktop distros.
+          # AppImage is skipped (matches the prior CI config). deb + rpm
+          # covers all major desktop distros.
           - platform: ubuntu-22.04
-            args: "--bundles deb,rpm"
           - platform: windows-latest
-            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./desktop/src-tauri -> target"
-
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      - name: Install desktop dependencies (Tauri CLI)
+      - name: Install desktop dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: desktop
+        working-directory: desktop-electron
 
       # ════════════════════════════════════════════════════════════════
       # Build the Python backend into a standalone executable via PyInstaller.
-      # The output (dist/oclaw-gateway/) is copied into the Tauri resources
-      # directory so it gets bundled into the installer.
+      # The output (dist/oclaw-gateway/) is copied into
+      # desktop-electron/resources/gateway/ so electron-builder picks it up
+      # via extraResources and bundles it as process.resourcesPath/gateway.
       # ════════════════════════════════════════════════════════════════
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
@@ -104,9 +86,10 @@ jobs:
         working-directory: backend
         run: |
           uv run python --version
-          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
-          mkdir -p ../desktop/src-tauri/resources/gateway
-          cp -R dist/oclaw-gateway/* ../desktop/src-tauri/resources/gateway/
+          uv run pyinstaller ../desktop-electron/backend-build/oclaw-gateway.spec --noconfirm
+          rm -rf ../desktop-electron/resources/gateway
+          mkdir -p ../desktop-electron/resources/gateway
+          cp -R dist/oclaw-gateway/* ../desktop-electron/resources/gateway/
 
       - name: Build Python backend (Windows)
         if: matrix.platform == 'windows-latest'
@@ -114,9 +97,10 @@ jobs:
         working-directory: backend
         run: |
           uv run python --version
-          uv run pyinstaller ../desktop/backend-build/oclaw-gateway.spec --noconfirm
-          New-Item -ItemType Directory -Force -Path ../desktop/src-tauri/resources/gateway
-          Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop/src-tauri/resources/gateway/ -Recurse -Force
+          uv run pyinstaller ../desktop-electron/backend-build/oclaw-gateway.spec --noconfirm
+          if (Test-Path ../desktop-electron/resources/gateway) { Remove-Item ../desktop-electron/resources/gateway -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path ../desktop-electron/resources/gateway
+          Copy-Item -Path dist/oclaw-gateway/* -Destination ../desktop-electron/resources/gateway/ -Recurse -Force
 
       # ════════════════════════════════════════════════════════════════
       # Verify the PyInstaller bundle contains all critical ASGI/server
@@ -128,7 +112,7 @@ jobs:
       - name: Verify gateway bundle contains critical packages
         shell: bash
         run: |
-          INTERNAL_DIR="desktop/src-tauri/resources/gateway/_internal"
+          INTERNAL_DIR="desktop-electron/resources/gateway/_internal"
           if [ ! -d "$INTERNAL_DIR" ]; then
             echo "ERROR: $INTERNAL_DIR does not exist — PyInstaller build likely failed"
             exit 1
@@ -150,36 +134,78 @@ jobs:
       - name: Verify gateway binary exists
         shell: bash
         run: |
-          ls -la desktop/src-tauri/resources/gateway/oclaw-gateway* || true
-          test -f desktop/src-tauri/resources/gateway/oclaw-gateway || test -f desktop/src-tauri/resources/gateway/oclaw-gateway.exe
+          ls -la desktop-electron/resources/gateway/oclaw-gateway* || true
+          test -f desktop-electron/resources/gateway/oclaw-gateway || test -f desktop-electron/resources/gateway/oclaw-gateway.exe
 
       # ════════════════════════════════════════════════════════════════
-      # Build + sign the Tauri app.
-      # The secret stores the minisign private key as base64 to survive
-      # GitHub UI newline mangling. Tauri's signer decodes base64 itself.
-      #   TAURI_SIGNING_PRIVATE_KEY        — base64-encoded minisign .key
-      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — password for the key
+      # Build the desktop app via electron-builder.
+      #
+      # electron-builder picks up:
+      #   - dist/main.js + dist/preload.cjs  (TS-compiled main + preload)
+      #   - resources/gateway/  (PyInstaller bundle, copied above)
+      #   - ../frontend/out/     (Next.js static export)
+      #
+      # The `release/` directory is the canonical output (matches
+      # `directories.output` in electron-builder.yml). We then upload the
+      # platform-specific files as release assets.
       # ════════════════════════════════════════════════════════════════
-      - name: Build and sign Tauri app
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Electron app (macOS)
+        if: matrix.platform == 'macos-14' || matrix.platform == 'macos-13'
+        working-directory: desktop-electron
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: "OClaw ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download this version and install."
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
-          # The action auto-generates latest.json pointing to release assets.
-          updaterJsonPreferNsis: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # electron-builder reads CSC_LINK / CSC_KEY_PASSWORD to sign the
+          # .app + .dmg. Set the matching macOS distribution certificate as
+          # a base64-encoded secret in repo settings; leave unset for
+          # unsigned local builds.
+          CSC_LINK: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          pnpm exec tsc -p tsconfig.json
+          pnpm exec tsc -p tsconfig.preload.json
+          pnpm exec electron-builder --mac --publish never
 
-      - name: Upload latest.json as a release asset
-        if: matrix.platform == 'macos-14'
+      - name: Build Electron app (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: desktop-electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec tsc -p tsconfig.json
+          pnpm exec tsc -p tsconfig.preload.json
+          pnpm exec electron-builder --linux deb rpm --publish never
+
+      - name: Build Electron app (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        working-directory: desktop-electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm exec tsc -p tsconfig.json
+          pnpm exec tsc -p tsconfig.preload.json
+          pnpm exec electron-builder --win nsis --publish never
+
+      # ════════════════════════════════════════════════════════════════
+      # Publish release artifacts + electron-updater manifest.
+      # electron-updater consumes the per-platform `latest-*.yml` files
+      # (generated by electron-builder) to detect + verify updates.
+      # ════════════════════════════════════════════════════════════════
+      - name: Upload desktop artifacts as release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: desktop/src-tauri/target/**/release/**/latest.json
           tag_name: ${{ github.ref_name }}
+          name: "OClaw ${{ github.ref_name }}"
+          body: "See the assets below to download this version and install."
+          draft: true
+          prerelease: false
+          files: |
+            desktop-electron/release/*.dmg
+            desktop-electron/release/*.zip
+            desktop-electron/release/*.exe
+            desktop-electron/release/*.dmg.blockmap
+            desktop-electron/release/*.zip.blockmap
+            desktop-electron/release/*.exe.blockmap
+            desktop-electron/release/latest-mac.yml
+            desktop-electron/release/latest-linux.yml
+            desktop-electron/release/latest.yml

@@ -23,6 +23,7 @@ from app.gateway.csrf_middleware import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
     CSRFMiddleware,
+    has_bearer_authorization,
     is_auth_endpoint,
     should_check_csrf,
 )
@@ -78,6 +79,12 @@ class _FakeRequest:
         self.url = _URL(path)
         self.cookies = {}
         self.headers = {}
+
+
+def test_csrf_detects_bearer_authorization():
+    req = _FakeRequest("/api/v1/test/protected")
+    req.headers = {"authorization": "Bearer token"}
+    assert has_bearer_authorization(req) is True
 
 
 def test_csrf_exempts_login_local():
@@ -195,23 +202,23 @@ def test_decode_token_malformed_maps_to_token_invalid_code():
 # ── Login Response Format ────────────────────────────────────────────
 
 
-def test_login_response_model_has_no_access_token():
-    """LoginResponse should NOT contain access_token field (RFC-001)."""
+def test_login_response_model_omits_empty_access_token_when_serialized_for_web():
+    """Web serialization omits empty access_token while desktop can opt in."""
     from app.gateway.routers.auth import LoginResponse
 
     resp = LoginResponse(expires_in=604800)
-    d = resp.model_dump()
+    d = resp.model_dump(exclude_none=True)
     assert "access_token" not in d
     assert "expires_in" in d
     assert d["expires_in"] == 604800
 
 
 def test_login_response_model_fields():
-    """LoginResponse has expires_in and needs_setup."""
+    """LoginResponse has expires_in, needs_setup, and optional access_token."""
     from app.gateway.routers.auth import LoginResponse
 
     fields = set(LoginResponse.model_fields.keys())
-    assert fields == {"expires_in", "needs_setup"}
+    assert fields == {"expires_in", "needs_setup", "access_token"}
 
 
 # ── AuthConfig in Route ──────────────────────────────────────────────
@@ -378,19 +385,16 @@ def test_auth_config_token_expiry_boundary_30_ok():
 
 def test_get_auth_config_missing_env_var_generates_ephemeral(caplog):
     """get_auth_config() auto-generates ephemeral secret when AUTH_JWT_SECRET is unset."""
-    import logging
-
     import app.gateway.auth.config as cfg
 
     old = cfg._auth_config
     cfg._auth_config = None
     try:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True), patch("dotenv.load_dotenv", return_value=None):
             os.environ.pop("AUTH_JWT_SECRET", None)
-            with caplog.at_level(logging.WARNING):
-                config = cfg.get_auth_config()
+            config = cfg.get_auth_config()
             assert config.jwt_secret
-            assert any("AUTH_JWT_SECRET" in msg for msg in caplog.messages)
+            assert os.environ["AUTH_JWT_SECRET"] == config.jwt_secret
     finally:
         cfg._auth_config = old
 
@@ -455,6 +459,16 @@ def test_csrf_middleware_allows_post_with_matching_token():
     resp = client.post(
         "/api/v1/test/protected",
         headers={CSRF_HEADER_NAME: token},
+    )
+    assert resp.status_code == 200
+
+
+def test_csrf_middleware_allows_post_with_bearer_authorization():
+    """Bearer-authenticated desktop requests do not rely on cookie CSRF."""
+    client = TestClient(_make_csrf_app())
+    resp = client.post(
+        "/api/v1/test/protected",
+        headers={"Authorization": "Bearer token"},
     )
     assert resp.status_code == 200
 
@@ -591,6 +605,106 @@ def test_api_login_success_no_token_in_body():
     assert "access_token" not in body
     # Token should be in cookie, not body
     assert "access_token" in resp.cookies
+
+
+def test_api_login_success_returns_token_for_desktop_origin():
+    """Desktop app:// login gets a bearer token because SameSite cookies are not sent cross-site."""
+    _setup_config()
+    with patch.dict(os.environ, {"GATEWAY_CORS_ORIGINS": "app://-"}):
+        client = _get_auth_client()
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "desktop-contract@test.com", "password": "securepassword123"},
+        )
+        resp = client.post(
+            "/api/v1/auth/login/local",
+            data={"username": "desktop-contract@test.com", "password": "securepassword123"},
+            headers={"Origin": "app://-"},
+        )
+    assert resp.status_code == 200
+    token = resp.json().get("access_token")
+    assert isinstance(token, str)
+    assert token
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "desktop-contract@test.com"
+
+
+def test_api_login_success_returns_token_for_desktop_header():
+    """Desktop login can request a bearer token even when Electron omits Origin."""
+    _setup_config()
+    client = _get_auth_client()
+    client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "desktop-header-contract@test.com",
+            "password": "securepassword123",
+        },
+    )
+    resp = client.post(
+        "/api/v1/auth/login/local",
+        data={
+            "username": "desktop-header-contract@test.com",
+            "password": "securepassword123",
+        },
+        headers={"X-OClaw-Desktop": "1"},
+    )
+
+    assert resp.status_code == 200
+    token = resp.json().get("access_token")
+    assert isinstance(token, str)
+    assert token
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "desktop-header-contract@test.com"
+
+
+def test_api_change_password_returns_new_token_for_desktop_header():
+    """Desktop password changes must return a fresh token because token_version changes."""
+    _setup_config()
+    client = _get_auth_client()
+    register_resp = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "desktop-change-password@test.com",
+            "password": "securepassword123",
+        },
+        headers={"X-OClaw-Desktop": "1"},
+    )
+    token = register_resp.json().get("access_token")
+    assert isinstance(token, str)
+
+    change_resp = client.post(
+        "/api/v1/auth/change-password",
+        json={
+            "current_password": "securepassword123",
+            "new_password": "newsecurepassword123",
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-OClaw-Desktop": "1",
+        },
+    )
+
+    assert change_resp.status_code == 200
+    new_token = change_resp.json().get("access_token")
+    assert isinstance(new_token, str)
+    assert new_token
+    assert new_token != token
+
+    bearer_only_client = _get_auth_client()
+    stale_me = bearer_only_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert stale_me.status_code == 401
+
+    fresh_me = bearer_only_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {new_token}"},
+    )
+    assert fresh_me.status_code == 200
+    assert fresh_me.json()["email"] == "desktop-change-password@test.com"
 
 
 def test_api_register_duplicate_returns_structured_400():

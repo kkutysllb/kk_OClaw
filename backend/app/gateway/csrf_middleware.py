@@ -63,6 +63,13 @@ def is_auth_endpoint(request: Request) -> bool:
     return request.url.path.rstrip("/") in _AUTH_EXEMPT_PATHS
 
 
+def has_bearer_authorization(request: Request) -> bool:
+    """Return true when request uses Authorization: Bearer authentication."""
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    return scheme.lower() == "bearer" and bool(token.strip())
+
+
 def _host_with_optional_port(hostname: str, port: int | None, scheme: str) -> str:
     """Return normalized host[:port], omitting default ports."""
     host = hostname.lower()
@@ -83,11 +90,14 @@ def _normalize_origin(origin: str) -> str | None:
         return None
 
     scheme = parsed.scheme.lower()
-    if scheme not in {"http", "https"} or not parsed.hostname:
+    if scheme not in {"http", "https", "app"} or not parsed.hostname:
         return None
 
     # Browser Origin is only scheme/host/port. Reject URL-shaped or credentialed values.
     if parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+        return None
+
+    if scheme == "app" and parsed.hostname != "-":
         return None
 
     return f"{scheme}://{_host_with_optional_port(parsed.hostname, port, scheme)}"
@@ -186,7 +196,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Cross-site auth request denied."},
             )
 
-        if should_check_csrf(request) and not _is_auth:
+        if should_check_csrf(request) and not _is_auth and not has_bearer_authorization(request):
             cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
             header_token = request.headers.get(CSRF_HEADER_NAME)
 
