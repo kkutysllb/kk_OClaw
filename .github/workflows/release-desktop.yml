@@ -1,9 +1,25 @@
 name: Release Desktop App
 
-# Triggered when a version tag (v*) is pushed.
-# Builds + publishes the Electron desktop app (macOS / Windows / Linux) via
-# electron-builder, then uploads the artifacts and latest-*.yml update
-# manifests to a GitHub Release for electron-updater auto-updates.
+# Triggered when a version tag (v*) is pushed or manually dispatched.
+#
+# Builds the Electron desktop app (macOS / Windows / Linux) via
+# electron-builder, signs + notarizes the macOS build using the team's
+# Apple Developer credentials, then publishes the artifacts and
+# electron-updater manifests (latest-*.yml) to a GitHub Release.
+#
+# electron-updater consumes the per-platform `latest-*.yml` manifest
+# at runtime to detect + verify new versions.
+#
+# Required GitHub Secrets (see docs/DESKTOP_RELEASE.md for setup):
+#   macOS code signing + notarization
+#     - MACOS_CERT_P12_BASE64       base64 of Developer ID Application .p12
+#     - MACOS_CERT_PASSWORD          .p12 file password
+#     - APPLE_ID                     Apple ID email (e.g. 13609247807@139.com)
+#     - APPLE_APP_SPECIFIC_PASSWORD  app-specific password from appleid.apple.com
+#     - APPLE_TEAM_ID                Apple Developer Team ID (e.g. DHV5D72JNF)
+#   Windows code signing (optional)
+#     - WINDOWS_CERT_PFX_BASE64      base64 of code-signing .pfx
+#     - WINDOWS_CERT_PASSWORD        .pfx file password
 on:
   push:
     tags:
@@ -11,21 +27,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
-    permissions:
-      contents: write
+  build:
+    name: ${{ matrix.label }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-14
-          - platform: macos-13
-          # AppImage is skipped (matches the prior CI config). deb + rpm
-          # covers all major desktop distros.
-          - platform: ubuntu-22.04
-          - platform: windows-latest
+          - os: macos-14
+            label: macOS (arm64)
+            target: mac
+            arch: arm64
+            build_args: --mac --arm64
+            sign_macos: "true"
+            sign_windows: "false"
+          - os: macos-13
+            label: macOS (x64)
+            target: mac
+            arch: x64
+            build_args: --mac --x64
+            sign_macos: "true"
+            sign_windows: "false"
+          - os: ubuntu-22.04
+            label: Linux (deb + rpm)
+            target: linux
+            arch: x64
+            build_args: --linux deb rpm
+            sign_macos: "false"
+            sign_windows: "false"
+          - os: windows-latest
+            label: Windows (NSIS)
+            target: win
+            arch: x64
+            build_args: --win nsis
+            sign_macos: "false"
+            sign_windows: "true"
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # ── macOS code signing + notarization (read by electron-builder) ──
+      # electron-builder accepts base64 directly in CSC_LINK and decodes
+      # the .p12 on the fly. It also handles the import into a temporary
+      # keychain, signing, and notarytool submission automatically when
+      # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID are set.
+      CSC_LINK: ${{ matrix.sign_macos == 'true' && secrets.MACOS_CERT_P12_BASE64 || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.sign_macos == 'true' && secrets.MACOS_CERT_PASSWORD || '' }}
+      APPLE_ID: ${{ matrix.sign_macos == 'true' && secrets.APPLE_ID || '' }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.sign_macos == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ matrix.sign_macos == 'true' && secrets.APPLE_TEAM_ID || '' }}
+      # ── Windows code signing (optional, .pfx) ──
+      WIN_CSC_LINK: ${{ matrix.sign_windows == 'true' && secrets.WINDOWS_CERT_PFX_BASE64 || '' }}
+      WIN_CSC_KEY_PASSWORD: ${{ matrix.sign_windows == 'true' && secrets.WINDOWS_CERT_PASSWORD || '' }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,35 +97,34 @@ jobs:
           version: 10
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
         working-directory: frontend
+        run: pnpm install --frozen-lockfile
 
       - name: Install desktop dependencies
-        run: pnpm install --frozen-lockfile
         working-directory: desktop-electron
+        run: pnpm install --frozen-lockfile
 
       # ════════════════════════════════════════════════════════════════
-      # Build the Python backend into a standalone executable via PyInstaller.
-      # The output (dist/oclaw-gateway/) is copied into
-      # desktop-electron/resources/gateway/ so electron-builder picks it up
-      # via extraResources and bundles it as process.resourcesPath/gateway.
+      # Build the Python gateway into a standalone executable via
+      # PyInstaller. The output is copied into
+      # desktop-electron/resources/gateway/ so electron-builder picks
+      # it up via extraResources and bundles it as
+      # process.resourcesPath/gateway.
       # ════════════════════════════════════════════════════════════════
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
 
-      - name: Install Python
+      - name: Install Python 3.12
         run: uv python install 3.12
 
       - name: Create Python 3.12 venv and install backend dependencies
-        # IMPORTANT: We must force-recreate the venv with Python 3.12.
-        # pyproject.toml declares requires-python >= 3.12 (no upper bound).
-        # uv's cache can preserve a .venv created with Python 3.14 (the latest
-        # version satisfying the constraint). When .venv already exists,
-        # `uv sync --python 3.12` silently reuses it instead of rebuilding.
-        # `uv venv --clear` wipes the old venv cross-platform (no rm -rf).
-        # PyInstaller 6.x has incomplete support for Python 3.14, causing
+        # IMPORTANT: pyproject.toml declares requires-python >= 3.12 (no
+        # upper bound). uv's cache can preserve a .venv created with
+        # Python 3.14 (the latest version satisfying the constraint).
+        # `uv venv --clear` wipes the old venv cross-platform. PyInstaller
+        # 6.x has incomplete support for Python 3.14, causing
         # collect_all() to silently return empty results.
         working-directory: backend
         run: |
@@ -81,22 +136,20 @@ jobs:
           echo "=== Verify uvicorn is importable ==="
           uv run python -c "import uvicorn; print('uvicorn', uvicorn.__version__)"
 
-      - name: Build Python backend (macOS/Linux)
-        if: matrix.platform != 'windows-latest'
+      - name: Build Python gateway (macOS/Linux)
+        if: matrix.os != 'windows-latest'
         working-directory: backend
         run: |
-          uv run python --version
           uv run pyinstaller ../desktop-electron/backend-build/oclaw-gateway.spec --noconfirm
           rm -rf ../desktop-electron/resources/gateway
           mkdir -p ../desktop-electron/resources/gateway
           cp -R dist/oclaw-gateway/* ../desktop-electron/resources/gateway/
 
-      - name: Build Python backend (Windows)
-        if: matrix.platform == 'windows-latest'
+      - name: Build Python gateway (Windows)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         working-directory: backend
         run: |
-          uv run python --version
           uv run pyinstaller ../desktop-electron/backend-build/oclaw-gateway.spec --noconfirm
           if (Test-Path ../desktop-electron/resources/gateway) { Remove-Item ../desktop-electron/resources/gateway -Recurse -Force }
           New-Item -ItemType Directory -Force -Path ../desktop-electron/resources/gateway
@@ -105,9 +158,9 @@ jobs:
       # ════════════════════════════════════════════════════════════════
       # Verify the PyInstaller bundle contains all critical ASGI/server
       # packages. A previous build silently shipped a bundle missing
-      # uvicorn/fastapi/starlette because collect_all() had swallowed the
-      # ImportError, causing "ModuleNotFoundError: No module named 'uvicorn'"
-      # at runtime.
+      # uvicorn/fastapi/starlette because collect_all() had swallowed
+      # the ImportError, causing "ModuleNotFoundError: No module named
+      # 'uvicorn'" at runtime.
       # ════════════════════════════════════════════════════════════════
       - name: Verify gateway bundle contains critical packages
         shell: bash
@@ -138,74 +191,43 @@ jobs:
           test -f desktop-electron/resources/gateway/oclaw-gateway || test -f desktop-electron/resources/gateway/oclaw-gateway.exe
 
       # ════════════════════════════════════════════════════════════════
-      # Build the desktop app via electron-builder.
+      # Build + sign + notarize + publish via electron-builder.
       #
-      # electron-builder picks up:
-      #   - dist/main.js + dist/preload.cjs  (TS-compiled main + preload)
-      #   - resources/gateway/  (PyInstaller bundle, copied above)
-      #   - ../frontend/out/     (Next.js static export)
+      # `--publish always` makes electron-builder create (or update) the
+      # GitHub Release for the current tag and upload all artifacts
+      # (dmg/zip/exe/deb/rpm + blockmaps + latest-*.yml manifests) to
+      # it. The four matrix jobs race to do this; electron-builder's
+      # GitHub publisher correctly merges uploads from concurrent jobs
+      # into the same release, so we don't need a separate
+      # "publish" job.
       #
-      # The `release/` directory is the canonical output (matches
-      # `directories.output` in electron-builder.yml). We then upload the
-      # platform-specific files as release assets.
+      # For manual dispatch (workflow_dispatch), we still pass
+      # `--publish always` so a draft release is created; the maintainer
+      # can review the assets in the GitHub UI before clicking
+      # "Publish". The release starts in draft mode.
       # ════════════════════════════════════════════════════════════════
-      - name: Build Electron app (macOS)
-        if: matrix.platform == 'macos-14' || matrix.platform == 'macos-13'
+      - name: Compile TypeScript (main + preload)
         working-directory: desktop-electron
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # electron-builder reads CSC_LINK / CSC_KEY_PASSWORD to sign the
-          # .app + .dmg. Set the matching macOS distribution certificate as
-          # a base64-encoded secret in repo settings; leave unset for
-          # unsigned local builds.
-          CSC_LINK: ${{ secrets.MACOS_CERT_P12_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
           pnpm exec tsc -p tsconfig.json
           pnpm exec tsc -p tsconfig.preload.json
-          pnpm exec electron-builder --mac --publish never
 
-      - name: Build Electron app (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Build Electron app
         working-directory: desktop-electron
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # electron-builder reads the package version and uses it as
+          # the release name. On tag pushes the version in
+          # desktop-electron/package.json should already match the tag.
+          # We don't override the publish provider — electron-builder.yml
+          # already declares `publish: github` with owner=kkutysllb
+          # and repo=kk_OClaw.
+          DEBUG: "electron-builder"
         run: |
-          pnpm exec tsc -p tsconfig.json
-          pnpm exec tsc -p tsconfig.preload.json
-          pnpm exec electron-builder --linux deb rpm --publish never
+          pnpm exec electron-builder ${{ matrix.build_args }} --publish always
 
-      - name: Build Electron app (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        working-directory: desktop-electron
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Show release output
+        if: always()
+        shell: bash
         run: |
-          pnpm exec tsc -p tsconfig.json
-          pnpm exec tsc -p tsconfig.preload.json
-          pnpm exec electron-builder --win nsis --publish never
-
-      # ════════════════════════════════════════════════════════════════
-      # Publish release artifacts + electron-updater manifest.
-      # electron-updater consumes the per-platform `latest-*.yml` files
-      # (generated by electron-builder) to detect + verify updates.
-      # ════════════════════════════════════════════════════════════════
-      - name: Upload desktop artifacts as release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "OClaw ${{ github.ref_name }}"
-          body: "See the assets below to download this version and install."
-          draft: true
-          prerelease: false
-          files: |
-            desktop-electron/release/*.dmg
-            desktop-electron/release/*.zip
-            desktop-electron/release/*.exe
-            desktop-electron/release/*.dmg.blockmap
-            desktop-electron/release/*.zip.blockmap
-            desktop-electron/release/*.exe.blockmap
-            desktop-electron/release/latest-mac.yml
-            desktop-electron/release/latest-linux.yml
-            desktop-electron/release/latest.yml
+          echo "=== desktop-electron/release/ contents ==="
+          ls -la desktop-electron/release/ || true
