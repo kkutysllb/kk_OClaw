@@ -545,6 +545,7 @@ client.upload_files("thread-1", ["./report.pdf"])
 - [贡献指南](CONTRIBUTING.md) - 开发环境搭建与协作流程
 - [项目说明](backend/docs/项目说明.md) - 完整项目文档
 - [后端架构](backend/README.md) - 后端架构与 API 参考
+- [桌面端发布流程](docs/DESKTOP_RELEASE.md) - electron-builder + Apple 签名 + 公证 + GitHub Actions 矩阵发布全流程
 
 ## 安全使用
 
