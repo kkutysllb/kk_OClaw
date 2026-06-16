@@ -192,11 +192,12 @@ pnpm --dir desktop-electron run build:app
    git push origin main --tags
    ```
 
-3. **GitHub Actions 自动开始**：进入仓库的 `Actions` 标签页能看到 `Release Desktop App` workflow 启动。4 个 matrix job 并行跑：
+3. **GitHub Actions 自动开始**：进入仓库的 `Actions` 标签页能看到 `Release Desktop App` workflow 启动。3 个 matrix job 并行跑：
    - `macOS (arm64)` — 签名 + 公证 + 出 `.dmg` + `.zip`
-   - `macOS (x64)` — 签名 + 公证 + 出 `.dmg` + `.zip`
    - `Linux (deb + rpm)` — 出 `.deb` + `.rpm`
    - `Windows (NSIS)` — 出 `.exe` + 块映射
+
+   > macOS x86_64 故意不出。Apple Silicon 自 2021 年起就是 Mac 默认架构，Rosetta 2 覆盖老设备，省一个 macos-13 job 可以节省 ~30 min CI 时间 + 一次额外公证轮询。如果有 Intel Mac 用户报需要，请联系我们重新加上。
 
 4. **Release 自动建好但为 draft**：每个 job 用 `electron-builder --publish always` 把自己的产物直接推到 GitHub Release，所有 job 都跑完后，Release 页面会看到所有平台的安装包 + `latest-mac.yml` / `latest-linux.yml` / `latest.yml`。
 
@@ -230,10 +231,9 @@ gh run view <run-id> --log | tail -200
 ### 2. 下载 .dmg 验证签名、公证、staple
 
 ```bash
-# 下载 draft release 的 macOS 安装包
+# 下载 draft release 的 macOS 安装包（只下载 arm64，x64 不出）
 gh release download v0.1.0 \
   --pattern 'OClaw-*-arm64.dmg' \
-  --pattern 'OClaw-*-x64.dmg' \
   --dir /tmp/verify
 ls -la /tmp/verify
 
@@ -267,13 +267,10 @@ for plat in mac linux win; do
     || echo "(not found)"
 done
 
-# 期望看到（例 latest-mac.yml）：
+# 期望看到（例 latest-mac.yml，x64 不出所以只剩 arm64）：
 # version: 0.1.0
 # files:
 #   - url: OClaw-0.1.0-arm64.dmg
-#     sha512: <base64>
-#     size: <bytes>
-#   - url: OClaw-0.1.0-x64.dmg
 #     sha512: <base64>
 #     size: <bytes>
 # path: OClaw-0.1.0-arm64.dmg
@@ -599,7 +596,6 @@ gh release create v0.1.0 \
   --title "OClaw v0.1.0" \
   --notes "Release notes here" \
   ./OClaw-0.1.0-arm64.dmg \
-  ./OClaw-0.1.0-x64.dmg \
   --draft
 ```
 
@@ -685,7 +681,6 @@ pnpm exec electron-builder --help
 
 # 单平台构建
 pnpm exec electron-builder --mac --arm64 --publish never
-pnpm exec electron-builder --mac --x64   --publish never
 pnpm exec electron-builder --linux deb rpm --publish never
 pnpm exec electron-builder --win nsis     --publish never
 
@@ -746,6 +741,6 @@ shasum -a 512 -b path/to/OClaw-0.1.0-arm64.dmg | awk '{print $1}' | xxd -r -p | 
 | Electron | 33.x |
 | electron-builder | 25.x |
 | PyInstaller | 6.x |
-| macOS Runner | macos-14（arm64）、macos-13（x64） |
+| macOS Runner | macos-14（arm64） |
 | Linux Runner | ubuntu-22.04 |
 | Windows Runner | windows-latest |

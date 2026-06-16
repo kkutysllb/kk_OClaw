@@ -40,13 +40,11 @@ jobs:
             build_args: --mac --arm64
             sign_macos: "true"
             sign_windows: "false"
-          - os: macos-13
-            label: macOS (x64)
-            target: mac
-            arch: x64
-            build_args: --mac --x64
-            sign_macos: "true"
-            sign_windows: "false"
+          # macOS x86_64 build is intentionally not generated. Apple
+          # Silicon has been the default Mac architecture since 2021
+          # and Rosetta 2 covers any stragglers. Dropping the macos-13
+          # job saves ~30 min of CI time per release and removes the
+          # need for a second macOS runner / notarization round.
           - os: ubuntu-22.04
             label: Linux (deb + rpm)
             target: linux

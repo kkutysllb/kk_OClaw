@@ -355,7 +355,7 @@ pnpm run build:gateway
 - 发现新版本时弹出更新对话框，点击「立即更新」自动下载安装
 - 更新包通过 `electron-updater` 校验发布工件签名，确保安全性
 
-发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建安装包。CI 会先通过 PyInstaller 打包 Python 后端，再用 electron-builder 生成 macOS (arm64 / x64)、Linux (deb / rpm)、Windows (NSIS) 安装包并上传到 Release：
+发布新版本时，维护者只需打一个 Git tag 即可触发 GitHub Actions 自动构建安装包。CI 会先通过 PyInstaller 打包 Python 后端，再用 electron-builder 生成 macOS (arm64)、Linux (deb / rpm)、Windows (NSIS) 安装包并上传到 Release：
 
 ```bash
 # 更新 desktop-electron/package.json 中的 version
