@@ -171,3 +171,7 @@ cron_config.json
 # ═══════════════════════════════════════
 .sisyphus/
 .claude/
+
+findings.md
+progress.md
+task_plan.md
