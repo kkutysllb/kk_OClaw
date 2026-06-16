@@ -14,6 +14,10 @@ __pycache__/
 *.so
 .Python
 build/
+# Re-include desktop-electron/build (icon files needed by electron-builder at packaging time;
+# the unanchored `build/` above was incorrectly matching the Electron asset directory)
+!/desktop-electron/build/
+!/desktop-electron/build/**
 develop-eggs/
 dist/
 downloads/
