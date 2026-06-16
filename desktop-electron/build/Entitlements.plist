@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow JIT (V8) — required by Electron's main process. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Allow loading unsigned executable memory (V8). -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Allow dyld env vars (needed for Electron helpers). -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <!-- Disable library validation so bundled native modules load. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- Network access for the gateway and auto-updater. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>
