@@ -189,6 +189,31 @@ jobs:
           test -f desktop-electron/resources/gateway/oclaw-gateway || test -f desktop-electron/resources/gateway/oclaw-gateway.exe
 
       # ════════════════════════════════════════════════════════════════
+      # Build the Next.js frontend as a static export (frontend/out/).
+      # electron-builder.yml references `../frontend/out` in
+      # extraResources, so this MUST run before the electron-builder
+      # step on every platform. Skipping it makes electron-builder
+      # fail with "file source doesn't exist" when bundling
+      # extraResources. macOS / Windows previously got lucky with
+      # the GitHub runner cache, but a fresh ubuntu-22.04 runner
+      # has no such cache and the Linux deb/rpm packaging failed
+      # for exactly this reason.
+      # ════════════════════════════════════════════════════════════════
+      - name: Build frontend (Next.js static export)
+        working-directory: frontend
+        run: pnpm run build:desktop
+
+      - name: Verify frontend/out/ exists
+        shell: bash
+        run: |
+          if [ ! -f frontend/out/index.html ]; then
+            echo "ERROR: frontend/out/index.html does not exist — frontend build silently failed"
+            ls -la frontend/ 2>&1 | head -10
+            exit 1
+          fi
+          echo "✓ frontend/out/ ready (size: $(du -sh frontend/out/ | cut -f1))"
+
+      # ════════════════════════════════════════════════════════════════
       # Build + sign + notarize + publish via electron-builder.
       #
       # `--publish always` makes electron-builder create (or update) the
