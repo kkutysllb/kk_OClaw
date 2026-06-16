@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "OClaw desktop — fully self-contained Electron shell wrapping the OClaw frontend and Python gateway.",
-  "author": "OClaw",
-  "license": "UNLICENSED",
+  "homepage": "https://github.com/kkutysllb/kk_OClaw",
+  "author": "OClaw Team <13609247807@139.com>",
+  "maintainer": "OClaw Team <13609247807@139.com>",
+  "license": "MIT",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
