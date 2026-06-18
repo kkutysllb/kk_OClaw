@@ -112,14 +112,23 @@ export function resolveFrontendRequestPath(input: string): string {
     return "workspace/chats/new.html";
   }
 
-  // Coding workspace: "workspace/coding" is pre-rendered as a static page,
-  // but "workspace/coding/<projectId>" is a dynamic route. Fall back to the
-  // coding page shell — the client-side router renders the correct project.
+  // Coding workspace: "workspace/coding/<projectId>" is a dynamic route.
+  // The desktop build pre-renders exactly one placeholder via
+  // generateStaticParams (projectId: "__init__"), producing
+  // workspace/coding/__init__.html. For any other projectId, fall back to
+  // that pre-rendered shell — page.tsx is a client component that reads
+  // projectId from usePathname() at runtime and loads the correct project.
+  //
+  // IMPORTANT: the fallback MUST be __init__.html (the project detail shell),
+  // NOT workspace/coding.html (which is the project gallery at
+  // /workspace/coding). Returning the gallery HTML causes the client router
+  // to repeatedly try to reconcile the URL vs. the rendered component,
+  // resulting in an infinite refresh loop.
   if (
     clean.startsWith("workspace/coding/") &&
     !clean.startsWith("workspace/coding/new")
   ) {
-    return "workspace/coding.html";
+    return "workspace/coding/__init__.html";
   }
 
   return `${clean}.html`;
