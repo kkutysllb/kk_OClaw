@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useFileList } from "@/core/projects";
+import { listFiles, useFileList } from "@/core/projects";
 import type { FileEntry } from "@/core/projects";
 import { cn } from "@/lib/utils";
 
@@ -65,15 +65,13 @@ export function FileExplorer({
         newExpanded.delete(nodePath);
       } else {
         newExpanded.add(nodePath);
-        // Lazy load children
+        // Lazy load children. Use listFiles() from core/projects so the
+        // request goes through getBackendBaseURL() + the authed fetcher —
+        // a raw fetch('/api/...') resolves against the page origin and breaks
+        // in the packaged static export (app://- protocol → ERR_FILE_NOT_FOUND).
         try {
-          const res = await fetch(
-            `/api/projects/${projectId}/files?path=${encodeURIComponent(nodePath)}`,
-          );
-          if (res.ok) {
-            const data = (await res.json()) as { entries: FileEntry[] };
-            setTree((prev) => updateTreeChildren(prev, nodePath, data.entries));
-          }
+          const entries = await listFiles(projectId, nodePath);
+          setTree((prev) => updateTreeChildren(prev, nodePath, entries));
         } catch {
           // ignore
         }

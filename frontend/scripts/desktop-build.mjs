@@ -407,6 +407,13 @@ export default function WorkspaceLayout({
 `,
   },
   {
+    // NOTE: This patch must stay in sync with the source
+    // app/workspace/workspace-content.tsx. The only difference from the source
+    // is the leading comment ("Desktop static export: no cookies() access").
+    // If you add/remove a component in the source version, mirror the change
+    // here — otherwise the desktop packaged build silently loses the change
+    // (historically bitten by the WorkspaceTaskTabs omission, which caused the
+    // multi-tab feature to work in dev but vanish in packaged builds).
     file: join(APP_DIR, "workspace", "workspace-content.tsx"),
     content: `import { Toaster } from "sonner";
 
@@ -414,6 +421,7 @@ import { QueryClientProvider } from "@/components/query-client-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
+import { WorkspaceTaskTabs } from "@/components/workspace/workspace-task-tabs";
 
 // Desktop static export: no cookies() access
 export function WorkspaceContent({
@@ -423,7 +431,10 @@ export function WorkspaceContent({
     <QueryClientProvider>
       <SidebarProvider className="h-screen" defaultOpen={false}>
         <WorkspaceSidebar />
-        <SidebarInset className="min-w-0">{children}</SidebarInset>
+        <SidebarInset className="min-w-0">
+          <WorkspaceTaskTabs />
+          {children}
+        </SidebarInset>
       </SidebarProvider>
       <CommandPalette />
       <Toaster position="top-center" />
