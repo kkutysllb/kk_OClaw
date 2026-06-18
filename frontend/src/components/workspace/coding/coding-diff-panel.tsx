@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangleIcon,
   GitCompareIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -26,6 +27,15 @@ interface CodingDiffPanelProps {
   selectedFilePath?: string | null;
   focusLine?: number | null;
 }
+
+// Cap the number of diff lines rendered in one go. Pathological diffs (lock
+// files, generated code, large reformatting) can exceed 100k lines, and
+// rendering every row in a single React pass creates hundreds of thousands
+// of DOM nodes → renderer process OOM-killed (observed on a 121k-line / 5 MB
+// diff in the packaged Electron build; dev survived only because it had not
+// been tested against that project). 3k lines is plenty for humans to review;
+// larger diffs are truncated with a notice pointing to `git diff`.
+const MAX_DIFF_RENDER_LINES = 3000;
 
 export function CodingDiffPanel({
   focusLine,
@@ -82,9 +92,21 @@ export function CodingDiffPanel({
   );
   const scopedDiffText =
     diffScope === "all" ? (diff?.diff ?? "") : filteredDiff;
+  // Truncate pathologically large diffs before rendering (see
+  // MAX_DIFF_RENDER_LINES). Both the side-by-side parser and the unified
+  // renderer consume `displayDiffText`, so a single guard covers both modes.
+  const diffLines = useMemo(() => scopedDiffText.split("\n"), [scopedDiffText]);
+  const isDiffTruncated = diffLines.length > MAX_DIFF_RENDER_LINES;
+  const displayDiffText = useMemo(
+    () =>
+      isDiffTruncated
+        ? diffLines.slice(0, MAX_DIFF_RENDER_LINES).join("\n")
+        : scopedDiffText,
+    [diffLines, isDiffTruncated, scopedDiffText],
+  );
   const sideBySideRows = useMemo(
-    () => parseUnifiedDiffForSideBySide(scopedDiffText),
-    [scopedDiffText],
+    () => parseUnifiedDiffForSideBySide(displayDiffText),
+    [displayDiffText],
   );
   const discardError =
     discardProjectFileChange.error instanceof Error
@@ -303,6 +325,16 @@ export function CodingDiffPanel({
               {discardError}
             </div>
           )}
+          {isDiffTruncated && (
+            <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+              <AlertTriangleIcon className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Diff 过大（{diffLines.length.toLocaleString()} 行），为避免渲染崩溃仅显示前{" "}
+                {MAX_DIFF_RENDER_LINES.toLocaleString()} 行。建议在左侧选择单个文件查看，或在终端运行{" "}
+                <code className="font-mono">git diff</code> 查看完整内容。
+              </span>
+            </div>
+          )}
           <ScrollArea className="min-h-0 flex-1">
             {diffViewMode === "side-by-side" ? (
               <SideBySideDiff
@@ -311,7 +343,7 @@ export function CodingDiffPanel({
                 rows={sideBySideRows}
               />
             ) : (
-              renderUnifiedDiff(scopedDiffText, focusedDiffLine)
+              renderUnifiedDiff(displayDiffText, focusedDiffLine)
             )}
           </ScrollArea>
         </div>
