@@ -103,11 +103,12 @@ function resolveTrayIcon(): Electron.NativeImage | undefined {
   ];
   for (const path of candidates) {
     if (!existsSync(path)) continue;
-    const image = nativeImage.createFromPath(path);
-    if (process.platform === "darwin") {
-      image.setTemplateImage(true);
-    }
-    return image;
+    // NOTE: do NOT call setTemplateImage(true) here. The tray icon is a
+    // full-colour brand logo (yellow→green gradient O-ring), not a monochrome
+    // silhouette. Marking it as a template image makes macOS discard all
+    // colour and render only the alpha mask as a solid white/grey blob.
+    // Colour tray icons are fully supported on macOS without template mode.
+    return nativeImage.createFromPath(path);
   }
   return undefined;
 }
