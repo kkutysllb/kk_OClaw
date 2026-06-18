@@ -9,10 +9,16 @@ import time
 
 import requests
 
-# MiniMax API base URL (domestic: api.minimaxi.com, international: api.minimax.io)
+# Provider modules live alongside this script.
+from gemini_veo_provider import generate as gemini_generate, is_configured as gemini_ok
+from kling_provider import generate as kling_generate, is_configured as kling_ok
+
+# MiniMax API base URL for TTS / music (domestic: api.minimaxi.com).
+# Note: Only audio endpoints (TTS + music) still use MiniMax; video generation
+# is handled by kling_provider / gemini_veo_provider.
 MINIMAX_API_BASE = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/v1")
 
-# Polling interval in seconds for video/music generation status
+# Polling interval in seconds for music generation status
 POLL_INTERVAL_SEC = 5
 # Maximum wait time in seconds (30 minutes)
 MAX_WAIT_SEC = 1800
@@ -477,6 +483,61 @@ def _generate_audio_for_prompt(
     return None, cleanup
 
 
+def _generate_video_only(
+    provider: str,
+    prompt_text: str,
+    reference_images: list[str],
+    output_file: str,
+    aspect_ratio: str,
+    fast_mode: bool,
+) -> None:
+    """Dispatch video generation to the selected provider, with auto fallback.
+
+    `provider` is one of: "auto" (try kling then gemini), "kling", "gemini".
+    Raises RuntimeError if every configured provider fails.
+    """
+    if provider == "auto":
+        order = [("kling", kling_generate, kling_ok), ("gemini", gemini_generate, gemini_ok)]
+    elif provider == "kling":
+        order = [("kling", kling_generate, kling_ok)]
+    elif provider == "gemini":
+        order = [("gemini", gemini_generate, gemini_ok)]
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
+
+    last_err: Exception | None = None
+    attempted = 0
+
+    for name, gen_fn, ok_fn in order:
+        if not ok_fn():
+            print(f"[{name}] credentials not configured, skipping")
+            continue
+        attempted += 1
+        try:
+            print(f"\n[{name}] starting video generation...")
+            gen_fn(
+                prompt_text=prompt_text,
+                reference_images=reference_images,
+                output_file=output_file,
+                aspect_ratio=aspect_ratio,
+                fast_mode=fast_mode,
+            )
+            print(f"[{name}] video generated successfully")
+            return
+        except Exception as e:
+            print(f"⚠ [{name}] generation failed: {e}")
+            last_err = e
+
+    if attempted == 0:
+        raise RuntimeError(
+            "No video provider is configured. Set credentials for at least one of:\n"
+            "  Kling   : KLING_ACCESS_KEY+KLING_SECRET_KEY  (official JWT)\n"
+            "            or KLING_API_KEY  (proxy Bearer)\n"
+            "  Gemini  : GEMINI_API_KEY"
+        )
+    raise RuntimeError(f"All video providers failed. Last error: {last_err}")
+
+
 def generate_video(
     prompt_file: str,
     reference_images: list[str],
@@ -484,146 +545,32 @@ def generate_video(
     aspect_ratio: str = "16:9",
     fast_mode: bool = False,
     no_audio: bool = False,
+    provider: str = "auto",
 ) -> str:
     prompt_data = _load_prompt_json(prompt_file)
     # Flatten prompt to string for the video generation API
     prompt_text = json.dumps(prompt_data, ensure_ascii=False)
 
+    # MiniMax key is still required for TTS / background music.
     api_key = os.getenv("MINIMAX_API_KEY")
-    if not api_key:
-        return "MINIMAX_API_KEY is not set"
+    if not api_key and not no_audio:
+        print(
+            "Warning: MINIMAX_API_KEY is not set; TTS and background music "
+            "will be skipped. Video generation still works via the configured "
+            "video provider (Kling / Gemini Veo)."
+        )
 
-    # Build request body for MiniMax video generation.
-    # MiniMax Token Plan provides TWO separate daily video quotas (3 each):
-    #   - Hailuo-2.3 768P 6s  → 3/day (standard mode)
-    #   - Hailuo-2.3-Fast 768P 6s → 3/day (fast mode, fast_pretreatment=true)
-    # Both use the same API model 'MiniMax-Hailuo-2.3'. Calling with
-    # --fast uses the Fast quota, giving up to 6 videos/day total.
-    request_body: dict = {
-        "model": "MiniMax-Hailuo-2.3",
-        "prompt": prompt_text,
-        "prompt_optimizer": True,
-        "duration": 6,
-    }
-    if fast_mode:
-        request_body["fast_pretreatment"] = True
-        print("Using fast mode (Hailuo-2.3-Fast quota)")
-
-    # If there are reference images, use the image-to-video endpoint
-    if reference_images:
-        valid_refs = []
-        for ref_img in reference_images:
-            try:
-                with open(ref_img, "rb") as f:
-                    data = f.read()
-                if data:
-                    valid_refs.append(ref_img)
-            except Exception as e:
-                print(f"Skipping invalid reference image {ref_img}: {e}")
-
-        if valid_refs:
-            print(
-                f"Note: MiniMax T2V model does not support reference images. "
-                f"Only the prompt will be used for generation. "
-                f"({len(valid_refs)} reference image(s) ignored)"
-            )
-
-    # ========== Step 1: Create video generation task ==========
-    print("Creating video generation task...")
-    response = requests.post(
-        f"{MINIMAX_API_BASE}/v1/video_generation",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json=request_body,
+    # ========== Step 1: Generate video via provider ==========
+    _generate_video_only(
+        provider=provider,
+        prompt_text=prompt_text,
+        reference_images=reference_images,
+        output_file=output_file,
+        aspect_ratio=aspect_ratio,
+        fast_mode=fast_mode,
     )
-    response.raise_for_status()
-    result = response.json()
 
-    base_resp = result.get("base_resp", {})
-    if base_resp.get("status_code") != 0:
-        raise Exception(
-            f"MiniMax API error (code={base_resp.get('status_code')}): "
-            f"{base_resp.get('status_msg', 'unknown error')}"
-        )
-
-    task_id = result.get("task_id")
-    if not task_id:
-        raise Exception(f"No task_id in response: {result}")
-    print(f"Task created: {task_id}")
-
-    # ========== Step 2: Poll for video task completion ==========
-    start_time = time.time()
-    file_id = None
-    while True:
-        elapsed = time.time() - start_time
-        if elapsed > MAX_WAIT_SEC:
-            raise Exception(
-                f"Video generation timed out after {MAX_WAIT_SEC}s. "
-                f"Task ID: {task_id}"
-            )
-
-        time.sleep(POLL_INTERVAL_SEC)
-
-        query_resp = requests.get(
-            f"{MINIMAX_API_BASE}/v1/query/video_generation",
-            params={"task_id": task_id},
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        query_resp.raise_for_status()
-        query_result = query_resp.json()
-
-        status = query_result.get("status", "")
-        print(f"  Task status: {status} (elapsed: {int(elapsed)}s)")
-
-        if status == "Success":
-            file_id = query_result.get("file_id")
-            if not file_id:
-                raise Exception(f"Task succeeded but no file_id: {query_result}")
-            break
-        elif status == "Fail":
-            query_base = query_result.get("base_resp", {})
-            raise Exception(
-                f"Video generation failed. "
-                f"Code: {query_base.get('status_code')}, "
-                f"Msg: {query_base.get('status_msg', 'unknown')}"
-            )
-        elif status in ("Preparing", "Queueing", "Processing"):
-            continue
-        else:
-            raise Exception(f"Unknown task status: {status}")
-
-    print(f"Video generated successfully. File ID: {file_id}")
-
-    # ========== Step 3: Get download URL ==========
-    file_resp = requests.get(
-        f"{MINIMAX_API_BASE}/v1/files/retrieve",
-        params={"file_id": file_id},
-        headers={"Authorization": f"Bearer {api_key}"},
-    )
-    file_resp.raise_for_status()
-    file_result = file_resp.json()
-
-    file_base = file_result.get("base_resp", {})
-    if file_base.get("status_code") != 0:
-        raise Exception(
-            f"Failed to retrieve file info: {file_base.get('status_msg', 'unknown')}"
-        )
-
-    download_url = file_result.get("file", {}).get("download_url")
-    if not download_url:
-        raise Exception(f"No download_url in file response: {file_result}")
-
-    # ========== Step 4: Download the video file ==========
-    print(f"Downloading video from {download_url}...")
-    dl_resp = requests.get(download_url)
-    dl_resp.raise_for_status()
-
-    with open(output_file, "wb") as f:
-        f.write(dl_resp.content)
-
-    # ========== Step 5: Generate audio and merge ==========
+    # ========== Step 2: Generate audio and merge ==========
     audio_result = " (no audio)"
     cleanup_files: list[str] = []
 
@@ -662,7 +609,10 @@ def generate_video(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate videos using MiniMax API")
+    parser = argparse.ArgumentParser(
+        description="Generate videos using Kling (primary) or Gemini Veo (fallback). "
+                    "TTS narration and background music are generated via MiniMax."
+    )
     parser.add_argument(
         "--prompt-file",
         required=True,
@@ -672,7 +622,8 @@ if __name__ == "__main__":
         "--reference-images",
         nargs="*",
         default=[],
-        help="Absolute paths to reference images (space-separated)",
+        help="Absolute paths to reference images (used as first/last frame "
+             "for image-to-video generation when supported by the provider)",
     )
     parser.add_argument(
         "--output-file",
@@ -683,13 +634,21 @@ if __name__ == "__main__":
         "--aspect-ratio",
         required=False,
         default="16:9",
-        help="Aspect ratio of the generated video",
+        help="Aspect ratio of the generated video (16:9, 9:16, or 1:1)",
+    )
+    parser.add_argument(
+        "--provider",
+        required=False,
+        default="auto",
+        choices=["auto", "kling", "gemini"],
+        help="Video generation provider. 'auto' tries Kling first then falls "
+             "back to Gemini Veo (default: auto)",
     )
     parser.add_argument(
         "--fast",
         action="store_true",
         default=False,
-        help="Use fast mode (Hailuo-2.3-Fast quota, separate 3/day limit)",
+        help="Use fast mode (Kling 'pro' mode / Gemini Veo fast model)",
     )
     parser.add_argument(
         "--no-audio",
@@ -703,12 +662,13 @@ if __name__ == "__main__":
     try:
         print(
             generate_video(
-                args.prompt_file,
-                args.reference_images,
-                args.output_file,
-                args.aspect_ratio,
-                args.fast,
-                args.no_audio,
+                prompt_file=args.prompt_file,
+                reference_images=args.reference_images,
+                output_file=args.output_file,
+                aspect_ratio=args.aspect_ratio,
+                fast_mode=args.fast,
+                no_audio=args.no_audio,
+                provider=args.provider,
             )
         )
     except Exception as e:

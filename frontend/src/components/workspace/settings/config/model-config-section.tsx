@@ -75,13 +75,22 @@ export function ModelConfigSection() {
 
   const handleDelete = async () => {
     if (!deletingModel) return;
+    const target = deletingModel;
     setDeleting(true);
+    // Optimistic removal: hide the row immediately so the UI feels instant.
+    // If the server rejects the delete we re-fetch to restore.
+    setModels((prev) => prev.filter((m) => m.name !== target.name));
+    setDeletingModel(null);
     try {
-      await deleteModel(deletingModel.name);
-      setDeletingModel(null);
+      await deleteModel(target.name);
+      // Confirm with a fresh server read to catch any drift.
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除失败");
+      // Restore on failure.
+      setModels((prev) =>
+        prev.some((m) => m.name === target.name) ? prev : [...prev, target],
+      );
     } finally {
       setDeleting(false);
     }

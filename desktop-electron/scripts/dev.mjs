@@ -29,6 +29,7 @@ const EMBEDDED_CONFIG = resolve(
 const GATEWAY_PORT = process.env.GATEWAY_PORT ?? "19987";
 const DEV_SERVER_PORT = "18659";
 const DEV_SERVER_URL = `http://127.0.0.1:${DEV_SERVER_PORT}`;
+const FRONTEND_READY_TIMEOUT_MS = 60_000;
 const DESKTOP_DEV_ORIGINS = [
   "app://-",
   `http://127.0.0.1:${DEV_SERVER_PORT}`,
@@ -43,12 +44,34 @@ let gatewayRestartTimer = null;
 let migrateDesktopConfigYaml = null;
 
 function start(cmd, args, opts = {}) {
-  const { onExit, ...spawnOpts } = opts;
+  const { onExit, onStdout, onStderr, detached, ...spawnOpts } = opts;
   const child = spawn(cmd, args, {
-    stdio: "inherit",
+    stdio: onStdout || onStderr ? ["inherit", "pipe", "pipe"] : "inherit",
     shell: process.platform === "win32",
+    // POSIX: put each child in its own process group so teardown can kill the
+    // entire group (including grandchildren spawned by pnpm exec / uv run)
+    // with a single negative-PID signal. Without this, killing the direct
+    // child leaves grandchildren as orphans still bound to ports (e.g. 19987)
+    // or holding .next/dev/lock. Windows has no process groups, so disabled.
+    detached: process.platform !== "win32" && detached !== false,
     ...spawnOpts,
   });
+  if (child.stdout) {
+    child.stdout.on("data", (chunk) => {
+      process.stdout.write(chunk);
+      if (typeof onStdout === "function") {
+        onStdout(String(chunk));
+      }
+    });
+  }
+  if (child.stderr) {
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      if (typeof onStderr === "function") {
+        onStderr(String(chunk));
+      }
+    });
+  }
   children.push(child);
   child.on("exit", (code, signal) => {
     const childIndex = children.indexOf(child);
@@ -85,12 +108,38 @@ function teardown(signal = "SIGTERM") {
   }
   for (const child of [...children].reverse()) {
     try {
-      process.kill(child.pid, signal);
-    } catch {
-      /* already dead */
+      // Kill the entire process group (negative PID). Each child was started
+      // with detached: true, so it is the leader of its own group; the signal
+      // propagates to all descendants (e.g. pnpm exec → next dev → next-server,
+      // or uv run → uvicorn), preventing the orphan-process port/lock leaks
+      // we hit on plain Ctrl+C.
+      process.kill(-child.pid, signal);
+    } catch (e) {
+      if (e && e.code === "EPERM") {
+        // Different session (rare on macOS); fall back to PID-only kill.
+        try { process.kill(child.pid, signal); } catch { /* already dead */ }
+      }
+      /* ESRCH or already dead — ignore */
     }
   }
-  setTimeout(() => process.exit(0), 1500);
+  // Graceful exit: give children 5s to clean up (delete .next/dev/lock, close
+  // webpack watcher, release ports, etc.). Next.js dev server needs 3-5s to
+  // release its lockfile; anything shorter leaves a stale "Unable to acquire
+  // lock" state on the next `pnpm run dev`. Escalate to SIGKILL for any
+  // stubborn survivors after 3s.
+  const forceKillTimer = setTimeout(() => {
+    for (const child of [...children]) {
+      try {
+        process.kill(-child.pid, "SIGKILL");
+      } catch {
+        /* already dead */
+      }
+    }
+  }, 3000);
+  setTimeout(() => {
+    clearTimeout(forceKillTimer);
+    process.exit(0);
+  }, 5000);
 }
 
 function migrateDesktopConfigFile(configPath) {
@@ -227,11 +276,17 @@ function startGateway() {
 // because it checks `window.oclawDesktop` (injected by the preload), not the
 // DESKTOP_BUILD env var. Cookie-based auth flows through the Next.js proxy,
 // matching fetcher.ts's `port === "18659"` credentials branch.
+let frontendReadyPromise = null;
+
 function startFrontend() {
   console.log(`[dev] starting Next.js dev server on port ${DEV_SERVER_PORT}...`);
+  let markReady;
+  frontendReadyPromise = new Promise((resolve) => {
+    markReady = resolve;
+  });
   start(
     process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-    ["exec", "next", "dev", "--port", DEV_SERVER_PORT],
+    ["exec", "next", "dev", "--hostname", "127.0.0.1", "--port", DEV_SERVER_PORT],
     {
       cwd: FRONTEND_DIR,
       env: {
@@ -245,8 +300,35 @@ function startFrontend() {
         NEXT_PUBLIC_LANGGRAPH_BASE_URL: "",
         GATEWAY_PORT,
       },
+      onStdout: (chunk) => {
+        if (chunk.includes("Ready in")) {
+          markReady();
+        }
+      },
+      onStderr: (chunk) => {
+        if (chunk.includes("Ready in")) {
+          markReady();
+        }
+      },
     },
   );
+  return frontendReadyPromise;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForFrontendReady() {
+  if (!frontendReadyPromise) {
+    throw new Error("Frontend dev server has not been started");
+  }
+  await Promise.race([
+    frontendReadyPromise,
+    sleep(FRONTEND_READY_TIMEOUT_MS).then(() => {
+      throw new Error(`Next.js dev server did not become ready at ${DEV_SERVER_URL}`);
+    }),
+  ]);
 }
 
 // ── 3. Electron ──────────────────────────────────────────────────────────
@@ -282,15 +364,15 @@ async function main() {
         process.exit(1);
       }
       import("../dist/config-migration.js")
-        .then((migrationModule) => {
+        .then(async (migrationModule) => {
           migrateDesktopConfigYaml = migrationModule.migrateDesktopConfigYaml;
           startGateway();
           startFrontend();
-          // Give the frontend a moment to bind before Electron loads it.
-          setTimeout(startElectron, 4000);
+          await waitForFrontendReady();
+          startElectron();
         })
         .catch((e) => {
-          console.error("[dev] failed to load config migration module:", e);
+          console.error("[dev] failed to start desktop dev environment:", e);
           process.exit(1);
         });
     });

@@ -1,0 +1,1 @@
+{"tool":"generate_column_chart","args":{"data":[{"category":"IF","value":0.93},{"category":"IC","value":0.83},{"category":"IH","value":0.78},{"category":"IM","value":1.33}],"title":"图6 跨期价差Z-Score","axisXTitle":"品种","axisYTitle":"Z-Score","width":900,"height":500,"theme":"academy"}}

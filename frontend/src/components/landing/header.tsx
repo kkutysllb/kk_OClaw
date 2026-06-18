@@ -1,19 +1,13 @@
 import { GitHubLogoIcon } from "@radix-ui/react-icons";
-import Link from "next/link";
 
-import type { Locale } from "@/core/i18n/locale";
-import { getI18n } from "@/core/i18n/server";
 import { cn } from "@/lib/utils";
 
 export type HeaderProps = {
   className?: string;
   homeURL?: string;
-  locale?: Locale;
 };
 
-export async function Header({ className, homeURL, locale }: HeaderProps) {
-  const { locale: resolvedLocale, t } = await getI18n(locale);
-  const lang = resolvedLocale.substring(0, 2);
+export async function Header({ className, homeURL }: HeaderProps) {
   return (
     <header
       className={cn(
@@ -34,12 +28,14 @@ export async function Header({ className, homeURL, locale }: HeaderProps) {
         </a>
       </div>
       <nav className="mr-8 ml-auto flex items-center gap-8 text-sm font-medium">
-        <Link
-          href={`/${lang}/docs`}
+        <a
+          href="https://github.com/kkutysllb/kk_OClaw"
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-secondary-foreground hover:text-foreground transition-colors"
         >
-          {t.home.docs}
-        </Link>
+          Docs
+        </a>
         <a
           href="https://github.com/kkutysllb/kk_OClaw"
           target="_blank"

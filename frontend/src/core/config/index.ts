@@ -12,7 +12,9 @@ import "@/core/desktop/types";
  * surface directly. When this property is absent we are in the web build.
  */
 const DESKTOP_BRIDGE_KEY = "oclawDesktop";
-const DESKTOP_DEV_SERVER_PORT = "18659";
+// Historical Electron dev port; kept only as a final fallback for shells that
+// never set `frontendPort` on the bridge (e.g. older desktop-electron builds).
+const LEGACY_ELECTRON_DEV_PORT = "18659";
 
 let _desktopPort: number =
   typeof window !== "undefined" && window.oclawDesktop?.gatewayPort != null
@@ -36,17 +38,38 @@ export function isDesktop(): boolean {
 }
 
 /**
+ * Resolve the dev-server port the current shell is loading the renderer from.
+ *
+ * Priority:
+ * 1. `window.oclawDesktop.frontendPort` — Electron shells can report the
+ *    actual dev-server port so this stays port-independent.
+ * 2. `18659` — default Electron dev port.
+ *
+ * Returns `null` for packaged shells that serve the renderer from a custom
+ * scheme (e.g. `app://-`) and therefore have no TCP port at all.
+ */
+function getDesktopDevPort(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromBridge = window.oclawDesktop?.frontendPort;
+  if (fromBridge != null && Number.isFinite(fromBridge)) {
+    return String(fromBridge);
+  }
+  return LEGACY_ELECTRON_DEV_PORT;
+}
+
+/**
  * Electron renderer loaded from the Next.js dev server.
  *
- * In this mode the gateway is owned by `desktop-electron/scripts/dev.mjs`,
- * while renderer API calls use Next rewrites for cookie-based auth.
+ * In this mode the gateway is owned by the Electron dev launcher, while
+ * renderer API calls use Next rewrites for cookie-based auth. The renderer
+ * recognises this mode by comparing `window.location.port` against the port
+ * reported via the Electron preload bridge.
  */
 export function isDesktopDevMode(): boolean {
-  return (
-    isDesktop() &&
-    typeof window !== "undefined" &&
-    window.location.port === DESKTOP_DEV_SERVER_PORT
-  );
+  if (!isDesktop() || typeof window === "undefined") return false;
+  const devPort = getDesktopDevPort();
+  if (devPort === null) return false;
+  return window.location.port === devPort;
 }
 
 /**

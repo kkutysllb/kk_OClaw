@@ -16,6 +16,7 @@
 | 文档 | 描述 |
 |------|------|
 | [STREAMING.md](STREAMING.md) | Token 级流式输出设计：Gateway 与 KKOCLAWClient 路径、`stream_mode` 语义、按 ID 去重 |
+| [CODING_AGENT.md](CODING_AGENT.md) | Coding Agent 与 Qiongqi 引擎：隔离运行时、内置技能、前端工作台、diff/review/ROI 工作流 |
 | [FILE_UPLOAD.md](FILE_UPLOAD.md) | 文件上传功能 |
 | [PATH_EXAMPLES.md](PATH_EXAMPLES.md) | 路径类型与使用示例 |
 | [summarization.md](summarization.md) | 上下文摘要功能 |
@@ -45,6 +46,7 @@ docs/
 ├── CONFIGURATION.md           # 配置指南
 ├── SETUP.md                   # 安装说明
 ├── FILE_UPLOAD.md             # 文件上传功能
+├── CODING_AGENT.md            # Coding Agent 与 Qiongqi 引擎
 ├── PATH_EXAMPLES.md           # 路径使用示例
 ├── summarization.md           # 摘要功能
 ├── plan_mode_usage.md         # Plan 模式功能

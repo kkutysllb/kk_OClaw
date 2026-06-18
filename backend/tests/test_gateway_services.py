@@ -160,6 +160,30 @@ def test_build_run_config_context_custom_agent_injects_agent_name():
     assert "configurable" not in config
 
 
+def test_build_run_config_coding_agent_injects_isolated_agent_name():
+    """Coding Agent must use its own memory/runtime scope, not global memory."""
+    from app.gateway.services import build_run_config
+
+    config = build_run_config("thread-1", None, None, assistant_id="coding_agent")
+
+    assert config["configurable"]["agent_name"] == "coding_agent"
+
+
+def test_build_run_config_context_coding_agent_injects_isolated_agent_name():
+    """Coding Agent context-mode requests must also carry the coding memory scope."""
+    from app.gateway.services import build_run_config
+
+    config = build_run_config(
+        "thread-1",
+        {"context": {"project_root": "/tmp/project"}},
+        None,
+        assistant_id="coding_agent",
+    )
+
+    assert config["context"]["agent_name"] == "coding_agent"
+    assert config["context"]["thread_id"] == "thread-1"
+
+
 def test_resolve_agent_factory_returns_make_lead_agent():
     """resolve_agent_factory always returns make_lead_agent regardless of assistant_id."""
     from app.gateway.services import resolve_agent_factory
@@ -345,12 +369,12 @@ def test_build_run_config_with_context():
 
 
 def test_build_run_config_null_context_becomes_empty_context():
-    """When caller sends context=null, treat it as an empty context object."""
+    """When caller sends context=null, start context mode with server thread_id."""
     from app.gateway.services import build_run_config
 
     config = build_run_config("thread-1", {"context": None}, None)
 
-    assert config["context"] == {}
+    assert config["context"] == {"thread_id": "thread-1"}
     assert "configurable" not in config
 
 
@@ -370,7 +394,7 @@ def test_build_run_config_null_context_custom_agent_injects_agent_name():
 
     config = build_run_config("thread-1", {"context": None}, None, assistant_id="finalis")
 
-    assert config["context"] == {"agent_name": "finalis"}
+    assert config["context"] == {"agent_name": "finalis", "thread_id": "thread-1"}
     assert "configurable" not in config
 
 

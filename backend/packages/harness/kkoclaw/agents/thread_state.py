@@ -11,6 +11,7 @@ class ThreadDataState(TypedDict):
     workspace_path: NotRequired[str | None]
     uploads_path: NotRequired[str | None]
     outputs_path: NotRequired[str | None]
+    project_root: NotRequired[str | None]
 
 
 class ViewedImageData(TypedDict):
@@ -71,3 +72,93 @@ class RuntimeContext(TypedDict, total=False):
     sandbox_id: str
     agent_name: str
     app_config: Any
+
+
+# ---------------------------------------------------------------------------
+# Coding Agent state extensions
+# ---------------------------------------------------------------------------
+
+
+class CodingProjectState(TypedDict):
+    """Metadata for the currently open coding project."""
+
+    root: str
+    name: str
+    branch: NotRequired[str]
+    worktree_path: NotRequired[str]
+    language: NotRequired[str]
+    framework: NotRequired[str]
+
+
+class FileDiff(TypedDict):
+    """A single file-level diff entry produced by coding tools."""
+
+    file_path: str
+    status: str  # "added" | "modified" | "deleted" | "renamed"
+    additions: int
+    deletions: int
+    diff: NotRequired[str]
+
+
+class TestResult(TypedDict):
+    """Structured result of a test or lint run."""
+
+    command: str
+    passed: bool
+    output: str
+    summary: NotRequired[str]
+    duration_ms: NotRequired[int]
+
+
+class PermissionDecision(TypedDict):
+    """Record of a user permission decision for a sensitive operation."""
+
+    tool: str
+    args: dict[str, Any]
+    decision: str  # "approved" | "denied" | "always"
+    reason: NotRequired[str]
+
+
+class ActiveCodingSkillState(TypedDict):
+    """Runtime policy metadata for a Coding skill activated in the current turn."""
+
+    id: str
+    allowed_tools: NotRequired[list[str]]
+
+
+class CodeSessionState(TypedDict):
+    """Per-session coding metadata."""
+
+    model: str
+    plan_mode: NotRequired[bool]
+    todos: NotRequired[list[dict]]
+    iter_count: NotRequired[int]
+    iteration_limit: NotRequired[int]
+
+
+def merge_diffs(existing: list[FileDiff] | None, new: list[FileDiff] | None) -> list[FileDiff]:
+    """Reducer for diff list — merges by file_path, later entries override."""
+    if existing is None:
+        return new or []
+    if new is None:
+        return existing
+    by_path: dict[str, FileDiff] = {d["file_path"]: d for d in existing}
+    for d in new:
+        by_path[d["file_path"]] = d
+    return list(by_path.values())
+
+
+class CodingThreadState(ThreadState):
+    """Extended state schema for the Coding Agent.
+
+    Inherits all fields from :class:`ThreadState` and adds coding-specific
+    fields for project context, file diffs, test results, permission
+    decisions, and session metadata.
+    """
+
+    project: NotRequired[CodingProjectState | None]
+    diff: Annotated[list[FileDiff], merge_diffs]
+    test_results: NotRequired[list[TestResult] | None]
+    permission_decisions: NotRequired[list[PermissionDecision] | None]
+    active_coding_skills: NotRequired[list[ActiveCodingSkillState] | None]
+    code_session: NotRequired[CodeSessionState | None]

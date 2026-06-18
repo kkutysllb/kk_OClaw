@@ -132,6 +132,10 @@ _CONTEXT_CONFIGURABLE_KEYS: frozenset[str] = frozenset(
         "max_concurrent_subagents",
         "agent_name",
         "is_bootstrap",
+        # Coding Agent: absolute path of the open project. Read by
+        # ``make_coding_agent`` (cfg["project_root"]) to scope file operations
+        # and inject the "## Current Project" section into the system prompt.
+        "project_root",
     }
 )
 
@@ -174,12 +178,21 @@ def inject_authenticated_user_context(config: dict[str, Any], request: Request) 
 def resolve_agent_factory(assistant_id: str | None):
     """Resolve the agent factory callable from config.
 
-    Custom agents are implemented as ``lead_agent`` + an ``agent_name``
-    injected into ``configurable`` or ``context`` — see
-    :func:`build_run_config`.  All ``assistant_id`` values therefore map to the
-    same factory; the routing happens inside ``make_lead_agent`` when it reads
-    ``cfg["agent_name"]``.
+    Two real graphs are dispatched by ``assistant_id``:
+
+    - ``coding_agent`` → :func:`make_coding_agent` (the code-engineering agent
+      with the coding tool set and ``CodingThreadState``).
+    - anything else → :func:`make_lead_agent` (the default). Custom agents are
+      implemented as ``lead_agent`` + an ``agent_name`` injected into
+      ``configurable`` or ``context`` — see :func:`build_run_config`. The
+      routing for those happens inside ``make_lead_agent`` when it reads
+      ``cfg["agent_name"]``.
     """
+    normalized = (assistant_id or "").strip().lower()
+    if normalized in ("coding_agent", "coding-agent"):
+        from kkoclaw.agents.coding_agent import make_coding_agent
+
+        return make_coding_agent
     from kkoclaw.agents.lead_agent.agent import make_lead_agent
 
     return make_lead_agent
@@ -226,6 +239,7 @@ def build_run_config(
                 context = dict(context_value)
             else:
                 raise ValueError("request config 'context' must be a mapping or null.")
+            context["thread_id"] = thread_id
             config["context"] = context
         else:
             configurable = {"thread_id": thread_id}
@@ -250,7 +264,7 @@ def build_run_config(
         else:
             target = config.setdefault("configurable", {})
         if target is not None and "agent_name" not in target:
-            target["agent_name"] = normalized
+            target["agent_name"] = "coding_agent" if normalized == "coding-agent" else normalized
         config.setdefault("run_name", resolve_root_run_name(config, normalized))
     if metadata:
         config.setdefault("metadata", {}).update(metadata)

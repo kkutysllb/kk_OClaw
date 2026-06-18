@@ -3,8 +3,7 @@
 import { Client as LangGraphClient } from "@langchain/langgraph-sdk/client";
 
 import { getDesktopSessionToken } from "../auth/session";
-import { getLangGraphBaseURL } from "../config";
-import { isDesktop } from "../config";
+import { getLangGraphBaseURL, isDesktopBackendManagedMode } from "../config";
 
 import { isStateChangingMethod, readCsrfCookie } from "./fetcher";
 import { sanitizeRunStreamOptions } from "./stream-mode";
@@ -34,15 +33,11 @@ function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
 }
 
 function injectDesktopAuthorization(init: RequestInit): RequestInit {
-  const isDesktopProduction =
-    isDesktop() &&
-    typeof window !== "undefined" &&
-    window.location.port !== "18659";
-  if (!isDesktopProduction) return init;
+  if (!isDesktopBackendManagedMode()) return init;
 
   const token = getDesktopSessionToken();
   if (!token) {
-    console.warn("[DIAG:api-client] isDesktopProduction=true but no session token in localStorage");
+    console.warn("[DIAG:api-client] desktopManaged=true but no session token in localStorage");
     return init;
   }
 

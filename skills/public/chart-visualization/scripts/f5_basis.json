@@ -1,0 +1,1 @@
+{"tool":"generate_column_chart","args":{"data":[{"category":"IF","value":-2.40},{"category":"IC","value":-2.85},{"category":"IH","value":-1.92},{"category":"IM","value":-3.44}],"title":"图5 近月基差率对比(%)","axisXTitle":"品种","axisYTitle":"基差率(%)","width":900,"height":500,"theme":"academy"}}

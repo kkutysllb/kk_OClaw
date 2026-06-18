@@ -23,10 +23,28 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
     restartBackend: vi.fn(async (): Promise<BackendStatus> => starting),
     getBackendLogs: vi.fn(async (): Promise<string[]> => []),
     pickFiles: vi.fn(async () => []),
+    pickDirectory: vi.fn(async () => null),
     openExternal: vi.fn(async (_url: string) => undefined),
+    openFolder: vi.fn(async (_path: string) => undefined),
     onFileDrop: vi.fn(() => () => {}),
     checkForUpdates: vi.fn(async () => ({ available: false })),
     installUpdate: vi.fn(async () => true),
+    getStartupInfo: vi.fn(async () => ({
+      services: [],
+      env_check: {
+        repo_root: "",
+        env_file: "",
+        env_file_exists: false,
+        gateway_port: 19987,
+        frontend_port: 3000,
+        uv_binary: "",
+        uv_binary_exists: true,
+        is_dev: true,
+      },
+      env_vars: [],
+    })),
+    getSkillModels: vi.fn(async () => ({ providers: [], vars: [], filePath: "" })),
+    setSkillModels: vi.fn(async () => ({ providers: [], vars: [], filePath: "" })),
     ...overrides,
   };
 }

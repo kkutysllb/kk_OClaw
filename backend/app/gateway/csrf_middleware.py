@@ -82,7 +82,12 @@ def _host_with_optional_port(hostname: str, port: int | None, scheme: str) -> st
 
 
 def _normalize_origin(origin: str) -> str | None:
-    """Return a normalized scheme://host[:port] origin, or None for invalid input."""
+    """Return a normalized scheme://host[:port] origin, or None for invalid input.
+
+    Supported schemes:
+    - http/https  — regular web origins
+    - app         — Electron custom protocol (app://-)
+    """
     try:
         parsed = urlsplit(origin.strip())
         port = parsed.port

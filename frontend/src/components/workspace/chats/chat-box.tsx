@@ -23,9 +23,16 @@ import { useThread } from "../messages/context";
 const CLOSE_MODE = { chat: 100, artifacts: 0 };
 const OPEN_MODE = { chat: 60, artifacts: 40 };
 
-const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
+interface ChatBoxProps {
+  children: React.ReactNode;
+  threadId: string;
+  artifactsMode?: "side-panel" | "disabled";
+}
+
+const ChatBox: React.FC<ChatBoxProps> = ({
   children,
   threadId,
+  artifactsMode = "side-panel",
 }) => {
   const { thread } = useThread();
   const pathname = usePathname();
@@ -50,7 +57,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     }
 
     // Update artifacts from the current thread
-    setArtifacts(thread.values.artifacts);
+    setArtifacts(thread.values.artifacts ?? []);
 
     // DO NOT automatically deselect the artifact when switching threads, because the artifacts auto discovering is not work now.
     // if (
@@ -99,6 +106,10 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
       }
     }
   }, [artifactPanelOpen]);
+
+  if (artifactsMode === "disabled") {
+    return <>{children}</>;
+  }
 
   return (
     <ResizablePanelGroup

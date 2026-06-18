@@ -3,6 +3,7 @@
 import {
   BellIcon,
   BrainIcon,
+  KeyRoundIcon,
   PaletteIcon,
   SettingsIcon,
   SlidersHorizontalIcon,
@@ -23,7 +24,9 @@ import { AppearanceSettingsPage } from "@/components/workspace/settings/appearan
 import { ConfigSettingsPage } from "@/components/workspace/settings/config-settings-page";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
+import { SkillModelsSettingsPage } from "@/components/workspace/settings/skill-models-settings-page";
 import { ToolSettingsPage } from "@/components/workspace/settings/tool-settings-page";
+import { isDesktop } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +36,8 @@ type SettingsSection =
   | "config"
   | "memory"
   | "tools"
-  | "notification";
+  | "notification"
+  | "skillModels";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -80,6 +84,12 @@ const SECTION_COLORS: Record<
     bar: "from-cyan-400 to-blue-500",
     bg: "bg-cyan-500/10",
   },
+  skillModels: {
+    iconActive: "text-fuchsia-400",
+    iconInactive: "text-fuchsia-500",
+    bar: "from-fuchsia-400 to-violet-500",
+    bg: "bg-fuchsia-500/10",
+  },
 };
 
 export function SettingsDialog(props: SettingsDialogProps) {
@@ -97,34 +107,45 @@ export function SettingsDialog(props: SettingsDialogProps) {
   }, [defaultSection, dialogProps.open]);
 
   const sections = useMemo(
-    () => [
-      {
-        id: "account",
-        label: t.settings.sections.account,
-        icon: UserIcon,
-      },
-      {
-        id: "appearance",
-        label: t.settings.sections.appearance,
-        icon: PaletteIcon,
-      },
-      {
-        id: "notification",
-        label: t.settings.sections.notification,
-        icon: BellIcon,
-      },
-      {
-        id: "memory",
-        label: t.settings.sections.memory,
-        icon: BrainIcon,
-      },
-      { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
-      {
-        id: "config",
-        label: t.settings.sections.config,
-        icon: SlidersHorizontalIcon,
-      },
-    ],
+    () => {
+      const base: { id: SettingsSection; label: string; icon: typeof UserIcon }[] = [
+        {
+          id: "account" as const,
+          label: t.settings.sections.account,
+          icon: UserIcon,
+        },
+        {
+          id: "appearance" as const,
+          label: t.settings.sections.appearance,
+          icon: PaletteIcon,
+        },
+        {
+          id: "notification" as const,
+          label: t.settings.sections.notification,
+          icon: BellIcon,
+        },
+        {
+          id: "memory" as const,
+          label: t.settings.sections.memory,
+          icon: BrainIcon,
+        },
+        { id: "tools" as const, label: t.settings.sections.tools, icon: WrenchIcon },
+        {
+          id: "config" as const,
+          label: t.settings.sections.config,
+          icon: SlidersHorizontalIcon,
+        },
+      ];
+      // 技能模型凭证配置仅在桌面端显示（Web 端用仓库根 .env 配置）。
+      if (isDesktop()) {
+        base.push({
+          id: "skillModels" as const,
+          label: t.settings.sections.skillModels,
+          icon: KeyRoundIcon,
+        });
+      }
+      return base;
+    },
     [
       t.settings.sections.account,
       t.settings.sections.appearance,
@@ -132,6 +153,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.tools,
       t.settings.sections.notification,
       t.settings.sections.config,
+      t.settings.sections.skillModels,
     ],
   );
   return (
@@ -172,7 +194,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     )}
                     <button
                       type="button"
-                      onClick={() => setActiveSection(id as SettingsSection)}
+                      onClick={() => setActiveSection(id)}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-200",
                         active
@@ -205,6 +227,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "tools" && <ToolSettingsPage />}
               {activeSection === "notification" && <NotificationSettingsPage />}
               {activeSection === "config" && <ConfigSettingsPage />}
+              {activeSection === "skillModels" && <SkillModelsSettingsPage />}
             </div>
           </ScrollArea>
         </div>

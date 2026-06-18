@@ -16,10 +16,15 @@ function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
       restartBackend: vi.fn(),
       getBackendLogs: vi.fn(),
       pickFiles: vi.fn(),
+      pickDirectory: vi.fn(),
       openExternal: vi.fn(),
+      openFolder: vi.fn(),
       onFileDrop: vi.fn(),
       checkForUpdates: vi.fn(),
       installUpdate: vi.fn(),
+      getStartupInfo: vi.fn(),
+      getSkillModels: vi.fn(),
+      setSkillModels: vi.fn(),
       ...bridge,
     } satisfies DesktopBridge;
   } else {

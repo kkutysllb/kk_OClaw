@@ -184,6 +184,7 @@ export const enUS: Translations = {
         mcp: "MCP",
     crons: "Cron Jobs",
     tokenUsage: "Token Usage",
+    coding: "Coding",
   },
 
   // Toolbar
@@ -496,6 +497,7 @@ export const enUS: Translations = {
       notification: "Notification",
       tokenUsage: "Token Usage",
       config: "System Config",
+      skillModels: "Skill Models",
     },
     memory: {
       title: "Memory",

@@ -42,6 +42,37 @@ interface UpdateInfo {
   body?: string;
 }
 
+// ── Skill model credentials (mirrors skill-models-env.ts shapes) ──────────
+
+interface SkillModelField {
+  key: string;
+  label: string;
+  secret: boolean;
+  placeholder?: string;
+}
+
+interface SkillModelProvider {
+  id: string;
+  category: "image" | "av";
+  title: string;
+  description: string;
+  matchKeywords: string[];
+  fields: SkillModelField[];
+}
+
+interface SkillModelVar {
+  key: string;
+  value: string;
+  configured: boolean;
+  isSecret: boolean;
+}
+
+interface SkillModelsConfig {
+  providers: SkillModelProvider[];
+  vars: SkillModelVar[];
+  filePath: string;
+}
+
 // The renderer reads `gatewayPort` synchronously at module load to resolve
 // the gateway base URL. We default it to the standard desktop port (19987);
 // the renderer's `initGatewayPort()` refreshes it asynchronously once the
@@ -68,10 +99,14 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
   // ── Native file dialog ──────────────────────────────────────────────
   pickFiles: (options?: FileDialogOptions): Promise<PickedFile[]> =>
     ipcRenderer.invoke("dialog:pick-files", options ?? {}),
+  pickDirectory: (options?: { title?: string }): Promise<string | null> =>
+    ipcRenderer.invoke("dialog:pick-directory", options ?? {}),
 
   // ── System integration ──────────────────────────────────────────────
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("shell:open-external", url),
+  openFolder: (folderPath: string): Promise<void> =>
+    ipcRenderer.invoke("shell:open-folder", folderPath),
   onFileDrop: (handler: (files: PickedFile[]) => void): (() => void) => {
     const listener = (
       _evt: IpcRendererEvent,
@@ -90,4 +125,12 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
     ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<boolean> =>
     ipcRenderer.invoke("updater:install"),
+
+  // ── Skill model credentials ────────────────────────────────────────
+  getSkillModels: (): Promise<SkillModelsConfig> =>
+    ipcRenderer.invoke("skill-models:get"),
+  setSkillModels: (
+    updates: Record<string, string>,
+  ): Promise<SkillModelsConfig> =>
+    ipcRenderer.invoke("skill-models:set", updates),
 });

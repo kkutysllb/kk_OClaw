@@ -29,23 +29,29 @@ export function WorkspaceHeader({ className }: { className?: string }) {
       >
         {state === "collapsed" ? (
           <div className="group-has-data-[collapsible=icon]/sidebar-wrapper:-translate-y flex w-full cursor-pointer items-center justify-center">
-            <div className="block pt-1 font-bold bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent group-hover/workspace-header:hidden">
+            <div className="block bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text pt-1 font-bold text-transparent group-hover/workspace-header:hidden">
               KC
             </div>
-            <SidebarTrigger className="hidden pl-2 group-hover/workspace-header:block" />
+            <SidebarTrigger
+              data-testid="workspace-sidebar-trigger"
+              className="hidden pl-2 group-hover/workspace-header:block"
+            />
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2">
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
-              <Link href="/" className="ml-2 font-bold bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent text-lg">
+              <Link
+                href="/"
+                className="ml-2 bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-lg font-bold text-transparent"
+              >
                 OClaw
               </Link>
             ) : (
-              <div className="ml-2 cursor-default font-bold bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-transparent text-lg">
+              <div className="ml-2 cursor-default bg-linear-to-r from-cyan-400 via-purple-500 to-pink-500 bg-clip-text text-lg font-bold text-transparent">
                 OClaw
               </div>
             )}
-            <SidebarTrigger />
+            <SidebarTrigger data-testid="workspace-sidebar-trigger" />
           </div>
         )}
       </div>

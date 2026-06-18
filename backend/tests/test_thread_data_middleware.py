@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from langgraph.runtime import Runtime
 
 from kkoclaw.agents.middlewares.thread_data_middleware import ThreadDataMiddleware
@@ -56,3 +57,49 @@ class TestThreadDataMiddleware:
 
         with pytest.raises(ValueError, match="Thread ID is required in runtime context or config.configurable"):
             middleware.before_agent(state={}, runtime=Runtime(context=None))
+
+    def test_coding_project_root_uses_home_scratch_workspace(self, tmp_path, monkeypatch):
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            "kkoclaw.agents.middlewares.thread_data_middleware.get_config",
+            lambda: {"configurable": {"thread_id": "coding-thread", "project_root": str(project_root)}},
+        )
+        middleware = ThreadDataMiddleware(base_dir=str(tmp_path / "kkoclaw"), lazy_init=True)
+
+        result = middleware.before_agent(state={}, runtime=Runtime(context=None))
+
+        assert result is not None
+        thread_data = result["thread_data"]
+        assert thread_data["project_root"] == str(project_root)
+        assert Path(thread_data["workspace_path"]).resolve() != project_root.resolve()
+        assert _as_posix(thread_data["workspace_path"]).endswith(".oclaw-coding/coding-thread/workspace")
+
+    def test_coding_project_root_from_runtime_context_uses_scratch_workspace(self, tmp_path, monkeypatch):
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        home = tmp_path / "home"
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setattr(
+            "kkoclaw.agents.middlewares.thread_data_middleware.get_config",
+            lambda: {"configurable": {}},
+        )
+        middleware = ThreadDataMiddleware(base_dir=str(tmp_path / "kkoclaw"), lazy_init=True)
+
+        result = middleware.before_agent(
+            state={},
+            runtime=Runtime(
+                context={
+                    "thread_id": "coding-context-thread",
+                    "project_root": str(project_root),
+                },
+            ),
+        )
+
+        assert result is not None
+        thread_data = result["thread_data"]
+        assert thread_data["project_root"] == str(project_root)
+        assert Path(thread_data["workspace_path"]).resolve() != project_root.resolve()
+        assert _as_posix(thread_data["workspace_path"]).endswith(".oclaw-coding/coding-context-thread/workspace")

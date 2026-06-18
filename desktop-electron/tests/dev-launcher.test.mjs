@@ -27,6 +27,19 @@ test("desktop dev launcher forces Next rewrites instead of public backend URLs",
   assert.match(devLauncherSource, /NEXT_PUBLIC_LANGGRAPH_BASE_URL: ""/);
 });
 
+test("desktop dev frontend binds to localhost instead of all interfaces", () => {
+  assert.match(devLauncherSource, /"next", "dev", "--hostname", "127\.0\.0\.1", "--port", DEV_SERVER_PORT/);
+});
+
+test("desktop dev launcher waits for the frontend before opening Electron", () => {
+  assert.match(devLauncherSource, /async function waitForFrontendReady\(\)/);
+  assert.match(devLauncherSource, /frontendReadyPromise/);
+  assert.match(devLauncherSource, /Ready in/);
+  assert.match(devLauncherSource, /await waitForFrontendReady\(\)/);
+  assert.doesNotMatch(devLauncherSource, /fetch\(DEV_SERVER_URL/);
+  assert.doesNotMatch(devLauncherSource, /setTimeout\(startElectron, 4000\)/);
+});
+
 test("desktop dev gateway CORS includes Electron's Next dev origins", () => {
   assert.match(devLauncherSource, /DESKTOP_DEV_ORIGINS/);
   assert.match(devLauncherSource, /http:\/\/127\.0\.0\.1:\$\{DEV_SERVER_PORT\}/);

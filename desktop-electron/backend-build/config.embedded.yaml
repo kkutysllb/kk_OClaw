@@ -178,6 +178,29 @@ agents_api:
   enabled: true
 
 # ============================================================================
+# Coding Agent — 独立代码工程 Agent
+# ============================================================================
+coding_agent:
+  enabled: true
+  model: null
+  sandbox: local
+  default_permission_mode: safe-only
+  worktree:
+    enabled: true
+    auto_create: false
+    base_branch: main
+  git:
+    auto_commit: false
+    conventional_commits: true
+  test:
+    auto_run: false
+    frameworks:
+      - pytest
+      - jest
+      - vitest
+      - go test
+
+# ============================================================================
 # Skill Self-Evolution
 # ============================================================================
 skill_evolution:

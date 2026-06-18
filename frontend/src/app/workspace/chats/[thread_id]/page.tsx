@@ -11,6 +11,7 @@ import {
   useThreadChat,
 } from "@/components/workspace/chats";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
+import { FollowupsProvider } from "@/components/workspace/followups-context";
 import { InputBox } from "@/components/workspace/input-box";
 import {
   MessageList,
@@ -19,6 +20,7 @@ import {
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import { RefreshButton } from "@/components/workspace/refresh-button";
+import { notifyWorkspaceTaskRouteChanged } from "@/components/workspace/workspace-task-tabs";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
@@ -67,7 +69,9 @@ export default function ChatPage() {
       setThreadId(createdThreadId);
       setIsNewThread(false);
       // ! Important: Never use next.js router for navigation in this case, otherwise it will cause the thread to re-mount and lose all states. Use native history API instead.
-      history.replaceState(null, "", `/workspace/chats/${createdThreadId}`);
+      const nextPath = `/workspace/chats/${createdThreadId}`;
+      history.replaceState(null, "", nextPath);
+      notifyWorkspaceTaskRouteChanged(nextPath);
     },
     onFinish: (state) => {
       if (document.hidden || !document.hasFocus()) {
@@ -104,6 +108,7 @@ export default function ChatPage() {
 
   return (
     <ThreadContext.Provider value={{ thread, isMock }}>
+      <FollowupsProvider>
       <ChatBox threadId={threadId}>
         <div className="relative flex size-full min-h-0 justify-between">
           <header
@@ -135,7 +140,6 @@ export default function ChatPage() {
                 threadId={threadId}
                 thread={thread}
                 paddingBottom={messageListPaddingBottom}
-                tokenUsageEnabled={tokenUsageEnabled}
                 hasMoreHistory={hasMoreHistory}
                 loadMoreHistory={loadMoreHistory}
                 isHistoryLoading={isHistoryLoading}
@@ -210,6 +214,7 @@ export default function ChatPage() {
           </main>
         </div>
       </ChatBox>
+      </FollowupsProvider>
     </ThreadContext.Provider>
   );
 }

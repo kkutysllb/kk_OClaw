@@ -1,0 +1,1997 @@
+"use client";
+
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClipboardCheckIcon,
+  FileTextIcon,
+  FilterIcon,
+  GitBranchIcon,
+  GitCompareIcon,
+  PackageOpenIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
+  ActivityIcon,
+  GaugeIcon,
+  InfoIcon,
+  SparklesIcon,
+  MessageSquareIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react";
+import Link from "next/link";
+import { useRef, useState, useEffect, useMemo } from "react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArtifactsProvider } from "@/components/workspace/artifacts";
+import {
+  useCodingRoiReports,
+  useCodingRoiSummary,
+  useCodingSession,
+  useCodingSessionEvents,
+  useCodingSkills,
+  useLatestCodingReview,
+  useSetCodingSkillEnabled,
+  useProject,
+  useWorktrees,
+} from "@/core/projects";
+import type { CodingSkill, QiongqiEvent, QiongqiRoiReport } from "@/core/projects";
+import { cn } from "@/lib/utils";
+
+import { AgentPanel } from "./agent-panel";
+import { CodeViewer } from "./code-viewer";
+import { CodingDiffPanel } from "./coding-diff-panel";
+import { CodingResultsPanel } from "./coding-results-panel";
+import { CodingTaskChangesPanel } from "./coding-task-changes-panel";
+import { FileExplorer } from "./file-explorer";
+import { ReviewPanel } from "./review-panel";
+
+interface CodingWorkbenchProps {
+  projectId: string;
+}
+
+type WorkbenchFocusTarget = "code" | "task-changes" | "diff" | "review";
+type WorkbenchFocusHandler = (
+  filePath: string,
+  target?: WorkbenchFocusTarget,
+  taskId?: string,
+  line?: number | null,
+) => void;
+
+export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
+  const { project, isLoading } = useProject(projectId);
+  const { worktrees } = useWorktrees(projectId);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [focusedLine, setFocusedLine] = useState<number | null>(null);
+  const [agentThreadId, setAgentThreadId] = useState<string | undefined>(
+    undefined,
+  );
+  const codingThreadId = agentThreadId ?? projectId;
+  const resultsThreadId = codingThreadId;
+  const [activeCodeTab, setActiveCodeTab] = useState<
+    "code" | "task-changes" | "diff" | "results" | "review"
+  >("code");
+  const [activeInspectorTab, setActiveInspectorTab] = useState<
+    "agent" | "events" | "session" | "roi" | "workflow" | "skills"
+  >("agent");
+
+  // Collapse state for the left (File Explorer) and right (Agent) panels.
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+
+  // Refs to the imperative panel handles for collapse/expand control.
+  const leftPanelRef = useRef<PanelImperativeHandle>(null);
+  const rightPanelRef = useRef<PanelImperativeHandle>(null);
+
+  if (isLoading) {
+    return (
+      <div className="flex size-full items-center justify-center">
+        <Skeleton className="h-full w-full" />
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <p className="text-lg font-semibold">项目未找到</p>
+        <p className="text-muted-foreground text-sm">
+          项目 ID "{projectId}" 不存在或已被删除。
+        </p>
+        <Link
+          href="/workspace/coding"
+          className="text-sm text-emerald-500 hover:underline"
+        >
+          ← 返回项目列表
+        </Link>
+      </div>
+    );
+  }
+
+  const toggleLeft = () => {
+    const next = !leftCollapsed;
+    setLeftCollapsed(next);
+    if (next) {
+      leftPanelRef.current?.collapse();
+    } else {
+      leftPanelRef.current?.expand();
+    }
+  };
+
+  const toggleRight = () => {
+    const next = !rightCollapsed;
+    setRightCollapsed(next);
+    if (next) {
+      rightPanelRef.current?.collapse();
+    } else {
+      rightPanelRef.current?.expand();
+    }
+  };
+
+  const focusWorkbenchFile = (
+    filePath: string,
+    target: WorkbenchFocusTarget = "code",
+    taskId?: string,
+    line?: number | null,
+  ) => {
+    setSelectedFile(filePath);
+    setFocusedLine(line ?? null);
+    setActiveCodeTab(target);
+    if (taskId) {
+      setSelectedTaskId(taskId);
+      setActiveInspectorTab("events");
+    }
+  };
+
+  return (
+    <ArtifactsProvider>
+      <div className="flex size-full min-h-0 flex-col">
+        {/* Header bar */}
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href="/workspace/coding"
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
+              项目
+            </Link>
+            <span className="text-muted-foreground">/</span>
+            <span className="truncate font-semibold">{project.name}</span>
+            {project.is_git_repo && (
+              <div className="bg-muted text-muted-foreground flex items-center gap-1 rounded-md px-2 py-0.5 text-xs">
+                <GitBranchIcon className="h-3 w-3" />
+                {worktrees.length > 0
+                  ? `${worktrees.length} worktree${worktrees.length > 1 ? "s" : ""}`
+                  : "main"}
+              </div>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="text-muted-foreground hidden max-w-xs truncate font-mono text-xs sm:inline">
+              {project.path}
+            </span>
+            <span className="text-muted-foreground hidden text-xs lg:inline">
+              Ctrl+B 切换侧边栏
+            </span>
+          </div>
+        </div>
+
+        {/* Three-panel resizable layout */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            className="flex h-11 shrink-0 items-center gap-3 overflow-x-auto border-b px-3"
+            data-testid="coding-workbench-toolbar"
+          >
+            <div
+              className="bg-muted text-muted-foreground ml-auto inline-flex h-8 w-fit shrink-0 items-center justify-center rounded-md p-1"
+              role="tablist"
+              aria-label="代码区视图"
+            >
+              <WorkbenchToolbarButton
+                active={activeCodeTab === "code"}
+                icon={<FileTextIcon className="h-3 w-3" />}
+                label="代码"
+                onClick={() => setActiveCodeTab("code")}
+              />
+              <WorkbenchToolbarButton
+                active={activeCodeTab === "task-changes"}
+                icon={<GitCompareIcon className="h-3 w-3" />}
+                label="任务变更"
+                onClick={() => setActiveCodeTab("task-changes")}
+              />
+              <WorkbenchToolbarButton
+                active={activeCodeTab === "diff"}
+                icon={<GitCompareIcon className="h-3 w-3" />}
+                label="项目 Diff"
+                onClick={() => setActiveCodeTab("diff")}
+              />
+              <WorkbenchToolbarButton
+                active={activeCodeTab === "results"}
+                icon={<PackageOpenIcon className="h-3 w-3" />}
+                label="结果"
+                onClick={() => setActiveCodeTab("results")}
+              />
+              <WorkbenchToolbarButton
+                active={activeCodeTab === "review"}
+                icon={<ClipboardCheckIcon className="h-3 w-3" />}
+                label="Code Review"
+                onClick={() => setActiveCodeTab("review")}
+              />
+            </div>
+          </div>
+          <div className="mt-0 flex min-h-0 flex-1 overflow-hidden">
+            <ResizablePanelGroup
+              orientation="horizontal"
+              className="relative h-full"
+            >
+              {leftCollapsed && (
+                <CollapsedPanelRestore
+                  id="left-panel-toggle"
+                  side="left"
+                  label="展开文件"
+                  onClick={toggleLeft}
+                />
+              )}
+              {/* Left: File Explorer */}
+              <ResizablePanel
+                panelRef={leftPanelRef}
+                defaultSize="20%"
+                minSize="12%"
+                maxSize="35%"
+                collapsible
+                collapsedSize="0%"
+                onResize={(size) => setLeftCollapsed(size.asPercentage === 0)}
+              >
+                <FileExplorer
+                  headerAction={
+                    <PanelHeaderToggle
+                      id="left-panel-toggle-expanded"
+                      label="收起文件"
+                      side="left"
+                      onClick={toggleLeft}
+                    />
+                  }
+                  projectId={projectId}
+                  selectedFile={selectedFile}
+                  onSelectFile={setSelectedFile}
+                />
+              </ResizablePanel>
+              <ResizableHandle
+                disabled={leftCollapsed}
+                className={
+                  leftCollapsed ? "pointer-events-none w-0! opacity-0" : ""
+                }
+              />
+              {/* Middle: Code / Diff / Results / Review */}
+              <ResizablePanel defaultSize="55%" minSize="30%">
+                <div className="flex h-full min-h-0 flex-col">
+                  {activeCodeTab === "code" && (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <CodeViewer projectId={projectId} filePath={selectedFile} />
+                    </div>
+                  )}
+                  {activeCodeTab === "diff" && (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <CodingDiffPanel
+                        projectId={projectId}
+                        selectedFilePath={selectedFile}
+                        focusLine={focusedLine}
+                      />
+                    </div>
+                  )}
+                  {activeCodeTab === "task-changes" && (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <CodingTaskChangesPanel
+                        threadId={codingThreadId}
+                        selectedFilePath={selectedFile}
+                        highlightedTaskId={selectedTaskId}
+                        onSelectTask={setSelectedTaskId}
+                        onFocusFile={focusWorkbenchFile}
+                      />
+                    </div>
+                  )}
+                  {activeCodeTab === "results" && (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <CodingResultsPanel threadId={resultsThreadId} />
+                    </div>
+                  )}
+                  {activeCodeTab === "review" && (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <ReviewPanel
+                        projectId={projectId}
+                        projectRoot={project.path}
+                        threadId={codingThreadId}
+                        onFocusFile={focusWorkbenchFile}
+                      />
+                    </div>
+                  )}
+                </div>
+              </ResizablePanel>
+              <ResizableHandle
+                disabled={rightCollapsed}
+                className={
+                  rightCollapsed ? "pointer-events-none w-0! opacity-0" : ""
+                }
+              />
+              {rightCollapsed && (
+                <CollapsedPanelRestore
+                  id="right-panel-toggle"
+                  side="right"
+                  label="展开 Agent Inspector"
+                  onClick={toggleRight}
+                />
+              )}
+              {/* Right: Agent Chat / Activity Panel */}
+              <ResizablePanel
+                panelRef={rightPanelRef}
+                defaultSize="25%"
+                minSize="15%"
+                maxSize="50%"
+                collapsible
+                collapsedSize="0%"
+                onResize={(size) => setRightCollapsed(size.asPercentage === 0)}
+              >
+                <AgentInspector
+                  headerAction={
+                    <PanelHeaderToggle
+                      id="right-panel-toggle-expanded"
+                      label="收起 Agent Inspector"
+                      side="right"
+                      onClick={toggleRight}
+                    />
+                  }
+                  onFocusFile={focusWorkbenchFile}
+                  projectRoot={project.path}
+                  projectId={projectId}
+                  threadId={codingThreadId}
+                  selectedTaskId={selectedTaskId}
+                  onThreadIdChange={setAgentThreadId}
+                  activeTab={activeInspectorTab}
+                  onActiveTabChange={setActiveInspectorTab}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        </div>
+      </div>
+    </ArtifactsProvider>
+  );
+}
+
+function WorkbenchToolbarButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-selected={active}
+      className={cn(
+        "inline-flex h-6 items-center gap-1.5 rounded-sm px-2 text-xs font-medium whitespace-nowrap transition-colors",
+        active
+          ? "bg-background text-foreground shadow-sm"
+          : "hover:bg-background/60 hover:text-foreground",
+      )}
+      role="tab"
+      title={label}
+      type="button"
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function PanelHeaderToggle({
+  id,
+  label,
+  onClick,
+  side,
+}: {
+  id: string;
+  label: string;
+  onClick: () => void;
+  side: "left" | "right";
+}) {
+  const Icon = side === "left" ? PanelLeftCloseIcon : PanelRightCloseIcon;
+
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        "text-muted-foreground hover:bg-muted hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors",
+        side === "left" ? "-mr-1" : "-ml-1",
+      )}
+      data-testid={id}
+      title={label}
+      type="button"
+      onClick={onClick}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
+function CollapsedPanelRestore({
+  id,
+  label,
+  onClick,
+  side,
+}: {
+  id: string;
+  label: string;
+  onClick: () => void;
+  side: "left" | "right";
+}) {
+  const Icon = side === "left" ? PanelLeftOpenIcon : PanelRightOpenIcon;
+
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        "bg-background text-muted-foreground hover:bg-muted hover:text-foreground absolute top-2 z-20 flex size-8 items-center justify-center rounded-md border shadow-sm transition-colors",
+        side === "left" ? "left-2" : "right-2",
+      )}
+      data-testid={id}
+      title={label}
+      type="button"
+      onClick={onClick}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
+function AgentInspector({
+  activeTab,
+  headerAction,
+  onActiveTabChange,
+  onFocusFile,
+  onThreadIdChange,
+  projectId,
+  projectRoot,
+  threadId,
+  selectedTaskId,
+}: {
+  activeTab: "agent" | "events" | "session" | "roi" | "workflow" | "skills";
+  headerAction?: React.ReactNode;
+  onActiveTabChange: (tab: "agent" | "events" | "session" | "roi" | "workflow" | "skills") => void;
+  onFocusFile?: WorkbenchFocusHandler;
+  projectId: string;
+  projectRoot: string;
+  threadId: string;
+  selectedTaskId?: string | null;
+  onThreadIdChange?: (threadId: string | undefined) => void;
+}) {
+  return (
+    <div className="bg-background flex h-full min-h-0 flex-col border-l">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold tracking-wide uppercase">
+            Agent Inspector
+          </p>
+        </div>
+        {headerAction}
+      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          onActiveTabChange(value as "agent" | "events" | "session" | "roi" | "workflow" | "skills")
+        }
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList className="mx-2 mt-2 grid h-8 shrink-0 grid-cols-6">
+          <TabsTrigger value="agent" className="px-2 text-xs" title="对话">
+            <MessageSquareIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">对话</span>
+          </TabsTrigger>
+          <TabsTrigger value="events" className="px-2 text-xs" title="事件">
+            <ActivityIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">事件</span>
+          </TabsTrigger>
+          <TabsTrigger value="session" className="px-2 text-xs" title="Session">
+            <InfoIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">Session</span>
+          </TabsTrigger>
+          <TabsTrigger value="roi" className="px-2 text-xs" title="ROI">
+            <GaugeIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">ROI</span>
+          </TabsTrigger>
+          <TabsTrigger value="workflow" className="px-2 text-xs" title="Workflow">
+            <GitCompareIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">流程</span>
+          </TabsTrigger>
+          <TabsTrigger value="skills" className="px-2 text-xs" title="Skills">
+            <SparklesIcon className="h-3 w-3 sm:mr-1" />
+            <span className="hidden sm:inline">Skills</span>
+          </TabsTrigger>
+        </TabsList>
+        <div className="relative mt-0 min-h-0 flex-1 overflow-hidden">
+          <PersistentInspectorPanel active={activeTab === "agent"}>
+            <AgentPanel
+              projectId={projectId}
+              onThreadIdChange={onThreadIdChange}
+            />
+          </PersistentInspectorPanel>
+          <PersistentInspectorPanel active={activeTab === "events"}>
+            <CodingEventsInspector
+              threadId={threadId}
+              onFocusFile={onFocusFile}
+              selectedTaskId={selectedTaskId}
+            />
+          </PersistentInspectorPanel>
+          <PersistentInspectorPanel active={activeTab === "session"}>
+            <CodingSessionInspector threadId={threadId} />
+          </PersistentInspectorPanel>
+          <PersistentInspectorPanel active={activeTab === "roi"}>
+            <CodingRoiInspector threadId={threadId} />
+          </PersistentInspectorPanel>
+          <PersistentInspectorPanel active={activeTab === "workflow"}>
+            <CodingWorkflowInspector projectRoot={projectRoot} threadId={threadId} />
+          </PersistentInspectorPanel>
+          <PersistentInspectorPanel active={activeTab === "skills"}>
+            <CodingSkillsInspector projectRoot={projectRoot} />
+          </PersistentInspectorPanel>
+        </div>
+      </Tabs>
+    </div>
+  );
+}
+
+function PersistentInspectorPanel({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute inset-0 min-h-0 overflow-hidden",
+        active ? "block" : "pointer-events-none hidden",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  session_started: "会话",
+  task_started: "任务",
+  plan_updated: "计划",
+  tool_policy_decided: "策略",
+  file_changed: "文件",
+  diff_summarized: "Diff",
+  roi_reported: "ROI",
+  task_completed: "完成",
+};
+
+function CodingEventsInspector({
+  onFocusFile,
+  selectedTaskId,
+  threadId,
+}: {
+  threadId: string;
+  onFocusFile?: WorkbenchFocusHandler;
+  selectedTaskId?: string | null;
+}) {
+  const { events, isLoading, isFetching, error, refetch } =
+    useCodingSessionEvents(threadId);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [groupByTask, setGroupByTask] = useState(false);
+
+  // Auto-refresh every 10s
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(() => void refetch(), 10000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, refetch]);
+
+  // Available event types from current data
+  const availableTypes = useMemo(() => {
+    const types = new Set<string>();
+    for (const event of events) types.add(event.event_type);
+    return Array.from(types).sort();
+  }, [events]);
+
+  // Filter + optionally group
+  const filteredEvents = useMemo(() => {
+    let filtered = events;
+    if (selectedTypes.size > 0) {
+      filtered = filtered.filter((e) => selectedTypes.has(e.event_type));
+    }
+    return filtered.slice().reverse();
+  }, [events, selectedTypes]);
+
+  const taskGroups = useMemo(() => {
+    if (!groupByTask) return null;
+    const groups = new Map<string, QiongqiEvent[]>();
+    for (const event of filteredEvents) {
+      const taskId =
+        typeof event.payload.task_id === "string"
+          ? event.payload.task_id
+          : "__unknown__";
+      if (!groups.has(taskId)) groups.set(taskId, []);
+      groups.get(taskId)!.push(event);
+    }
+    return Array.from(groups.entries())
+      .sort(([a], [b]) =>
+        a === "__unknown__" ? 1 : b === "__unknown__" ? -1 : a.localeCompare(b),
+      );
+  }, [filteredEvents, groupByTask]);
+
+  const toggleType = (type: string) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  return (
+    <InspectorSection
+      title="事件流"
+      meta={`${filteredEvents.length} 条${selectedTypes.size > 0 ? ` (已过滤)` : ""}`}
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+      action={
+        <button
+          className={cn(
+            "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[10px] font-medium transition-colors",
+            autoRefresh && "text-emerald-600 dark:text-emerald-400",
+          )}
+          type="button"
+          onClick={() => setAutoRefresh((v) => !v)}
+        >
+          <RefreshCwIcon
+            className={cn("h-3 w-3", autoRefresh && "animate-spin")}
+          />
+          自动刷新
+        </button>
+      }
+    >
+      {isLoading ? (
+        <InspectorSkeleton rows={5} />
+      ) : error ? (
+        <InspectorError message={getErrorMessage(error)} />
+      ) : events.length === 0 ? (
+        <InspectorEmpty
+          title="暂无事件"
+          description="Agent 运行后会记录任务、工具、ROI 和文件变更事件。"
+        />
+      ) : (
+        <div className="flex min-h-0 flex-col">
+          {/* Filter chips + group toggle */}
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-2 py-1.5">
+            <FilterIcon className="text-muted-foreground h-3 w-3 shrink-0" />
+            {availableTypes.map((type) => {
+              const active = selectedTypes.size === 0 || selectedTypes.has(type);
+              return (
+                <button
+                  key={type}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                    active
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:text-foreground opacity-60",
+                  )}
+                  type="button"
+                  onClick={() => toggleType(type)}
+                >
+                  {EVENT_TYPE_LABELS[type] ?? type}
+                </button>
+              );
+            })}
+            <button
+              className={cn(
+                "ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                groupByTask && "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+              )}
+              type="button"
+              onClick={() => setGroupByTask((v) => !v)}
+            >
+              按 Task
+            </button>
+          </div>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="space-y-2 p-3">
+              {taskGroups
+                ? taskGroups.map(([taskId, taskEvents]) => (
+                    <TaskGroup
+                      key={taskId}
+                      taskId={taskId}
+                      events={taskEvents}
+                      onFocusFile={onFocusFile}
+                      selectedTaskId={selectedTaskId}
+                    />
+                  ))
+                : filteredEvents.map((event) => (
+                    <EventRow
+                      key={event.seq}
+                      event={event}
+                      onFocusFile={onFocusFile}
+                      selectedTaskId={selectedTaskId}
+                    />
+                  ))}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+    </InspectorSection>
+  );
+}
+
+function TaskGroup({
+  events,
+  onFocusFile,
+  selectedTaskId,
+  taskId,
+}: {
+  events: QiongqiEvent[];
+  onFocusFile?: WorkbenchFocusHandler;
+  selectedTaskId?: string | null;
+  taskId: string;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const isHighlighted = selectedTaskId === taskId;
+
+  return (
+    <div>
+      <button
+        className={cn(
+          "hover:bg-muted/60 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+          isHighlighted && "ring-1 ring-emerald-500/30 bg-emerald-500/10",
+        )}
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {expanded ? (
+          <ChevronDownIcon className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRightIcon className="h-3 w-3 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 truncate font-mono text-[10px]">
+          {taskId === "__unknown__" ? "未关联任务" : taskId}
+        </span>
+        <span className="text-muted-foreground shrink-0 text-[10px]">
+          {events.length} 事件
+        </span>
+      </button>
+      {expanded && (
+        <div className="ml-3 space-y-1.5 border-l-2 border-muted pl-2">
+          {events.map((event) => (
+            <EventRow
+              key={event.seq}
+              event={event}
+              onFocusFile={onFocusFile}
+              selectedTaskId={selectedTaskId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventRow({
+  event,
+  onFocusFile,
+  selectedTaskId,
+}: {
+  event: QiongqiEvent;
+  onFocusFile?: WorkbenchFocusHandler;
+  selectedTaskId?: string | null;
+}) {
+  const focusTarget = getEventFocusTarget(event);
+
+  return (
+    <div className={cn("rounded-md border p-2", focusTarget?.taskId && focusTarget.taskId === selectedTaskId && "ring-1 ring-emerald-500/30 bg-emerald-500/10")}>
+      <div className="flex items-center justify-between gap-2">
+        <Badge
+          variant="outline"
+          className="rounded px-1.5 font-mono text-[10px]"
+        >
+          #{event.seq}
+        </Badge>
+        <span className="text-muted-foreground truncate text-[11px]">
+          {formatCompactDate(event.created_at)}
+        </span>
+      </div>
+      <p className="mt-1 truncate text-xs font-medium">
+        {formatEventType(event.event_type)}
+      </p>
+      <pre className="text-muted-foreground mt-1 line-clamp-3 overflow-hidden font-mono text-[11px] whitespace-pre-wrap">
+        {formatJsonPreview(event.payload)}
+      </pre>
+      {focusTarget && onFocusFile && (
+        <Button
+          className="mt-2 h-7 w-full justify-start px-2 text-xs"
+          size="sm"
+          type="button"
+          variant="ghost"
+          onClick={() => onFocusFile(focusTarget.path, focusTarget.target, focusTarget.taskId)}
+        >
+          <FileTextIcon className="h-3.5 w-3.5" />
+          定位 {focusTarget.target === "diff" ? "变更" : "文件"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function CodingSessionInspector({ threadId }: { threadId: string }) {
+  const { session, isLoading, isFetching, error, refetch } =
+    useCodingSession(threadId);
+  const [expandedRawSession, setExpandedRawSession] = useState(false);
+  const changeSummary = session?.change_summary ?? {};
+  const changedFiles = getNumberValue(changeSummary, "changed_files");
+  const additions = getNumberValue(changeSummary, "additions");
+  const deletions = getNumberValue(changeSummary, "deletions");
+  const currentTask = getCurrentTaskLabel(session?.change_summary);
+  const roi = session?.roi ?? {};
+  const providerUsage = getRecordValue(roi, "provider_usage");
+  const tokenTotal = getNumberValue(providerUsage, "total_tokens");
+  const toolPolicyCount = session?.tool_policy.length ?? 0;
+
+  return (
+    <InspectorSection
+      title="运行概览"
+      meta={
+        session?.updated_at
+          ? `更新 ${formatCompactDate(session.updated_at)}`
+          : undefined
+      }
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+    >
+      {isLoading ? (
+        <InspectorSkeleton rows={4} />
+      ) : error ? (
+        <InspectorError message={getErrorMessage(error)} />
+      ) : !session ? (
+        <InspectorEmpty
+          title="暂无 Session"
+          description="Agent 首次运行后会生成 Qiongqi session 状态。"
+        />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 p-3">
+            <MetricGrid
+              items={[
+                ["Skills", session.skills.length, "发现的 Coding skills"],
+                [
+                  "Active",
+                  session.active_coding_skills.length,
+                  "本轮激活的 Coding skills",
+                ],
+                ["Tools", toolPolicyCount, "当前工具策略条目"],
+                ["Tokens", tokenTotal, "当前 ROI provider usage 总 token"],
+              ]}
+            />
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">运行边界</p>
+              <KeyValueRow label="Thread" value={session.thread_id} />
+              <KeyValueRow
+                label="Project"
+                value={session.project_root ?? "未绑定项目路径"}
+              />
+              <KeyValueRow
+                label="Scratch"
+                value={session.scratch_root ?? "未创建 scratch workspace"}
+              />
+            </div>
+
+            <MetricGrid
+              items={[
+                ["Files", changedFiles, "本 session 记录的文件变更数"],
+                ["Additions", additions, "新增行数"],
+                ["Deletions", deletions, "删除行数"],
+                ["+ / -", additions + deletions, "新增与删除行合计"],
+              ]}
+            />
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">当前任务</p>
+              <p className="text-muted-foreground text-xs leading-5">
+                {currentTask}
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">变更摘要</p>
+              {Object.keys(changeSummary).length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  暂无任务变更摘要。
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {Object.entries(changeSummary).slice(0, 6).map(([key, value]) => (
+                    <KeyValueRow
+                      key={key}
+                      label={key}
+                      value={formatInspectorValue(value)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">活跃技能</p>
+              {session.active_coding_skills.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  当前 session 未激活 Coding skill。
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {session.active_coding_skills.map((skill, index) => (
+                    <Badge
+                      key={`${String(skill.id ?? index)}-${index}`}
+                      variant="secondary"
+                      className="rounded px-1.5 text-[10px]"
+                    >
+                      {String(skill.name ?? skill.id ?? "skill")}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">工具策略</p>
+              {session.tool_policy.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  当前 session 没有工具限制策略。
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {session.tool_policy.slice(0, 5).map((policy, index) => (
+                    <div
+                      key={`${String(policy.id ?? index)}-${index}`}
+                      className="bg-muted/40 rounded px-2 py-1"
+                    >
+                      <p className="truncate text-xs font-medium">
+                        {String(policy.id ?? policy.name ?? `policy-${index + 1}`)}
+                      </p>
+                      <p className="text-muted-foreground mt-0.5 truncate text-[10px]">
+                        {formatToolPolicySummary(policy)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">ROI 摘要</p>
+              {Object.keys(roi).length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  暂无 ROI 摘要。
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <MiniStat label="Total" value={tokenTotal} />
+                  <MiniStat
+                    label="Input"
+                    value={getNumberValue(providerUsage, "input_tokens")}
+                  />
+                  <MiniStat
+                    label="Output"
+                    value={getNumberValue(providerUsage, "output_tokens")}
+                  />
+                  <MiniStat
+                    label="Hidden tools"
+                    value={getNumberValue(roi, "hidden_tool_count")}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2 rounded-md border p-2">
+              <button
+                className="hover:bg-muted/60 flex w-full items-center gap-2 rounded px-1 py-1 text-left text-xs font-medium"
+                type="button"
+                onClick={() => setExpandedRawSession((value) => !value)}
+              >
+                {expandedRawSession ? (
+                  <ChevronDownIcon className="h-3 w-3" />
+                ) : (
+                  <ChevronRightIcon className="h-3 w-3" />
+                )}
+                原始 Session
+              </button>
+              {expandedRawSession && (
+                <pre className="text-muted-foreground max-h-44 overflow-auto font-mono text-[11px] leading-4 whitespace-pre-wrap">
+                  {formatJsonPreview({
+                    tool_policy: session.tool_policy,
+                    change_summary: session.change_summary,
+                    roi: session.roi,
+                  })}
+                </pre>
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+      )}
+    </InspectorSection>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-muted/40 rounded px-2 py-1.5">
+      <p className="text-muted-foreground text-[10px]">{label}</p>
+      <p className="mt-0.5 font-mono text-xs font-semibold">
+        {formatNumber(value)}
+      </p>
+    </div>
+  );
+}
+
+function CodingRoiInspector({ threadId }: { threadId: string }) {
+  const { summary, isLoading, isFetching, error, refetch } =
+    useCodingRoiSummary(threadId);
+  const { reports } = useCodingRoiReports(threadId);
+  const [expandedReport, setExpandedReport] = useState<number | null>(null);
+
+  return (
+    <InspectorSection
+      title="ROI"
+      meta={summary ? `${summary.report_count} 次报告` : undefined}
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+    >
+      {isLoading ? (
+        <InspectorSkeleton rows={4} />
+      ) : error ? (
+        <InspectorError message={getErrorMessage(error)} />
+      ) : !summary || summary.report_count === 0 ? (
+        <InspectorEmpty
+          title="暂无 ROI 数据"
+          description="Agent 完成 ROI 记录后会显示 token、工具目录和压缩收益。"
+        />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 p-3">
+            {/* Trend sparkline */}
+            {reports.length > 1 && (
+              <RoiTrendSparkline reports={reports} />
+            )}
+            <MetricGrid
+              items={[
+                ["Total tokens", summary.provider_usage.total_tokens ?? 0, "累计令牌消耗"],
+                ["Input", summary.provider_usage.input_tokens ?? 0, "提示词输入令牌"],
+                ["Output", summary.provider_usage.output_tokens ?? 0, "模型输出令牌"],
+                ["Hidden tools", summary.latest?.hidden_tool_count ?? 0, "隐蔽工具数量"],
+                ["Externalized", summary.tool_output.externalized_count ?? 0, "外部化输出次数"],
+                [
+                  "Saved chars",
+                  summary.token_economy.compressed_chars_saved ?? 0,
+                  "压缩节省字符数",
+                ],
+              ]}
+            />
+            {/* Report history */}
+            {reports.length > 0 && (
+              <div className="space-y-1 rounded-md border p-2">
+                <p className="text-xs font-medium">报告历史</p>
+                {reports.slice().reverse().slice(0, 8).map((report) => (
+                  <div key={report.seq} className="space-y-0.5">
+                    <button
+                      className="hover:bg-muted/60 flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs"
+                      type="button"
+                      onClick={() =>
+                        setExpandedReport(
+                          expandedReport === report.seq ? null : report.seq,
+                        )
+                      }
+                    >
+                      {expandedReport === report.seq ? (
+                        <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                      ) : (
+                        <ChevronRightIcon className="h-3 w-3 shrink-0" />
+                      )}
+                      <span className="font-mono text-[10px]">#{report.seq}</span>
+                      <span className="text-muted-foreground">
+                        {formatCompactDate(report.created_at)}
+                      </span>
+                      <span className="text-muted-foreground ml-auto text-[10px]">
+                        T:{report.provider_usage?.total_tokens ?? "-"}
+                      </span>
+                    </button>
+                    {expandedReport === report.seq && (
+                      <div className="bg-muted/40 ml-3 rounded-md p-1.5">
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
+                          <span className="text-muted-foreground">全量工具</span>
+                          <span className="font-mono">{report.full_tool_count}</span>
+                          <span className="text-muted-foreground">可见工具</span>
+                          <span className="font-mono">{report.visible_tool_count}</span>
+                          <span className="text-muted-foreground">隐蔽工具</span>
+                          <span className="font-mono">{report.hidden_tool_count}</span>
+                          <span className="text-muted-foreground">外部化</span>
+                          <span className="font-mono">{report.tool_output?.externalized_count ?? 0}</span>
+                          <span className="text-muted-foreground">压缩节省</span>
+                          <span className="font-mono">{report.token_economy?.compressed_chars_saved ?? 0}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {summary.latest && (
+              <div className="space-y-2 rounded-md border p-2">
+                <p className="text-xs font-medium">最新指纹</p>
+                <Fingerprint
+                  label="Stable"
+                  value={summary.latest.stable_prompt_fingerprint}
+                />
+                <Fingerprint
+                  label="Tools"
+                  value={summary.latest.tool_catalog_fingerprint}
+                />
+                <Fingerprint
+                  label="Prefix"
+                  value={summary.latest.immutable_prefix_fingerprint}
+                />
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      )}
+    </InspectorSection>
+  );
+}
+
+function RoiTrendSparkline({ reports }: { reports: QiongqiRoiReport[] }) {
+  const sorted = reports.slice().sort((a, b) => a.seq - b.seq);
+  const maxTokens = Math.max(...sorted.map((r) => r.provider_usage?.input_tokens ?? 0), 1);
+  const barWidth = Math.max(4, Math.min(14, 100 / sorted.length - 2));
+
+  return (
+    <div className="rounded-md border p-2">
+      <p className="text-muted-foreground mb-1.5 text-[10px]">
+        Input tokens 趋势（#{sorted[0]?.seq} → #{sorted[sorted.length - 1]?.seq}）
+      </p>
+      <div className="flex items-end gap-px" style={{ height: 40 }}>
+        {sorted.map((report) => {
+          const height = ((report.provider_usage?.input_tokens ?? 0) / maxTokens) * 36;
+          return (
+            <div
+              key={report.seq}
+              className="bg-emerald-500/60 hover:bg-emerald-500/90 flex-1 rounded-t-sm transition-colors"
+              style={{ height: Math.max(2, height) }}
+              title={`#${report.seq}: ${report.provider_usage?.input_tokens ?? 0} input tokens`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const SKILL_CATEGORIES = [
+  {
+    id: "delivery",
+    label: "项目交付",
+    ids: [
+      "project-delivery-workflow",
+      "requirements-analysis",
+      "product-spec",
+      "acceptance-criteria",
+      "technical-design",
+      "project-scaffolding",
+      "environment-setup",
+      "handoff-docs",
+    ],
+  },
+  {
+    id: "core",
+    label: "核心工程",
+    ids: [
+      "using-superpowers",
+      "planning",
+      "task-decomposition",
+      "codebase-analysis",
+      "context-management",
+      "implement",
+      "patch-authoring",
+      "rollback-recovery",
+    ],
+  },
+  {
+    id: "qiongqi",
+    label: "Qiongqi",
+    ids: [
+      "agent-memory-isolation",
+      "scratch-workspace",
+      "qiongqi-roi",
+      "diff-analysis",
+      "pr-review-advanced",
+    ],
+  },
+  {
+    id: "frontend",
+    label: "前端",
+    ids: [
+      "frontend-engineering",
+      "react-nextjs",
+      "ui-polish",
+      "web-accessibility",
+      "webapp-testing",
+      "playwright-verification",
+      "state-management",
+      "typescript",
+    ],
+  },
+  {
+    id: "backend",
+    label: "后端",
+    ids: [
+      "fastapi-backend",
+      "api-design",
+      "database",
+      "migration",
+      "error-handling",
+      "observability",
+      "build-system",
+    ],
+  },
+  {
+    id: "quality",
+    label: "质量审查",
+    ids: [
+      "debug",
+      "systematic-debugging",
+      "test-driven-development",
+      "test-writer",
+      "qa-test-plan",
+      "code-review",
+      "security-review",
+      "security-hardening",
+      "performance",
+      "verification-before-completion",
+    ],
+  },
+  {
+    id: "release",
+    label: "发布运维",
+    ids: [
+      "ci-cd",
+      "dependency-upgrade",
+      "deployment",
+      "release-engineering",
+      "operations-runbook",
+      "docs",
+      "workflow-automation",
+      "using-git-worktrees",
+      "subagent-orchestration",
+      "skill-authoring",
+    ],
+  },
+] as const;
+
+const PROJECT_DELIVERY_STAGES = [
+  {
+    title: "需求",
+    goal: "明确用户、目标、范围和验收标准。",
+    nextPrompt: "请基于当前项目目标进行需求分析，输出用户角色、核心场景、非目标和验收标准。",
+    skills: ["requirements-analysis", "product-spec", "acceptance-criteria"],
+  },
+  {
+    title: "设计",
+    goal: "确定架构、模块边界、数据模型和 API 合约。",
+    nextPrompt: "请基于已确认需求制定技术设计，包含架构边界、数据模型、API 合约、风险和验证计划。",
+    skills: ["technical-design", "architecture", "api-design", "database"],
+  },
+  {
+    title: "初始化",
+    goal: "建立可运行、可测试、可构建的项目骨架。",
+    nextPrompt: "请初始化项目工程结构，补齐环境配置、构建脚本、测试入口和 CI 基础命令。",
+    skills: ["project-scaffolding", "environment-setup", "build-system", "ci-cd"],
+  },
+  {
+    title: "实现",
+    goal: "按垂直切片交付可验证功能。",
+    nextPrompt: "请按垂直切片实现下一组核心功能，保持小 diff，并补充必要测试。",
+    skills: ["vertical-slice-development", "implement", "test-driven-development"],
+  },
+  {
+    title: "验证",
+    goal: "用自动化测试和浏览器验证确认功能可用。",
+    nextPrompt: "请制定并执行当前功能的 QA 验证，覆盖自动化测试、浏览器交互、错误状态和回归风险。",
+    skills: ["qa-test-plan", "webapp-testing", "playwright-verification"],
+  },
+  {
+    title: "审查",
+    goal: "审查 diff、PR 风险、安全风险和可维护性。",
+    nextPrompt: "请对当前项目 diff 和任务变更执行代码审查，输出阻塞问题、建议修复和合并风险。",
+    skills: ["diff-analysis", "code-review", "security-review", "pr-review-advanced"],
+  },
+  {
+    title: "交付",
+    goal: "准备发布、部署、运维和交接材料。",
+    nextPrompt: "请准备项目交付材料，包含部署步骤、发布检查、运维 runbook、回滚方案和交接文档。",
+    skills: ["deployment", "release-engineering", "operations-runbook", "handoff-docs"],
+  },
+] as const;
+
+function CodingWorkflowInspector({
+  projectRoot,
+  threadId,
+}: {
+  projectRoot: string;
+  threadId: string;
+}) {
+  const { skills, isLoading, isFetching, error, refetch } =
+    useCodingSkills(projectRoot);
+  const { session } = useCodingSession(threadId);
+  const { review } = useLatestCodingReview(threadId);
+  const { summary: roiSummary } = useCodingRoiSummary(threadId);
+  const skillsById = useMemo(() => {
+    const map = new Map<string, CodingSkill>();
+    for (const skill of skills) map.set(skill.id, skill);
+    return map;
+  }, [skills]);
+  const workflowSignals = useMemo(
+    () => ({
+      hasSession: Boolean(session),
+      hasChanges:
+        getNumberValue(session?.change_summary ?? {}, "changed_files") > 0 ||
+        getNumberValue(session?.change_summary ?? {}, "additions") > 0 ||
+        getNumberValue(session?.change_summary ?? {}, "deletions") > 0,
+      hasReview: Boolean(review),
+      hasBlockingReview:
+        (review?.summary.critical ?? 0) > 0 || (review?.summary.major ?? 0) > 0,
+      hasRoi: Boolean(roiSummary && roiSummary.report_count > 0),
+    }),
+    [roiSummary, review, session],
+  );
+
+  return (
+    <InspectorSection
+      title="Workflow"
+      meta="项目交付流程"
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+    >
+      {isLoading ? (
+        <InspectorSkeleton rows={5} />
+      ) : error ? (
+        <InspectorError message={getErrorMessage(error)} />
+      ) : skills.length === 0 ? (
+        <InspectorEmpty
+          title="暂无 Workflow 数据"
+          description="内置项目交付技能加载后会在这里展示阶段流程。"
+        />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 p-3">
+            <div className="rounded-md border p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold">项目交付流程</p>
+                  <p className="text-muted-foreground mt-0.5 truncate text-[10px]">
+                    从需求到交付的内置技能编排
+                  </p>
+                </div>
+                {skillsById.get("project-delivery-workflow") && (
+                  <Badge variant="secondary" className="rounded px-1.5 text-[10px]">
+                    workflow
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-2 grid gap-1.5">
+                {PROJECT_DELIVERY_STAGES.map((stage, index) => (
+                  <WorkflowStageCard
+                    key={stage.title}
+                    goal={stage.goal}
+                    index={index + 1}
+                    nextPrompt={stage.nextPrompt}
+                    status={getWorkflowStageStatus(stage.title, workflowSignals)}
+                    skills={stage.skills}
+                    skillsById={skillsById}
+                    title={stage.title}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </ScrollArea>
+      )}
+    </InspectorSection>
+  );
+}
+
+function CodingSkillsInspector({ projectRoot }: { projectRoot: string }) {
+  const { skills, isLoading, isFetching, error, refetch } =
+    useCodingSkills(projectRoot);
+  const setSkillEnabled = useSetCodingSkillEnabled(projectRoot);
+  const pendingSkillId = setSkillEnabled.variables?.skillId ?? null;
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [skillSearch, setSkillSearch] = useState("");
+
+  const filteredSkills = useMemo(() => {
+    const query = skillSearch.trim().toLowerCase();
+    const category = SKILL_CATEGORIES.find((item) => item.id === activeCategory);
+    const categoryIds = category ? new Set<string>(category.ids) : null;
+    return skills.filter((skill) => {
+      if (categoryIds && !categoryIds.has(skill.id)) return false;
+      if (!query) return true;
+      return (
+        skill.id.toLowerCase().includes(query) ||
+        skill.name.toLowerCase().includes(query) ||
+        skill.description.toLowerCase().includes(query)
+      );
+    });
+  }, [activeCategory, skillSearch, skills]);
+
+  return (
+    <InspectorSection
+      title="Skills"
+      meta={`内置技能 · ${skills.length} 个`}
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+    >
+      {isLoading ? (
+        <InspectorSkeleton rows={5} />
+      ) : error ? (
+        <InspectorError message={getErrorMessage(error)} />
+      ) : skills.length === 0 ? (
+        <InspectorEmpty
+          title="暂无 Coding Skills"
+          description="内置 Coding skills 会显示在这里，和通用任务技能隔离。"
+        />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 p-3">
+            {setSkillEnabled.error && (
+              <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-2 py-1.5 text-xs">
+                {getErrorMessage(setSkillEnabled.error)}
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="relative">
+                <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2 top-[50%] h-3.5 w-3.5 -translate-y-1/2" />
+                <input
+                  className="border-input bg-background h-8 w-full rounded-md border pr-2 pl-7 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                  placeholder="搜索技能..."
+                  type="search"
+                  value={skillSearch}
+                  onChange={(event) => setSkillSearch(event.target.value)}
+                />
+              </div>
+              <SkillCategoryFilter
+                activeCategory={activeCategory}
+                skills={skills}
+                onSelectCategory={setActiveCategory}
+              />
+            </div>
+
+            <div className="space-y-2">
+              {filteredSkills.length === 0 ? (
+                <InspectorEmpty
+                  title="没有匹配的技能"
+                  description="调整搜索关键词或切换分类。"
+                />
+              ) : (
+                filteredSkills.map((skill) => (
+                  <SkillCard
+                    key={`${skill.scope}-${skill.id}`}
+                    pending={pendingSkillId === skill.id}
+                    skill={skill}
+                    onToggle={(enabled) =>
+                      setSkillEnabled.mutate({
+                        skillId: skill.id,
+                        request: {
+                          project_root: projectRoot,
+                          scope: skill.scope,
+                          enabled,
+                        },
+                      })
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+      )}
+    </InspectorSection>
+  );
+}
+
+function WorkflowStageCard({
+  goal,
+  index,
+  nextPrompt,
+  skills,
+  skillsById,
+  status,
+  title,
+}: {
+  goal: string;
+  index: number;
+  nextPrompt: string;
+  skills: readonly string[];
+  skillsById: Map<string, CodingSkill>;
+  status: "pending" | "active" | "ready" | "blocked";
+  title: string;
+}) {
+  const available = skills.filter((id) => skillsById.has(id));
+  const enabled = available.filter((id) => skillsById.get(id)?.enabled).length;
+
+  return (
+    <div className="bg-muted/30 rounded-md border px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <span className="bg-background text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded border font-mono text-[10px]">
+          {index}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+        <Badge
+          variant={status === "ready" ? "secondary" : "outline"}
+          className={cn(
+            "rounded px-1.5 text-[10px]",
+            status === "active" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+            status === "blocked" && "border-orange-500/40 text-orange-600 dark:text-orange-400",
+          )}
+        >
+          {formatWorkflowStageStatus(status)}
+        </Badge>
+        <span className="text-muted-foreground font-mono text-[10px]">
+          {enabled}/{available.length}
+        </span>
+      </div>
+      <p className="text-muted-foreground mt-1.5 text-[11px] leading-4">
+        {goal}
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {skills.map((id) => {
+          const skill = skillsById.get(id);
+          return (
+            <Badge
+              key={id}
+              variant={skill?.enabled ? "secondary" : "outline"}
+              className={cn(
+                "rounded px-1.5 text-[10px]",
+                !skill && "text-muted-foreground opacity-50",
+              )}
+            >
+              {skill?.name ?? id}
+            </Badge>
+          );
+        })}
+      </div>
+      <button
+        className="text-muted-foreground hover:bg-muted hover:text-foreground mt-2 h-6 rounded border px-2 text-[10px] transition-colors"
+        type="button"
+        onClick={() => void copyWorkflowPrompt(nextPrompt)}
+      >
+        复制提示词
+      </button>
+    </div>
+  );
+}
+
+async function copyWorkflowPrompt(nextPrompt: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(nextPrompt);
+  } catch {
+    // Clipboard can be unavailable in some desktop/webview contexts.
+  }
+}
+
+function getWorkflowStageStatus(
+  title: string,
+  workflowSignals: {
+    hasSession: boolean;
+    hasChanges: boolean;
+    hasReview: boolean;
+    hasBlockingReview: boolean;
+    hasRoi: boolean;
+  },
+): "pending" | "active" | "ready" | "blocked" {
+  if (title === "需求" || title === "设计" || title === "初始化") {
+    return workflowSignals.hasSession ? "ready" : "pending";
+  }
+  if (title === "实现") {
+    if (workflowSignals.hasChanges) return "ready";
+    return workflowSignals.hasSession ? "active" : "pending";
+  }
+  if (title === "验证") {
+    if (workflowSignals.hasRoi) return "ready";
+    return workflowSignals.hasChanges ? "active" : "pending";
+  }
+  if (title === "审查") {
+    if (workflowSignals.hasBlockingReview) return "blocked";
+    if (workflowSignals.hasReview) return "ready";
+    return workflowSignals.hasChanges ? "active" : "pending";
+  }
+  if (title === "交付") {
+    if (workflowSignals.hasReview && !workflowSignals.hasBlockingReview) return "active";
+    return "pending";
+  }
+  return "pending";
+}
+
+function formatWorkflowStageStatus(status: "pending" | "active" | "ready" | "blocked") {
+  if (status === "ready") return "完成";
+  if (status === "active") return "进行中";
+  if (status === "blocked") return "阻塞";
+  return "待开始";
+}
+
+function SkillCategoryFilter({
+  activeCategory,
+  onSelectCategory,
+  skills,
+}: {
+  activeCategory: string;
+  skills: CodingSkill[];
+  onSelectCategory: (category: string) => void;
+}) {
+  const skillIds = useMemo(() => new Set(skills.map((skill) => skill.id)), [skills]);
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      <button
+        className={cn(
+          "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
+          activeCategory === "all"
+            ? "bg-primary text-primary-foreground"
+            : "hover:bg-muted text-muted-foreground hover:text-foreground",
+        )}
+        type="button"
+        onClick={() => onSelectCategory("all")}
+      >
+        全部分类
+      </button>
+      {SKILL_CATEGORIES.map((category) => {
+        const count = category.ids.filter((id) => skillIds.has(id)).length;
+        return (
+          <button
+            key={category.id}
+            className={cn(
+              "rounded-md border px-2 py-1 text-[10px] font-medium transition-colors",
+              activeCategory === category.id
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted text-muted-foreground hover:text-foreground",
+            )}
+            type="button"
+            onClick={() => onSelectCategory(category.id)}
+          >
+            {category.label} {count}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SkillCard({
+  onToggle,
+  pending,
+  skill,
+}: {
+  pending: boolean;
+  skill: CodingSkill;
+  onToggle: (enabled: boolean) => void;
+}) {
+  const category = SKILL_CATEGORIES.find((item) =>
+    (item.ids as readonly string[]).includes(skill.id),
+  );
+
+  return (
+    <div className="bg-background w-full rounded-md border p-2.5 text-left">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{skill.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <Badge
+              variant={skill.enabled ? "secondary" : "outline"}
+              className="rounded px-1.5 text-[10px]"
+            >
+              {skill.scope === "global" ? "内置技能" : skill.scope}
+            </Badge>
+            {category && (
+              <Badge variant="outline" className="rounded px-1.5 text-[10px]">
+                {category.label}
+              </Badge>
+            )}
+            {!skill.enabled && (
+              <Badge variant="outline" className="rounded px-1.5 text-[10px]">
+                disabled
+              </Badge>
+            )}
+          </div>
+        </div>
+        <Switch
+          aria-label={`${skill.enabled ? "禁用" : "启用"} ${skill.name}`}
+          checked={skill.enabled}
+          disabled={pending}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onCheckedChange={onToggle}
+        />
+      </div>
+      <p className="text-muted-foreground mt-2 line-clamp-3 text-xs leading-5">
+        {skill.description || skill.id}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {skill.activation_keywords.slice(0, 4).map((keyword) => (
+          <Badge
+            key={keyword}
+            variant="outline"
+            className="rounded px-1.5 text-[10px]"
+          >
+            {keyword}
+          </Badge>
+        ))}
+        {skill.activation_keywords.length > 4 && (
+          <Badge
+            variant="outline"
+            className="text-muted-foreground rounded px-1.5 text-[10px]"
+          >
+            +{skill.activation_keywords.length - 4}
+          </Badge>
+        )}
+        {skill.manifest_errors.length > 0 && (
+          <Badge variant="destructive" className="rounded px-1.5 text-[10px]">
+            manifest
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InspectorSection({
+  action,
+  children,
+  isFetching,
+  meta,
+  onRefresh,
+  title,
+}: {
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  isFetching: boolean;
+  meta?: string;
+  onRefresh: () => void;
+  title: string;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">{title}</p>
+          {meta && <p className="text-muted-foreground text-[11px]">{meta}</p>}
+        </div>
+        {action}
+        <Button
+          className="size-7"
+          disabled={isFetching}
+          size="icon"
+          title="刷新"
+          type="button"
+          variant="ghost"
+          onClick={onRefresh}
+        >
+          <RefreshCwIcon
+            className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
+          />
+        </Button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InspectorSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="space-y-2 p-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <Skeleton key={index} className="h-16 w-full" />
+      ))}
+    </div>
+  );
+}
+
+function InspectorError({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
+      <p className="text-destructive text-xs">{message}</p>
+    </div>
+  );
+}
+
+function InspectorEmpty({
+  description,
+  title,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-5 text-center">
+      <div className="bg-muted/60 flex h-10 w-10 items-center justify-center rounded-md">
+        <ActivityIcon className="text-muted-foreground h-5 w-5" />
+      </div>
+      <p className="text-sm font-medium">{title}</p>
+      <p className="text-muted-foreground max-w-56 text-xs leading-5">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function MetricGrid({ items }: { items: Array<[string, number] | [string, number, string]> }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {items.map((item) => {
+        const [label, value, tip] = item;
+        return (
+          <div key={label} className="rounded-md border p-2" title={tip}>
+            <p className="text-muted-foreground text-[11px]">{label}</p>
+            <p className="mt-1 font-mono text-sm font-semibold">
+              {formatNumber(value)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Fingerprint({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2 text-[11px]">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate font-mono">{value}</span>
+    </div>
+  );
+}
+
+function KeyValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-2 text-[11px]">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="truncate font-mono" title={value}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "加载失败";
+}
+
+function formatEventType(eventType: string): string {
+  return eventType.replaceAll("_", " ");
+}
+
+function getEventFocusTarget(
+  event: QiongqiEvent,
+): { path: string; target: "code" | "task-changes" | "diff"; taskId?: string } | null {
+  const path =
+    typeof event.payload.path === "string"
+      ? event.payload.path
+      : Array.isArray(event.payload.paths) &&
+          typeof event.payload.paths[0] === "string"
+        ? event.payload.paths[0]
+        : null;
+  if (!path) return null;
+  const taskId = typeof event.payload.task_id === "string" ? event.payload.task_id : undefined;
+  return {
+    path,
+    target:
+      event.event_type === "file_changed" ||
+      event.event_type === "diff_summarized"
+        ? "task-changes"
+        : "code",
+    taskId,
+  };
+}
+
+function formatJsonPreview(value: Record<string, unknown>): string {
+  if (Object.keys(value).length === 0) return "{}";
+  return JSON.stringify(value, null, 2);
+}
+
+function getNumberValue(value: Record<string, unknown>, key: string): number {
+  const raw = value[key];
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+function getRecordValue(value: Record<string, unknown>, key: string): Record<string, unknown> {
+  const raw = value[key];
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+function getCurrentTaskLabel(
+  changeSummary: Record<string, unknown> | undefined,
+): string {
+  if (!changeSummary || Object.keys(changeSummary).length === 0) {
+    return "暂无当前任务摘要。Agent 产生任务变更后会在这里显示。";
+  }
+  const taskId = changeSummary.task_id;
+  const title = changeSummary.title ?? changeSummary.task ?? changeSummary.summary;
+  if (typeof taskId === "string" && typeof title === "string") {
+    return `${taskId}: ${title}`;
+  }
+  if (typeof title === "string") return title;
+  if (typeof taskId === "string") return taskId;
+  return "已有变更摘要，但未记录明确任务标题。";
+}
+
+function formatInspectorValue(value: unknown): string {
+  if (value == null) return "-";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) return `${value.length} 项`;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function formatToolPolicySummary(policy: Record<string, unknown>): string {
+  const tools = Array.isArray(policy.allowed_tools)
+    ? policy.allowed_tools.map(String)
+    : [];
+  const permissions =
+    policy.permissions && typeof policy.permissions === "object"
+      ? Object.keys(policy.permissions as Record<string, unknown>)
+      : [];
+  if (tools.length > 0 && permissions.length > 0) {
+    return `${tools.slice(0, 4).join(", ")} · ${permissions.join(", ")}`;
+  }
+  if (tools.length > 0) return tools.slice(0, 5).join(", ");
+  if (permissions.length > 0) return permissions.join(", ");
+  return "未声明工具限制";
+}
+
+function formatCompactDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}

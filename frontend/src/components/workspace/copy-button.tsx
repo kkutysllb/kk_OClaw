@@ -8,9 +8,11 @@ import { Tooltip } from "./tooltip";
 
 export function CopyButton({
   clipboardData,
+  tooltip,
   ...props
 }: ComponentProps<typeof Button> & {
   clipboardData: string;
+  tooltip?: string;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -20,7 +22,7 @@ export function CopyButton({
     setTimeout(() => setCopied(false), 2000);
   }, [clipboardData]);
   return (
-    <Tooltip content={t.clipboard.copyToClipboard}>
+    <Tooltip content={tooltip ?? t.clipboard.copyToClipboard}>
       <Button
         size="icon-sm"
         type="button"

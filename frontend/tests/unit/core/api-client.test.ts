@@ -23,6 +23,11 @@ function setDesktopMode(enabled: boolean) {
   }
 }
 
+function setDesktopModeWithFrontendPort(frontendPort: number) {
+  const w = window as unknown as Record<string, unknown>;
+  w.oclawDesktop = { gatewayPort: 19987, frontendPort };
+}
+
 function stubLocationPort(port: string) {
   Object.defineProperty(window, "location", {
     value: {
@@ -55,5 +60,20 @@ describe("LangGraph API client request hook", () => {
 
     const headers = new Headers(init.headers);
     expect(headers.get("Authorization")).toBe("Bearer desktop-token");
+  });
+
+  test("uses csrf cookie and no bearer token in desktop dev mode with dynamic frontend port", () => {
+    setDesktopModeWithFrontendPort(3000);
+    stubLocationPort("3000");
+    document.cookie = "csrf_token=csrf-dev-token";
+
+    const init = prepareLangGraphRequest(
+      new URL("http://localhost:3000/api/threads/search"),
+      { method: "POST" },
+    );
+
+    const headers = new Headers(init.headers);
+    expect(headers.get("Authorization")).toBeNull();
+    expect(headers.get("X-CSRF-Token")).toBe("csrf-dev-token");
   });
 });

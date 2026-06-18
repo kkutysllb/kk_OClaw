@@ -29,6 +29,9 @@ extraResources:
   - from: ../frontend/out
     to: frontend-out
     filter: ["**/*"]
+  - from: build/icons
+    to: icons
+    filter: ["16x16.png", "32x32.png"]
 
 # ── macOS ─────────────────────────────────────────────────────────────────
 mac:

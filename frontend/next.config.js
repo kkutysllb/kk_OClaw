@@ -32,10 +32,13 @@ const config = {
     ? {
         output: "export",
         images: { unoptimized: true },
-        // Use relative asset paths so Electron's loadFile (file:// protocol)
-        // can resolve _next/static/... correctly. Absolute paths (/_next/...)
-        // would resolve to the filesystem root and cause a blank screen.
-        assetPrefix: "./",
+        // Electron serves the static export via the app://- custom scheme.
+        // Absolute paths resolve against the scheme root, so we MUST NOT use
+        // "./" (relative) here because
+        // webpack would resolve chunk URLs relative to window.location,
+        // breaking all sub-route pages (e.g. /workspace/coding/xxx would
+        // request /workspace/coding/_next/... instead of /_next/...,
+        // causing chunk 404 → global-error).
       }
     : {
         i18n: {

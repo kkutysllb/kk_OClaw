@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from kkoclaw.config.acp_config import ACPAgentConfig, load_acp_config_from_dict
 from kkoclaw.config.agents_api_config import AgentsApiConfig, load_agents_api_config_from_dict
 from kkoclaw.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
+from kkoclaw.config.coding_agent_config import CodingAgentConfig
 from kkoclaw.config.database_config import DatabaseConfig
 from kkoclaw.config.extensions_config import ExtensionsConfig
 from kkoclaw.config.guardrails_config import GuardrailsConfig, load_guardrails_config_from_dict
@@ -101,6 +102,7 @@ class AppConfig(BaseModel):
     summarization: SummarizationConfig = Field(default_factory=SummarizationConfig, description="Conversation summarization configuration")
     memory: MemoryConfig = Field(default_factory=MemoryConfig, description="Memory subsystem configuration")
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
+    coding_agent: CodingAgentConfig = Field(default_factory=CodingAgentConfig, description="Dedicated Coding Agent graph configuration")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")

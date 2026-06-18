@@ -31,7 +31,7 @@
   - **启动恢复**：`deps.py` 新增 `_mark_latest_recovered_threads_error`，Gateway 重启后自动恢复孤立运行并标记线程状态
 
 ## 计划功能
-
+- [ ] Workflow 真正一键驱动 agent、复杂进度计算、更多浏览器截图验证，可以放到后续版本迭代
 - [ ] 池化 sandbox 资源以减少 sandbox 容器数量
 - [ ] 添加认证/授权层
 - [ ] 实现速率限制

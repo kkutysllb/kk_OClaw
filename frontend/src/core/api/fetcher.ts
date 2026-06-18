@@ -1,6 +1,6 @@
 import { buildLoginUrl } from "@/core/auth/types";
 import { getDesktopSessionToken } from "@/core/auth/session";
-import { isDesktop } from "@/core/config";
+import { isDesktop, isDesktopBackendManagedMode } from "@/core/config";
 
 /** HTTP methods that the gateway's CSRFMiddleware checks. */
 export type StateChangingMethod = "POST" | "PUT" | "DELETE" | "PATCH";
@@ -76,7 +76,7 @@ export async function fetch(
     }
   }
 
-  const desktopToken = isDesktop() && typeof window !== "undefined" && window.location.port !== "18659"
+  const desktopToken = isDesktopBackendManagedMode()
     ? getDesktopSessionToken()
     : null;
   const mergedHeaders = new Headers(headers);
@@ -88,7 +88,7 @@ export async function fetch(
   if (typeof url === "string" && url.includes("/api/")) {
     console.log(
       `[DIAG:fetcher] ${init?.method ?? "GET"} ${url}`,
-      `isDesktop=${isDesktop()} port=${typeof window !== "undefined" ? window.location.port : "<ssr>"}`,
+      `isDesktop=${isDesktop()} desktopManaged=${isDesktopBackendManagedMode()} port=${typeof window !== "undefined" ? window.location.port : "<ssr>"}`,
       `tokenPresent=${!!desktopToken} authzHeader=${!!mergedHeaders.get("Authorization")}`,
     );
   }
@@ -100,7 +100,7 @@ export async function fetch(
     // In desktop dev mode, cookies ARE needed for auth (proxied via Next.js).
     ...(desktopToken
       ? {}
-      : isDesktop() && typeof window !== "undefined" && window.location.port !== "18659"
+      : isDesktopBackendManagedMode()
         ? {}
         : { credentials: "include" as RequestCredentials }),
   });

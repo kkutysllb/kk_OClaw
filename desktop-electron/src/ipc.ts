@@ -7,11 +7,16 @@
  * frontend's desktop abstraction layer stays unchanged.
  */
 
-import { app, dialog, ipcMain, shell, type BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 
 import { BackendManager, resolveGatewayPort, type BackendStatus } from "./backend.js";
+import {
+  readSkillModelsEnv,
+  writeSkillModelsEnv,
+  type SkillModelsConfig,
+} from "./skill-models-env.js";
 import { isAllowedExternalUrl } from "./url-policy.js";
 
 // ── Shared payload types (mirrors frontend `core/desktop/types.ts`) ───────
@@ -58,7 +63,7 @@ function guessMime(ext: string): string | undefined {
  * Returns the shared `BackendManager` so the main process can drive it
  * (e.g. auto-launch on `app.whenReady`, stop on `before-quit`).
  */
-export function registerIpc(getMainWindow: () => BrowserWindow | null): BackendManager {
+export function registerIpc(): BackendManager {
   const manager = new BackendManager();
 
   // ── Backend lifecycle ──────────────────────────────────────────────
@@ -83,7 +88,7 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): BackendM
   ipcMain.handle(
     "dialog:pick-files",
     async (_evt, options: FileDialogOptions = {}): Promise<PickedFile[]> => {
-      const win = getMainWindow();
+      const win = BrowserWindow.fromWebContents(_evt.sender);
       const dialogOpts: Electron.OpenDialogOptions = {
         title: options.title ?? "Select file",
         filters: options.filters,
@@ -117,6 +122,46 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): BackendM
     }
     await shell.openExternal(url);
   });
+
+  // ── Open local folder in system file manager (Finder / Explorer) ───
+  ipcMain.handle("shell:open-folder", async (_evt, folderPath: string) => {
+    await shell.openPath(folderPath);
+  });
+
+  // ── Native directory picker (for Code Mode project selection) ───────
+  ipcMain.handle(
+    "dialog:pick-directory",
+    async (_evt, options: { title?: string } = {}): Promise<string | null> => {
+      const win = BrowserWindow.fromWebContents(_evt.sender);
+      const dialogOpts: Electron.OpenDialogOptions = {
+        title: options.title ?? "选择项目目录",
+        properties: ["openDirectory"],
+      };
+      const result = win
+        ? await dialog.showOpenDialog(win, dialogOpts)
+        : await dialog.showOpenDialog(dialogOpts);
+
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    },
+  );
+
+  // ── Skill model credentials (.env read/write) ───────────────────────
+  // Returns the redacted snapshot of <KKOCLAW_HOME>/.env. Secrets are masked
+  // so the renderer never receives raw API keys.
+  ipcMain.handle(
+    "skill-models:get",
+    (): SkillModelsConfig => readSkillModelsEnv(),
+  );
+
+  // Merges updates into the .env. Secret fields whose incoming value is a
+  // redaction placeholder (`***`-prefixed) are preserved verbatim so the
+  // renderer can round-trip the redacted snapshot without losing keys.
+  ipcMain.handle(
+    "skill-models:set",
+    (_evt, updates: Record<string, string>): SkillModelsConfig =>
+      writeSkillModelsEnv(updates),
+  );
 
   return manager;
 }

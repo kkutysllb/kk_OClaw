@@ -55,7 +55,8 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-let mainWindow: BrowserWindow | null = null;
+const appWindows = new Set<BrowserWindow>();
+let lastActiveWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let backend: BackendManager | null = null;
 
@@ -74,10 +75,14 @@ function isBackendAutolaunchEnabled(): boolean {
 // ── Icon resolution ──────────────────────────────────────────────────────
 
 function resolveIcon(): Electron.NativeImage | undefined {
+  // __dirname (compiled main.js) lives in desktop-electron/dist/.
+  // "../build/icon.png" resolves to desktop-electron/build/icon.png —
+  // the most reliable path that doesn't depend on REPO_ROOT.
   const candidates = [
+    join(__dirname, "..", "build", "icon.png"),
     // Packaged: icon bundled by electron-builder.
     join(process.resourcesPath, "icon.png"),
-    // Dev: project icon assets.
+    // Dev fallbacks via REPO_ROOT (now correctly = repo root).
     join(REPO_ROOT, "desktop-electron", "build", "icon.png"),
     join(REPO_ROOT, "desktop-electron", "resources", "icon.png"),
   ];
@@ -87,10 +92,34 @@ function resolveIcon(): Electron.NativeImage | undefined {
   return undefined;
 }
 
+function resolveTrayIcon(): Electron.NativeImage | undefined {
+  const candidates = [
+    join(__dirname, "..", "build", "icons", "16x16.png"),
+    join(__dirname, "..", "build", "icons", "32x32.png"),
+    join(process.resourcesPath, "icons", "16x16.png"),
+    join(process.resourcesPath, "icons", "32x32.png"),
+    join(REPO_ROOT, "desktop-electron", "build", "icons", "16x16.png"),
+    join(REPO_ROOT, "desktop-electron", "build", "icons", "32x32.png"),
+  ];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    const image = nativeImage.createFromPath(path);
+    if (process.platform === "darwin") {
+      image.setTemplateImage(true);
+    }
+    return image;
+  }
+  return undefined;
+}
+
 // ── Window ───────────────────────────────────────────────────────────────
 
-function createWindow(): BrowserWindow {
-  const options: BrowserWindowConstructorOptions = {
+interface AppWindowOptions {
+  path?: string;
+}
+
+function createAppWindow(options: AppWindowOptions = {}): BrowserWindow {
+  const windowOptions: BrowserWindowConstructorOptions = {
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -111,7 +140,9 @@ function createWindow(): BrowserWindow {
     },
   };
 
-  const win = new BrowserWindow(options);
+  const win = new BrowserWindow(windowOptions);
+  appWindows.add(win);
+  lastActiveWindow = win;
 
   // Capture renderer console output into renderer.log for debugging.
   // This is critical for tracing the desktop auth/login flow which runs
@@ -127,6 +158,17 @@ function createWindow(): BrowserWindow {
     if (!isQuitting) {
       e.preventDefault();
       win.hide();
+    }
+  });
+
+  win.on("focus", () => {
+    lastActiveWindow = win;
+  });
+
+  win.on("closed", () => {
+    appWindows.delete(win);
+    if (lastActiveWindow === win) {
+      lastActiveWindow = getMostRecentWindow();
     }
   });
 
@@ -150,19 +192,52 @@ function createWindow(): BrowserWindow {
     }
   });
 
-  void loadContent(win);
+  void loadContent(win, options.path).catch((error: unknown) => {
+    log.error(`failed to load desktop window content: ${String(error)}`);
+  });
 
   return win;
 }
 
-async function loadContent(win: BrowserWindow): Promise<void> {
+async function loadContent(win: BrowserWindow, path = "/"): Promise<void> {
   const isDev = !app.isPackaged && process.env.OCLAW_DEV_SERVER === "1";
   if (isDev) {
-    await win.loadURL(DEV_SERVER_URL);
+    const base = DEV_SERVER_URL.endsWith("/") ? DEV_SERVER_URL.slice(0, -1) : DEV_SERVER_URL;
+    await win.loadURL(`${base}${path}`);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    await win.loadURL(`${APP_ORIGIN}/`);
+    await win.loadURL(`${APP_ORIGIN}${path}`);
   }
+}
+
+function getMostRecentWindow(): BrowserWindow | null {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && !focused.isDestroyed()) return focused;
+  if (lastActiveWindow && !lastActiveWindow.isDestroyed()) return lastActiveWindow;
+  const windows = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed());
+  return windows.at(-1) ?? null;
+}
+
+function showWindow(win: BrowserWindow): void {
+  if (win.isMinimized()) {
+    win.restore();
+  }
+  win.show();
+  win.focus();
+  lastActiveWindow = win;
+}
+
+function showLastActiveWindow(): void {
+  const win = getMostRecentWindow();
+  if (win) {
+    showWindow(win);
+    return;
+  }
+  createAppWindow();
+}
+
+function createNewTaskWindow(path = "/workspace/chats/new"): BrowserWindow {
+  return createAppWindow({ path });
 }
 
 function registerFrontendProtocol(): void {
@@ -213,6 +288,27 @@ function buildAppMenu(): Menu {
   const template: Electron.MenuItemConstructorOptions[] = [
     fileMenu,
     {
+      label: "模式",
+      submenu: [
+        item({
+          label: "Code 模式",
+          accelerator: "CommandOrControl+Shift+C",
+          click: () => navigateTo("/workspace/coding"),
+        }),
+        item({ type: "separator" }),
+        item({
+          label: "聊天模式",
+          accelerator: "CommandOrControl+Shift+H",
+          click: () => navigateTo("/workspace/chats/new"),
+        }),
+        item({
+          label: "Agent 模式",
+          accelerator: "CommandOrControl+Shift+A",
+          click: () => navigateTo("/workspace/agents"),
+        }),
+      ],
+    },
+    {
       label: "编辑",
       submenu: [
         item({ role: "undo", label: "撤销" }),
@@ -241,6 +337,26 @@ function buildAppMenu(): Menu {
     {
       label: "窗口",
       submenu: [
+        item({
+          label: "新建聊天窗口",
+          accelerator: "CommandOrControl+Shift+N",
+          click: () => {
+            createNewTaskWindow("/workspace/chats/new");
+          },
+        }),
+        item({
+          label: "新建 Coding 窗口",
+          accelerator: "CommandOrControl+Shift+K",
+          click: () => {
+            createNewTaskWindow("/workspace/coding");
+          },
+        }),
+        item({ type: "separator" }),
+        item({
+          label: "显示最近窗口",
+          click: () => showLastActiveWindow(),
+        }),
+        item({ type: "separator" }),
         item({ role: "minimize", label: "最小化" }),
         item({ role: "close", label: "关闭" }),
       ],
@@ -282,7 +398,9 @@ function buildTrayMenu(status: BackendStatus): Menu {
           : "后端状态：已停止";
 
   return Menu.buildFromTemplate([
-    { label: "显示 OClaw", click: () => showMainWindow() },
+    { label: "显示 OClaw", click: () => showLastActiveWindow() },
+    { label: "新建聊天窗口", click: () => createNewTaskWindow("/workspace/chats/new") },
+    { label: "新建 Coding 窗口", click: () => createNewTaskWindow("/workspace/coding") },
     { type: "separator" },
     { label: statusLabel, enabled: false },
     {
@@ -301,23 +419,26 @@ function buildTrayMenu(status: BackendStatus): Menu {
 }
 
 function createTray(): Tray {
-  const icon = resolveIcon() ?? nativeImage.createEmpty();
+  const icon = resolveTrayIcon() ?? nativeImage.createEmpty();
   tray = new Tray(icon);
   tray.setToolTip("OClaw");
 
   // Initialize with a placeholder status, refresh on next tick.
   tray.setContextMenu(buildTrayMenu({ status: "starting", port: 0 }));
-  tray.on("click", () => showMainWindow());
+  tray.on("click", () => showLastActiveWindow());
 
   return tray;
 }
 
-function showMainWindow(): void {
-  if (!mainWindow) {
-    mainWindow = createWindow();
+/** Navigate the active window to an in-app path (e.g. /workspace/coding). */
+function navigateTo(path: string): void {
+  const win = getMostRecentWindow() ?? createAppWindow();
+  const isDev = !app.isPackaged && process.env.OCLAW_DEV_SERVER === "1";
+  if (isDev) {
+    const base = DEV_SERVER_URL.endsWith("/") ? DEV_SERVER_URL.slice(0, -1) : DEV_SERVER_URL;
+    void win.loadURL(`${base}${path}`);
   } else {
-    mainWindow.show();
-    mainWindow.focus();
+    void win.loadURL(`${APP_ORIGIN}${path}`);
   }
 }
 
@@ -331,7 +452,7 @@ function registerShortcuts(): void {
     if (win && win.isVisible()) {
       win.hide();
     } else {
-      showMainWindow();
+      showLastActiveWindow();
     }
   });
 }
@@ -348,7 +469,8 @@ function closeWindowsForQuit(): void {
     win.removeAllListeners("close");
     win.destroy();
   }
-  mainWindow = null;
+  appWindows.clear();
+  lastActiveWindow = null;
 }
 
 function quitApp(): void {
@@ -379,11 +501,11 @@ void app.whenReady().then(async () => {
   registerFrontendProtocol();
   Menu.setApplicationMenu(buildAppMenu());
 
-  mainWindow = createWindow();
+  createAppWindow();
   createTray();
 
   // Register IPC handlers (returns the shared BackendManager).
-  backend = registerIpc(() => mainWindow);
+  backend = registerIpc();
   backend.onStatusChange((status) => {
     log.info(`backend status: ${status.status} (port=${status.port}${status.error ? `, error=${status.error}` : ""})`);
     tray?.setContextMenu(buildTrayMenu(status));
@@ -405,17 +527,11 @@ void app.whenReady().then(async () => {
   log.info("OClaw desktop ready");
 });
 
-app.on("second-instance", () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-    mainWindow.show();
-    mainWindow.focus();
-  } else {
-    mainWindow = createWindow();
-  }
-});
+function handleSecondInstance(): void {
+  showLastActiveWindow();
+}
+
+app.on("second-instance", () => handleSecondInstance());
 
 // Keep the app running in the tray when all windows close. The user quits
 // explicitly via the tray menu (which sets isQuitting before app.quit()).
@@ -425,9 +541,9 @@ app.on("window-all-closed", () => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    mainWindow = createWindow();
+    createAppWindow();
   } else {
-    mainWindow?.show();
+    showLastActiveWindow();
   }
 });
 

@@ -1,36 +1,17 @@
 import "@/styles/globals.css";
 import "katex/dist/katex.min.css";
 
-import { type Metadata } from "next";
+import { type ReactNode } from "react";
 
-import { BackendSplashScreen, DesktopInit, UpdateChecker } from "@/components/desktop";
-import { ThemeProvider } from "@/components/theme-provider";
-import { I18nProvider } from "@/core/i18n/context";
-import { detectLocaleServer } from "@/core/i18n/server";
+import { DesktopProviders } from "@/components/desktop/providers";
 
-export const metadata: Metadata = {
-  title: "OClaw",
-  description: "An AI-powered agent orchestration platform for autonomous research, coding, and content creation.",
-  icons: {
-    icon: "/favicon.svg",
-  },
-};
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
-  const locale = await detectLocaleServer();
+}: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang={locale} suppressContentEditableWarning suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider attribute="class" enableSystem disableTransitionOnChange>
-          <I18nProvider initialLocale={locale}>
-            <DesktopInit />
-            <BackendSplashScreen />
-            <UpdateChecker />
-            {children}
-          </I18nProvider>
-        </ThemeProvider>
+        <DesktopProviders>{children}</DesktopProviders>
       </body>
     </html>
   );

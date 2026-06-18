@@ -1,19 +1,13 @@
-"use client";
+import { ChatProviders } from "@/components/workspace/chats/chat-providers";
 
-import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
-import { ArtifactsProvider } from "@/components/workspace/artifacts";
-import { SubtasksProvider } from "@/core/tasks/context";
+export function generateStaticParams() {
+  return [{ thread_id: "new" }];
+}
 
 export default function ChatLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <SubtasksProvider>
-      <ArtifactsProvider>
-        <PromptInputProvider>{children}</PromptInputProvider>
-      </ArtifactsProvider>
-    </SubtasksProvider>
-  );
+  return <ChatProviders>{children}</ChatProviders>;
 }

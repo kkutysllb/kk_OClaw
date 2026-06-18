@@ -93,6 +93,65 @@ def test_app_config_defaults_empty_database_to_sqlite(tmp_path, monkeypatch):
     assert config.database.sqlite_dir == ".kkoclaw/data"
 
 
+def test_app_config_loads_coding_agent_config(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.yaml"
+    extensions_path = tmp_path / "extensions_config.json"
+    _write_extensions_config(extensions_path)
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "sandbox": {"use": "kkoclaw.sandbox.local:LocalSandboxProvider"},
+                "models": [
+                    {
+                        "name": "general-model",
+                        "use": "langchain_openai:ChatOpenAI",
+                        "model": "gpt-test",
+                    },
+                    {
+                        "name": "coding-model",
+                        "use": "langchain_openai:ChatOpenAI",
+                        "model": "gpt-coding-test",
+                    },
+                ],
+                "coding_agent": {
+                    "enabled": True,
+                    "model": "coding-model",
+                    "sandbox": "local",
+                    "default_permission_mode": "safe",
+                    "worktree": {
+                        "enabled": True,
+                        "auto_create": True,
+                        "base_branch": "develop",
+                    },
+                    "git": {
+                        "auto_commit": True,
+                        "conventional_commits": False,
+                    },
+                    "test": {
+                        "auto_run": True,
+                        "frameworks": ["pytest", "vitest"],
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("KKOCLAW_EXTENSIONS_CONFIG_PATH", str(extensions_path))
+
+    config = AppConfig.from_file(str(config_path))
+
+    assert config.coding_agent.enabled is True
+    assert config.coding_agent.model == "coding-model"
+    assert config.coding_agent.default_permission_mode == "safe"
+    assert config.coding_agent.worktree.auto_create is True
+    assert config.coding_agent.worktree.base_branch == "develop"
+    assert config.coding_agent.git.auto_commit is True
+    assert config.coding_agent.git.conventional_commits is False
+    assert config.coding_agent.test.auto_run is True
+    assert config.coding_agent.test.frameworks == ["pytest", "vitest"]
+
+
 def test_get_app_config_reloads_when_file_changes(tmp_path, monkeypatch):
     config_path = tmp_path / "config.yaml"
     extensions_path = tmp_path / "extensions_config.json"

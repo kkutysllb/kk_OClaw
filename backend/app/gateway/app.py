@@ -19,18 +19,26 @@ from app.gateway.routers import (
     assistants_compat,
     auth,
     channels,
+    coding_changes,
+    coding_events,
+    coding_review,
+    coding_roi,
+    coding_sessions,
+    coding_skills,
     config as config_router,
     crons,
     feedback,
     mcp,
     memory,
     models,
+    projects,
     runs,
     skills,
     suggestions,
     thread_runs,
     threads,
     uploads,
+    workspace_task_tabs,
 )
 from kkoclaw.config import app_config as kkoclaw_app_config
 from kkoclaw.config.app_config import apply_logging_level
@@ -426,6 +434,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "name": "health",
                 "description": "Health check and system status endpoints",
             },
+            {
+                "name": "projects",
+                "description": "Manage coding-agent projects and git worktrees",
+            },
         ],
     )
 
@@ -477,11 +489,32 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
     # Skills API is mounted at /api/skills
     app.include_router(skills.router)
 
+    # Coding Skills API is mounted at /api/coding/skills
+    app.include_router(coding_skills.router)
+
+    # Qiongqi Coding session snapshot API is mounted at /api/coding/sessions/{thread_id}
+    app.include_router(coding_sessions.router)
+
+    # Qiongqi Coding session events API is mounted at /api/coding/sessions/{thread_id}/events
+    app.include_router(coding_events.router)
+
+    # Qiongqi Coding task changes API is mounted at /api/coding/sessions/{thread_id}/changes
+    app.include_router(coding_changes.router)
+
+    # Qiongqi Coding review API is mounted at /api/coding/reviews
+    app.include_router(coding_review.router)
+
+    # Qiongqi Coding ROI telemetry API is mounted at /api/coding/sessions/{thread_id}/roi
+    app.include_router(coding_roi.router)
+
     # Artifacts API is mounted at /api/threads/{thread_id}/artifacts
     app.include_router(artifacts.router)
 
     # Uploads API is mounted at /api/threads/{thread_id}/uploads
     app.include_router(uploads.router)
+
+    # Workspace task tabs API is mounted at /api/workspace/task-tabs
+    app.include_router(workspace_task_tabs.router)
 
     # Thread cleanup API is mounted at /api/threads/{thread_id}
     app.include_router(threads.router)
@@ -512,6 +545,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Stateless Runs API (stream/wait without a pre-existing thread)
     app.include_router(runs.router)
+
+    # Coding Projects & Worktrees API is mounted at /api/projects
+    app.include_router(projects.router)
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict:

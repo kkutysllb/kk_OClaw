@@ -11,6 +11,7 @@ import { BackendStatusIndicator } from "@/components/desktop";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
+import { FollowupsProvider } from "@/components/workspace/followups-context";
 import { InputBox } from "@/components/workspace/input-box";
 import {
   MessageList,
@@ -18,6 +19,7 @@ import {
   MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { notifyWorkspaceTaskRouteChanged } from "@/components/workspace/workspace-task-tabs";
 import { RefreshButton } from "@/components/workspace/refresh-button";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
@@ -76,11 +78,9 @@ export default function AgentChatPage() {
       setThreadId(createdThreadId);
       setIsNewThread(false);
       // ! Important: Never use next.js router for navigation in this case, otherwise it will cause the thread to re-mount and lose all states. Use native history API instead.
-      history.replaceState(
-        null,
-        "",
-        `/workspace/agents/${agent_name}/chats/${createdThreadId}`,
-      );
+      const nextPath = `/workspace/agents/${agent_name}/chats/${createdThreadId}`;
+      history.replaceState(null, "", nextPath);
+      notifyWorkspaceTaskRouteChanged(nextPath);
     },
     onFinish: (state) => {
       if (document.hidden || !document.hasFocus()) {
@@ -118,6 +118,7 @@ export default function AgentChatPage() {
 
   return (
     <ThreadContext.Provider value={{ thread }}>
+      <FollowupsProvider>
       <ChatBox threadId={threadId}>
         <div className="relative flex size-full min-h-0 justify-between">
           <header
@@ -169,7 +170,6 @@ export default function AgentChatPage() {
                 threadId={threadId}
                 thread={thread}
                 paddingBottom={messageListPaddingBottom}
-                tokenUsageEnabled={tokenUsageEnabled}
                 hasMoreHistory={hasMoreHistory}
                 loadMoreHistory={loadMoreHistory}
                 isHistoryLoading={isHistoryLoading}
@@ -233,6 +233,7 @@ export default function AgentChatPage() {
           </main>
         </div>
       </ChatBox>
+      </FollowupsProvider>
     </ThreadContext.Provider>
   );
 }

@@ -41,6 +41,7 @@ ALLOWED_SECTIONS: set[str] = {
     "skills",
     "tool_search",
     "agents_api",
+    "coding_agent",
     "skill_evolution",
     "channels",
     "guardrails",

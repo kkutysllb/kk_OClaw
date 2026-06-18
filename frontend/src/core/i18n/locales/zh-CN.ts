@@ -178,6 +178,7 @@ export const zhCN: Translations = {
     mcp: "MCP 管理",
     crons: "定时任务",
     tokenUsage: "Token 用量",
+    coding: "Coding",
   },
 
   // Toolbar
@@ -481,6 +482,7 @@ export const zhCN: Translations = {
       notification: "通知",
       tokenUsage: "Token 用量",
       config: "系统配置",
+      skillModels: "技能模型",
     },
     memory: {
       title: "记忆",

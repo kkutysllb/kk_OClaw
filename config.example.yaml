@@ -1091,3 +1091,56 @@ cron_management:
 #   failure_threshold: 5
 #   # Time in seconds before attempting to recover (default: 60)
 #   recovery_timeout_sec: 60
+
+# ============================================================================
+# Coding Agent 配置 (独立代码工程 Agent)
+# ============================================================================
+# coding_agent 是一个独立的 graph，专为代码工程任务优化。
+# 它在 lead_agent 的中间件链基础上，增加了 coding 专用工具集和状态结构。
+#
+# coding_agent:
+#   # 总开关，设为 false 时 coding_agent graph 不会注册
+#   enabled: true
+#   # 模型覆盖，设为 null 则使用全局默认模型
+#   model: null
+#   # 沙箱模式：local | docker
+#   sandbox: local
+#   # 默认权限模式：safe-only（只读+安全操作）| safe（需确认危险操作）| yolo（全自动）
+#   default_permission_mode: safe-only
+#   worktree:
+#     # 是否启用 git worktree 隔离
+#     enabled: true
+#     # 是否在 Agent 启动时自动创建 worktree
+#     auto_create: false
+#     # worktree 创建时的基准分支
+#     base_branch: main
+#   git:
+#     # 是否自动 commit Agent 产生的变更
+#     auto_commit: false
+#     # 强制使用 Conventional Commits 格式
+#     conventional_commits: true
+#   test:
+#     # 测试通过后是否自动 commit
+#     auto_run: false
+#     # 支持的测试框架列表
+#     frameworks: [pytest, jest, vitest, "go test"]
+
+coding_agent:
+  enabled: true
+  model: null
+  sandbox: local
+  default_permission_mode: safe-only
+  worktree:
+    enabled: true
+    auto_create: false
+    base_branch: main
+  git:
+    auto_commit: false
+    conventional_commits: true
+  test:
+    auto_run: false
+    frameworks:
+    - pytest
+    - jest
+    - vitest
+    - go test

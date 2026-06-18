@@ -23,6 +23,11 @@ function setDesktopMode(enabled: boolean) {
   }
 }
 
+function setDesktopModeWithFrontendPort(frontendPort: number) {
+  const w = window as unknown as Record<string, unknown>;
+  w.oclawDesktop = { gatewayPort: 19987, frontendPort };
+}
+
 function stubLocationPort(port: string) {
   Object.defineProperty(window, "location", {
     value: {
@@ -56,5 +61,20 @@ describe("fetcher desktop auth", () => {
     const [, init] = vi.mocked(globalThis.fetch).mock.calls[0] ?? [];
     const headers = new Headers((init as RequestInit | undefined)?.headers);
     expect(headers.get("Authorization")).toBe("Bearer desktop-token");
+  });
+
+  test("uses cookie and csrf flow in desktop dev mode with dynamic frontend port", async () => {
+    setDesktopModeWithFrontendPort(3000);
+    stubLocationPort("3000");
+    document.cookie = "csrf_token=csrf-dev-token";
+
+    await fetchWithAuth("/api/models", { method: "POST" });
+
+    const [, init] = vi.mocked(globalThis.fetch).mock.calls[0] ?? [];
+    const request = init as RequestInit | undefined;
+    const headers = new Headers(request?.headers);
+    expect(headers.get("Authorization")).toBeNull();
+    expect(headers.get("X-CSRF-Token")).toBe("csrf-dev-token");
+    expect(request?.credentials).toBe("include");
   });
 });

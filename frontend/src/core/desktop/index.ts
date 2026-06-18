@@ -14,9 +14,13 @@ import { isDesktop } from "../config";
 export type {
   BackendStatus,
   BackendStatusKind,
+  EnvCheckInfo,
+  EnvVarInfo,
   FileDialogOptions,
   GatewayConfig,
   PickedFile,
+  ServiceStateInfo,
+  StartupDiagnostics,
   UpdateInfo,
 } from "./types";
 
@@ -24,6 +28,7 @@ import type {
   BackendStatus,
   FileDialogOptions,
   PickedFile,
+  StartupDiagnostics,
 } from "./types";
 
 // ── Backend management ───────────────────────────────────────────────────
@@ -83,6 +88,19 @@ export async function getBackendLogs(): Promise<string[]> {
   }
 }
 
+// ── Startup diagnostics ──────────────────────────────────────────────────
+
+/** Get full startup diagnostics for the splash panel (services + env check). */
+export async function getStartupInfo(): Promise<StartupDiagnostics | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await window.oclawDesktop!.getStartupInfo();
+  } catch (e) {
+    console.warn("[desktop] getStartupInfo failed:", e);
+    return null;
+  }
+}
+
 // ── File dialog ──────────────────────────────────────────────────────────
 
 /**
@@ -133,6 +151,47 @@ function openBrowserFilePicker(
     };
     input.click();
   });
+}
+
+// ── Directory picker (Code Mode project selection) ──────────────────────
+
+/**
+ * Open a native directory picker and return the selected folder path.
+ * Returns null if the user cancels or in browser mode (no native picker).
+ */
+export async function pickDirectory(
+  options: { title?: string } = {},
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  try {
+    return await window.oclawDesktop!.pickDirectory(options);
+  } catch (e) {
+    console.warn("[desktop] pickDirectory failed:", e);
+    return null;
+  }
+}
+
+// ── Open folder in system file manager ──────────────────────────────
+
+/**
+ * Open a local folder in the system file manager (Finder / Explorer).
+ * Falls back to copying the path to clipboard in browser mode.
+ */
+export async function openFolder(folderPath: string): Promise<void> {
+  if (!isDesktop()) {
+    // Browser fallback: copy path to clipboard
+    try {
+      await navigator.clipboard.writeText(folderPath);
+    } catch {
+      // Clipboard may be unavailable
+    }
+    return;
+  }
+  try {
+    await window.oclawDesktop!.openFolder(folderPath);
+  } catch (e) {
+    console.warn("[desktop] openFolder failed:", e);
+  }
 }
 
 // Re-export system-integration helpers kept in dedicated modules.

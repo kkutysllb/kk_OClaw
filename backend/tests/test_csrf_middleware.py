@@ -20,3 +20,16 @@ def test_desktop_app_origin_is_allowed_when_configured(monkeypatch):
     )
 
     assert is_allowed_auth_origin(request) is True
+
+
+def test_tauri_origin_is_not_allowed_for_electron_desktop(monkeypatch):
+    monkeypatch.setenv("GATEWAY_CORS_ORIGINS", "app://-")
+
+    request = _Request(
+        {
+            "origin": "tauri://localhost",
+            "host": "127.0.0.1:19987",
+        },
+    )
+
+    assert is_allowed_auth_origin(request) is False

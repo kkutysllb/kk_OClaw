@@ -6,7 +6,8 @@
   ],
   "env": ".env",
   "graphs": {
-    "lead_agent": "kkoclaw.agents:make_lead_agent"
+    "lead_agent": "kkoclaw.agents:make_lead_agent",
+    "coding_agent": "kkoclaw.agents:make_coding_agent"
   },
   "auth": {
     "path": "./app/gateway/langgraph_auth.py:auth"

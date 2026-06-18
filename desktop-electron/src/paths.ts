@@ -14,11 +14,15 @@ import { join, resolve } from "node:path";
 /**
  * The repo root when running in development.
  *
- * `desktop-electron/` lives one level below the repo root, so the parent
- * of this module's compiled output (`dist/`) is the package dir, and its
- * parent is the repo root.
+ * `app.getAppPath()` returns the directory containing `package.json`,
+ * i.e. `desktop-electron/` itself. The repo root is one level above.
+ *
+ * (Previously this used `"..", ".."` which incorrectly pointed two
+ * levels above the package dir — e.g. `kk_Projects/` instead of
+ * `kk_OClaw/` — causing dev-mode icon/resource resolution to silently
+ * fail because every candidate path was off by one directory.)
  */
-const REPO_ROOT = resolve(app.getAppPath(), "..", "..");
+const REPO_ROOT = resolve(app.getAppPath(), "..");
 
 /** Whether we are running from a packaged app (not from source). */
 export function isPackaged(): boolean {
@@ -104,6 +108,21 @@ export function getDesktopConfigPath(): string {
 /** The desktop-owned extensions config file for MCP and skill enablement state. */
 export function getDesktopExtensionsConfigPath(): string {
   return join(getKkoclawHome(), "extensions_config.json");
+}
+
+/**
+ * The desktop-owned `.env` file holding skill model credentials.
+ *
+ * Public skills such as image/video/music generation read provider
+ * credentials from fixed environment variable names (e.g. `GEMINI_API_KEY`,
+ * `MINIMAX_API_KEY`). The web deployment puts these in the repo-root `.env`,
+ * but the desktop shell runs fully isolated under `userData` and never reads
+ * that file. This path is the desktop equivalent: `backend.ts` parses it on
+ * launch and injects every variable into the gateway child-process
+ * environment so skill subprocesses inherit them via `os.environ`.
+ */
+export function getSkillModelsEnvPath(): string {
+  return join(getKkoclawHome(), ".env");
 }
 
 /**

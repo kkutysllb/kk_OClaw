@@ -23,6 +23,9 @@ dependencies = [
     "email-validator>=2.0.0",
 ]
 
+[project.scripts]
+oclaw-code = "kkoclaw.coding_cli:main"
+
 [project.optional-dependencies]
 postgres = ["kkoclaw-harness[postgres]"]
 

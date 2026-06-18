@@ -22,3 +22,14 @@ test("package resource verifier rejects stale or incomplete gateway bundles", ()
   assert.match(verifierSource, /config\.embedded\.yaml/);
   assert.match(verifierSource, /skills\/public/);
 });
+
+test("packaged app ships small tray icons separately from the app icon", () => {
+  const builderConfig = readFileSync(
+    new URL("../electron-builder.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(builderConfig, /from: build\/icons/);
+  assert.match(builderConfig, /to: icons/);
+  assert.match(builderConfig, /16x16\.png/);
+  assert.match(builderConfig, /32x32\.png/);
+});

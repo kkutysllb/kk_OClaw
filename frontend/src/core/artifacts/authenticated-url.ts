@@ -3,14 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fetch } from "@/core/api/fetcher";
-import { isDesktop } from "@/core/config";
+import { isDesktopBackendManagedMode } from "@/core/config";
 
 function isDesktopProduction(): boolean {
-  return (
-    isDesktop() &&
-    typeof window !== "undefined" &&
-    window.location.port !== "18659"
-  );
+  return isDesktopBackendManagedMode();
 }
 
 function parseUrl(url: string): URL | null {

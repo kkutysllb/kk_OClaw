@@ -1,0 +1,1 @@
+{"tool":"generate_column_chart","args":{"data":[{"category":"IF","value":47.5},{"category":"IC","value":57.8},{"category":"IH","value":56.0},{"category":"IM","value":56.3}],"title":"图2 股指期货加权综合评分","axisXTitle":"品种","axisYTitle":"综合评分","width":900,"height":500,"theme":"academy"}}

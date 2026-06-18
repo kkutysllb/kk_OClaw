@@ -33,6 +33,7 @@ import { restartGateway, waitForGateway } from "@/core/settings-config/api";
 import { cn } from "@/lib/utils";
 
 import { ModelConfigSection } from "./config/model-config-section";
+import { CodingAgentForm } from "./config/settings-forms/coding-agent-form";
 import { CronForm } from "./config/settings-forms/cron-form";
 import { DatabaseForm } from "./config/settings-forms/database-form";
 import { LogLevelForm } from "./config/settings-forms/log-level-form";
@@ -49,6 +50,7 @@ import { YamlEditorSection } from "./config/yaml-editor-section";
 type ConfigSubPage =
   | "models"
   | "sandbox"
+  | "coding_agent"
   | "database"
   | "run_events"
   | "cron"
@@ -122,6 +124,7 @@ export function ConfigSettingsPage() {
       title: "运行时",
       items: [
         { id: "sandbox", label: "沙箱", icon: TerminalIcon },
+        { id: "coding_agent", label: "Coding Agent", icon: Code2Icon },
         { id: "database", label: "数据库", icon: DatabaseIcon },
         { id: "run_events", label: "运行事件", icon: HardDriveIcon },
         { id: "cron", label: "定时任务", icon: ClockIcon },
@@ -227,6 +230,7 @@ export function ConfigSettingsPage() {
           <div className="min-w-0 p-5">
             {active === "models" && <ModelConfigSection />}
             {active === "sandbox" && <SandboxForm />}
+            {active === "coding_agent" && <CodingAgentForm />}
             {active === "database" && <DatabaseForm />}
             {active === "run_events" && <RunEventsForm />}
             {active === "cron" && <CronForm />}

@@ -1,0 +1,1 @@
+{"tool":"generate_column_chart","args":{"data":[{"category":"IF","value":-10394},{"category":"IC","value":-18986},{"category":"IH","value":-6929},{"category":"IM","value":-22281}],"title":"图4 前20大席位净持仓汇总","axisXTitle":"品种","axisYTitle":"净持仓(手)","width":900,"height":500,"theme":"academy"}}

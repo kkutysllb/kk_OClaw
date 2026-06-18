@@ -126,6 +126,7 @@ export interface Translations {
     mcp: string;
     crons: string;
     tokenUsage: string;
+    coding: string;
   };
 
   // Toolbar
@@ -425,6 +426,7 @@ export interface Translations {
       notification: string;
       tokenUsage: string;
       config: string;
+      skillModels: string;
     };
     memory: {
       title: string;

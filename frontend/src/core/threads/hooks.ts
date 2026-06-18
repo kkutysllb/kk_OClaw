@@ -28,6 +28,8 @@ export type ThreadStreamOptions = {
   threadId?: string | null | undefined;
   context: LocalSettings["context"];
   isMock?: boolean;
+  /** LangGraph assistant/graph id to run. Defaults to ``"lead_agent"``. */
+  assistantId?: string;
   onSend?: (threadId: string) => void;
   onStart?: (threadId: string, runId: string) => void;
   onFinish?: (state: AgentThreadState) => void;
@@ -102,6 +104,7 @@ export function useThreadStream({
   threadId,
   context,
   isMock,
+  assistantId = "lead_agent",
   onSend,
   onStart,
   onFinish,
@@ -160,7 +163,7 @@ export function useThreadStream({
 
   const thread = useStream<AgentThreadState>({
     client: getAPIClient(isMock),
-    assistantId: "lead_agent",
+    assistantId,
     threadId: onStreamThreadId,
     reconnectOnMount: true,
     fetchStateHistory: { limit: 1 },
@@ -310,7 +313,7 @@ export function useThreadStream({
 
   const sendMessage = useCallback(
     async (
-      threadId: string,
+      threadId: string | undefined,
       message: PromptInputMessage,
       extraContext?: Record<string, unknown>,
       options?: SendMessageOptions,
@@ -361,7 +364,7 @@ export function useThreadStream({
       }
       setOptimisticMessages(newOptimistic);
 
-      listeners.current.onSend?.(threadId);
+      listeners.current.onSend?.(threadId!);
 
       let uploadedFileInfo: UploadedFileInfo[] = [];
 
@@ -516,11 +519,15 @@ export function useThreadStream({
     }
   );
 
-  const mergedMessages = mergeMessages(
-    history,
-    filteredThreadMessages,
-    optimisticMessages,
-  );
+  // When `threadId` is undefined/null (a brand-new, unsaved thread), force an
+  // empty message list. This avoids a transient race where `isNewThread` has
+  // already flipped to true (InputBox translates to center, Welcome renders)
+  // while the internal `onStreamThreadId` / `useStream` still hold the previous
+  // thread's messages — which previously caused the new-chat UI to "float"
+  // over the previous thread's history until a manual page refresh.
+  const mergedMessages = threadId
+    ? mergeMessages(history, filteredThreadMessages, optimisticMessages)
+    : [];
 
   // Merge history, live stream, and optimistic messages for display
   // History messages may overlap with thread.messages; thread.messages take precedence
@@ -582,6 +589,18 @@ export function useThreadHistory(threadId: string) {
       setLoading(false);
     }
   }, []);
+  // Clear messages and pagination cursors whenever the thread changes so
+  // that history from the previous thread does not leak into the new view.
+  // This is critical when navigating from a historical thread to a brand-new
+  // chat: `useThreadRuns("")` returns an empty list and `loadMessages()`
+  // early-returns, so without this reset the previous thread's messages would
+  // persist in state and render behind the new-chat InputBox/Welcome.
+  useEffect(() => {
+    setMessages([]);
+    indexRef.current = -1;
+    runsRef.current = [];
+  }, [threadId]);
+
   useEffect(() => {
     threadIdRef.current = threadId;
     if (runs.data && runs.data.length > 0) {

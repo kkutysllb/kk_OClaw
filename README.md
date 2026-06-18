@@ -11,6 +11,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](./Makefile)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
+[English](./README.en.md) | **简体中文**
+
 KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**memory** 和 **sandbox** 组织在一起，再配合可扩展的 **skills**，让 agent 可以完成几乎任何事情。
 
 ---
@@ -35,6 +37,7 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
   - [桌面端特性](#桌面端特性)
   - [桌面端自动更新](#桌面端自动更新)
 - [核心特性](#核心特性)
+  - [Coding Agent 与 Qiongqi 引擎](#coding-agent-与-qiongqi-引擎)
   - [Skills 与 Tools](#skills-与-tools)
   - [Sub-Agents](#sub-agents)
   - [Sandbox 与文件系统](#sandbox-与文件系统)
@@ -367,6 +370,21 @@ git push origin main --tags
 
 ## 核心特性
 
+### Coding Agent 与 Qiongqi 引擎
+
+Coding Agent 是 KKOCLAW 面向真实代码项目的独立工程工作台。它通过独立的 **QiongqiEngine** 运行边界，把代码任务和普通聊天、研究、报告等任务隔离开来。
+
+核心特色：
+
+- **独立运行边界**：Coding session、active skills、tool policy、events、ROI 和 change summary 都保存在 `~/.oclaw-coding/{thread_id}`，不会混入普通 OClaw 任务记忆。
+- **安全 scratch workspace**：Agent 分析代码时产生的中间文件统一写入 `~/.oclaw-coding/{thread_id}/workspace`，避免污染用户项目根目录。
+- **内置工程技能体系**：内置 59 个 Coding skills，覆盖需求分析、技术设计、项目初始化、实现、测试、调试、安全审查、PR review、部署交付等工程流程。
+- **项目变更可审计**：前端工作台展示项目文件、代码、任务变更、Git diff、Qiongqi events、ROI 和 review 结论，让用户能看到 agent 本轮到底改了什么。
+- **真实 Code Review 工作流**：Code Review 基于项目 diff、任务变更、Qiongqi 事件和本地 PR 上下文，支持 review finding 聚焦到 diff，并提供保守的一键修复能力。
+- **不中断任务的前端工作台**：右侧 Agent 对话面板持久挂载，切换 Session、ROI、事件、流程、Skills 等面板不会中断当前 Coding 任务。
+
+详细实现见 [Coding Agent 实现说明](docs/CODING_AGENT.md)。
+
 ### Skills 与 Tools
 
 Skills 是 KKOCLAW 能做"几乎任何事"的关键。
@@ -448,9 +466,12 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
-
+- **coding agent功能完成+前端多标签功能实现（2026-06-18）**
+  - 完成Coding Agent 面向真实代码项目的独立工程工作台。它通过独立的 **QiongqiEngine（穷奇）** 运行边界，把代码任务和普通聊天、研究、报告等任务隔离开来。
+  - 完成前端多标签功能，实现在一个页面内容多任务并行。web端和桌面端同步实现。
+  - 修改视频生成技能的模型调用，优选可灵，次选gemini，支持文生视频和图生视频。支持官方和中转。TTS(speech-2.8-hd)/音乐(music-2.6) 保留 MiniMax，仅替换视频生成模型
 - **Token Economy 系统性设计移植（2026-06-13）**
-  - 参考 Kun 项目 5 层 Token 经济机制，系统性降低 token 消耗，默认全部禁用，显式开启
+  - 实现 5 层 Token 经济机制，系统性降低 token 消耗，默认全部禁用，显式开启
   - 新增 `TokenEconomyConfig` 配置模型（`token_economy_config.py`），支持简洁响应指令、历史工具结果压缩、Storm Breaker 三层开关
   - 新增 `TokenEconomyMiddleware`（`token_economy_middleware.py`）：模型调用前自动截断旧 ToolMessage 内容（head+tail 策略），保护代码块/URL/文件路径/错误信号不被破坏；注入简洁响应 system-reminder
   - 新增 `ToolStormBreaker`（`tool_storm_breaker.py`）：滑动窗口跟踪同回合工具调用，相同 name+args 达到阈值后自动抑制；变更类工具自动清除只读记录
@@ -543,6 +564,7 @@ client.upload_files("thread-1", ["./report.pdf"])
 ## 文档
 
 - [贡献指南](CONTRIBUTING.md) - 开发环境搭建与协作流程
+- [Coding Agent 实现说明](docs/CODING_AGENT.md) - Qiongqi 引擎、隔离运行时、前端工作台、diff/review/ROI 工作流
 - [项目说明](backend/docs/项目说明.md) - 完整项目文档
 - [后端架构](backend/README.md) - 后端架构与 API 参考
 - [桌面端发布流程](docs/DESKTOP_RELEASE.md) - electron-builder + Apple 签名 + 公证 + GitHub Actions 矩阵发布全流程

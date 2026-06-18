@@ -25,23 +25,55 @@ const ROOT = resolve(import.meta.dirname, "..");
 const APP_DIR = join(ROOT, "src", "app");
 const BACKUP_DIR = join(ROOT, ".desktop-build-backup");
 
+// ── Resolve gateway port from the shared repo-root .env ───────────────────
+// The Electron static export talks to the embedded gateway owned by the
+// desktop shell. Falling back to 19987 preserves the default desktop port
+// when .env is absent.
+function resolveGatewayPort() {
+  const envFile = resolve(ROOT, "..", ".env");
+  if (existsSync(envFile)) {
+    for (const line of readFileSync(envFile, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      if (key !== "GATEWAY_PORT") continue;
+      const val = trimmed
+        .slice(eq + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
+      const port = Number.parseInt(val, 10);
+      if (Number.isFinite(port) && port > 0) return String(port);
+    }
+  }
+  return "19987";
+}
+const GATEWAY_PORT = resolveGatewayPort();
+console.log(`[desktop-build] using GATEWAY_PORT=${GATEWAY_PORT} (from shared .env or fallback)`);
+
 // ── Directories to move aside (incompatible with static export) ───────────
 // api/ — server-only route handlers
 // mock/ — server-only mock data routes
 // [lang]/ — i18n dynamic segment (no generateStaticParams for static export)
-// workspace/agents/[agent_name]/chats/[thread_id]/ — dynamic route, client component
-//   (kept out of build; agent chat URLs fall back to chats/new.html via
-//   the Electron protocol handler in frontend-protocol.ts)
+// workspace/agents/[agent_name]/chats/[thread_id]/ — dynamic route, client
+//   component. NOT moved aside; given a generateStaticParams layout (created
+//   via LAYOUT_PATCHES) so the route survives the static export. The page.tsx
+//   reads agent_name from usePathname() and thread_id from useThreadChat().
 //
 // NOTE: workspace/chats/[thread_id]/ is NOT moved aside — it is kept and
 // patched via LAYOUT_PATCHES below to export generateStaticParams, which
 // pre-renders /workspace/chats/new. Other thread IDs are handled at runtime
 // by the Electron protocol handler fallback + client-side useParams().
+//
+// NOTE: workspace/coding/[projectId]/ is NOT moved aside — it is kept and
+// given a generateStaticParams layout (created via NEW_FILES) so the dynamic
+// route survives the static export. The page.tsx is a client component that
+// reads projectId from usePathname() at runtime.
 const CONFLICT_DIRS = [
   "api",
   "mock",
   "[lang]",
-  "workspace/agents/[agent_name]/chats/[thread_id]",
 ];
 
 // ── Files to move aside (incompatible with static export) ──────────────────
@@ -78,6 +110,59 @@ export function ChatProviders({
       </ArtifactsProvider>
     </SubtasksProvider>
   );
+}
+`,
+  },
+  {
+    // Same client-component wrapper, but for the agents route.
+    file: join(
+      APP_DIR,
+      "workspace",
+      "agents",
+      "[agent_name]",
+      "chats",
+      "[thread_id]",
+      "_chat-providers.tsx",
+    ),
+    content: `"use client";
+
+import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
+import { ArtifactsProvider } from "@/components/workspace/artifacts";
+import { SubtasksProvider } from "@/core/tasks/context";
+
+export function ChatProviders({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SubtasksProvider>
+      <ArtifactsProvider>
+        <PromptInputProvider>{children}</PromptInputProvider>
+      </ArtifactsProvider>
+    </SubtasksProvider>
+  );
+}
+`,
+  },
+  {
+    // Server-component layout for the coding project dynamic route.
+    // page.tsx is "use client" and reads projectId from usePathname(), so it
+    // cannot export generateStaticParams itself. This layout is a server
+    // component that satisfies Next.js `output: export` by pre-rendering a
+    // single placeholder. At runtime the client router loads the page.tsx
+    // chunk for ANY projectId and resolves it client-side.
+    file: join(APP_DIR, "workspace", "coding", "[projectId]", "layout.tsx"),
+    content: `export function generateStaticParams() {
+  return [{ projectId: "__init__" }];
+}
+
+export default function CodingProjectLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return children;
 }
 `,
   },
@@ -376,6 +461,35 @@ export default function ChatLayout({
 }
 `,
   },
+  {
+    // Same treatment for the agent chat dynamic route. The original layout
+    // is a client component ("use client" + providers); replace it with a
+    // server component that exports generateStaticParams and delegates the
+    // providers to the _chat-providers client wrapper.
+    file: join(
+      APP_DIR,
+      "workspace",
+      "agents",
+      "[agent_name]",
+      "chats",
+      "[thread_id]",
+      "layout.tsx",
+    ),
+    content: `import { ChatProviders } from "./_chat-providers";
+
+export function generateStaticParams() {
+  return [{ agent_name: "__init__", thread_id: "new" }];
+}
+
+export default function AgentChatLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <ChatProviders>{children}</ChatProviders>;
+}
+`,
+  },
 ];
 
 // ── Build logic ───────────────────────────────────────────────────────────
@@ -478,10 +592,11 @@ function main() {
           NODE_ENV: "production",
           DESKTOP_BUILD: "true",
           SKIP_ENV_VALIDATION: "1",
-          // Point the frontend at the embedded gateway port (19987).
-          NEXT_PUBLIC_BACKEND_BASE_URL: "http://127.0.0.1:19987",
-          NEXT_PUBLIC_LANGGRAPH_BASE_URL: "http://127.0.0.1:19987/api",
-          GATEWAY_PORT: "19987",
+          // Point the frontend at the gateway port resolved from the shared
+          // .env so the desktop shell and the web build share the same backend.
+          NEXT_PUBLIC_BACKEND_BASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`,
+          NEXT_PUBLIC_LANGGRAPH_BASE_URL: `http://127.0.0.1:${GATEWAY_PORT}/api`,
+          GATEWAY_PORT,
         },
       });
     } catch (buildErr) {
@@ -498,9 +613,9 @@ function main() {
             NODE_ENV: "production",
             DESKTOP_BUILD: "true",
             SKIP_ENV_VALIDATION: "1",
-            NEXT_PUBLIC_BACKEND_BASE_URL: "http://127.0.0.1:19987",
-            NEXT_PUBLIC_LANGGRAPH_BASE_URL: "http://127.0.0.1:19987/api",
-            GATEWAY_PORT: "19987",
+            NEXT_PUBLIC_BACKEND_BASE_URL: `http://127.0.0.1:${GATEWAY_PORT}`,
+            NEXT_PUBLIC_LANGGRAPH_BASE_URL: `http://127.0.0.1:${GATEWAY_PORT}/api`,
+            GATEWAY_PORT,
           },
         });
       } catch (e2) {

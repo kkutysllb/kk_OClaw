@@ -2,11 +2,11 @@ import logging
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.gateway.deps import get_config
-from kkoclaw.config.app_config import AppConfig
+from kkoclaw.config.app_config import AppConfig, reload_app_config
 from kkoclaw.models.config_validation import validate_model_credentials
 
 logger = logging.getLogger(__name__)
@@ -25,16 +25,27 @@ def _load_config_yaml() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _save_config_yaml(config_data: dict) -> Path:
-    """Write the raw dict back to config.yaml.
+def _save_config_yaml(config_data: dict, request: Request | None = None) -> Path:
+    """Write the raw dict back to config.yaml and sync the in-memory cache.
 
-    The AppConfig singleton detects the mtime change and automatically
-    reloads when the next LangGraph run or gateway request arrives.
+    After writing, immediately reload the ``AppConfig`` singleton and update
+    ``app.state.config`` so that subsequent reads (e.g. ``GET /api/models``)
+    see the change without waiting for a gateway restart. The mtime-based
+    auto-reload in ``get_app_config()`` only helps callers that go through
+    ``get_app_config()`` — but ``get_config`` returns the stale reference
+    stored on ``app.state`` at startup, so we must refresh it explicitly.
     """
     config_path = AppConfig.resolve_config_path()
     with open(config_path, "w", encoding="utf-8") as f:
         yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
     logger.info(f"config.yaml written to {config_path}")
+
+    # Force-reload the singleton and propagate the fresh instance to
+    # app.state so every subsequent request picks it up.
+    new_config = reload_app_config()
+    if request is not None:
+        request.app.state.config = new_config
+
     return config_path
 
 
@@ -206,11 +217,15 @@ async def get_model(model_name: str, config: AppConfig = Depends(get_config)) ->
     summary="Create Model",
     description="Add a new model configuration and persist it to config.yaml.",
 )
-async def create_model(req: ModelRequest, config: AppConfig = Depends(get_config)) -> ModelResponse:
+async def create_model(
+    req: ModelRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> ModelResponse:
     """Create a new model configuration.
 
     The model is appended to the models list in config.yaml. The AppConfig
-    cache picks up the change automatically on the next read.
+    cache is reloaded immediately so subsequent reads see the new model.
     """
     # Validate uniqueness
     if config.get_model_config(req.name) is not None:
@@ -223,7 +238,7 @@ async def create_model(req: ModelRequest, config: AppConfig = Depends(get_config
         _validate_model_dict(model_dict)
         models_list.append(model_dict)
         config_data["models"] = models_list
-        _save_config_yaml(config_data)
+        _save_config_yaml(config_data, request)
         return ModelResponse(**model_dict)
     except HTTPException:
         raise
@@ -238,7 +253,12 @@ async def create_model(req: ModelRequest, config: AppConfig = Depends(get_config
     summary="Update Model",
     description="Update an existing model configuration and persist changes to config.yaml.",
 )
-async def update_model(model_name: str, req: ModelRequest, config: AppConfig = Depends(get_config)) -> ModelResponse:
+async def update_model(
+    model_name: str,
+    req: ModelRequest,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+) -> ModelResponse:
     """Update an existing model configuration."""
     if config.get_model_config(model_name) is None:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
@@ -264,7 +284,7 @@ async def update_model(model_name: str, req: ModelRequest, config: AppConfig = D
                 model_dict[k] = v
         _validate_model_dict(model_dict)
         models_list[target_idx] = model_dict
-        _save_config_yaml(config_data)
+        _save_config_yaml(config_data, request)
         return ModelResponse(**model_dict)
     except HTTPException:
         raise
@@ -279,7 +299,11 @@ async def update_model(model_name: str, req: ModelRequest, config: AppConfig = D
     summary="Delete Model",
     description="Remove a model configuration from config.yaml.",
 )
-async def delete_model(model_name: str, config: AppConfig = Depends(get_config)):
+async def delete_model(
+    model_name: str,
+    request: Request,
+    config: AppConfig = Depends(get_config),
+):
     """Delete a model configuration."""
     if config.get_model_config(model_name) is None:
         raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
@@ -292,7 +316,7 @@ async def delete_model(model_name: str, config: AppConfig = Depends(get_config))
         if len(models_list) == original_len:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in config file")
         config_data["models"] = models_list
-        _save_config_yaml(config_data)
+        _save_config_yaml(config_data, request)
     except HTTPException:
         raise
     except Exception as e:

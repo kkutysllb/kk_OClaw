@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import NotRequired, override
 
 from langchain.agents import AgentState
@@ -13,6 +14,8 @@ from kkoclaw.config.paths import Paths, get_paths
 from kkoclaw.runtime.user_context import get_effective_user_id
 
 logger = logging.getLogger(__name__)
+
+_CODING_SCRATCH_DIR = ".oclaw-coding"
 
 
 class ThreadDataMiddlewareState(AgentState):
@@ -78,6 +81,18 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
         self._paths.ensure_thread_dirs(thread_id, user_id=user_id)
         return self._get_thread_paths(thread_id, user_id=user_id)
 
+    def _get_coding_scratch_paths(self, thread_id: str) -> dict[str, str]:
+        """Return user-home Coding Agent scratch paths for a task/thread."""
+        from kkoclaw.config.paths import _validate_thread_id
+
+        root = Path.home() / _CODING_SCRATCH_DIR / _validate_thread_id(thread_id)
+        return {
+            "workspace_path": str(root / "workspace"),
+            "uploads_path": str(root / "uploads"),
+            "outputs_path": str(root / "outputs"),
+            "coding_task_root": str(root),
+        }
+
     @override
     def before_agent(self, state: ThreadDataMiddlewareState, runtime: Runtime) -> dict | None:
         # Check for workspace path overrides first (used by cron scheduler
@@ -88,6 +103,7 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
             configurable = get_config().get("configurable", {}) or {}
         except RuntimeError:
             pass  # Not inside a runnable context — no configurable overrides
+        context = runtime.context or {}
         workspace_thread_id = configurable.get("workspace_thread_id")
         workspace_user_id = configurable.get("workspace_user_id")
 
@@ -97,7 +113,6 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
             user_id = workspace_user_id or get_effective_user_id()
         else:
             # Normal mode: resolve from runtime context or configurable
-            context = runtime.context or {}
             thread_id = context.get("thread_id")
             if thread_id is None:
                 thread_id = configurable.get("thread_id")
@@ -118,12 +133,20 @@ class ThreadDataMiddleware(AgentMiddleware[ThreadDataMiddlewareState]):
         messages = list(state.get("messages", []))
         last_message = messages[-1] if messages else None
 
+        # Coding Agent: keep the real project root as metadata, but use a
+        # user-home scratch workspace for relative bash paths and intermediate
+        # files so analysis artifacts do not pollute the source repository.
+        project_root = context.get("project_root") or configurable.get("project_root")
+        if project_root:
+            paths.update(self._get_coding_scratch_paths(thread_id))
+            paths["project_root"] = project_root
+
         if last_message and isinstance(last_message, HumanMessage):
             messages[-1] = HumanMessage(
                 content=last_message.content,
                 id=last_message.id,
                 name=last_message.name or "user-input",
-                additional_kwargs={**last_message.additional_kwargs, "run_id": runtime.context.get("run_id"), "timestamp": datetime.now(UTC).isoformat()},
+                additional_kwargs={**last_message.additional_kwargs, "run_id": context.get("run_id"), "timestamp": datetime.now(UTC).isoformat()},
             )
 
         return {

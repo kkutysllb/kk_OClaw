@@ -9,7 +9,6 @@ import {
   PlusIcon,
   SparklesIcon,
   RocketIcon,
-  XIcon,
   ZapIcon,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -40,13 +39,12 @@ import {
   usePromptInputController,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { Button } from "@/components/ui/button";
-import { ConfettiButton } from "@/components/ui/confetti-button";
 import {
-  type SuggestionColorTheme,
   Suggestion,
   Suggestions,
 } from "@/components/ai-elements/suggestion";
+import { Button } from "@/components/ui/button";
+import { ConfettiButton } from "@/components/ui/confetti-button";
 import {
   Dialog,
   DialogContent,
@@ -84,6 +82,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
+import { useFollowupsContext } from "./followups-context";
 import { useThread } from "./messages/context";
 import { ModeHoverGuide } from "./mode-hover-guide";
 import { Tooltip } from "./tooltip";
@@ -151,6 +150,17 @@ export function InputBox({
   const { thread, isMock } = useThread();
   const { textInput } = usePromptInputController();
   const promptRootRef = useRef<HTMLDivElement | null>(null);
+  // Destructure the stable setters out of the context. These come from
+  // useState/useCallback inside the Provider, so their identities are stable
+  // across renders. Using them (rather than the whole `followupsCtx` object)
+  // as useEffect deps is what prevents the infinite update loop: the context
+  // value object identity changes whenever `data`/`hidden` change, but the
+  // setter identities never do.
+  const {
+    setData: setCtxFollowupsData,
+    setHidden: setCtxFollowupsHidden,
+    registerClickHandler: registerCtxClickHandler,
+  } = useFollowupsContext();
 
   const [followups, setFollowups] = useState<string[]>([]);
   const [followupsHidden, setFollowupsHidden] = useState(false);
@@ -438,39 +448,28 @@ export function InputBox({
     return () => controller.abort();
   }, [context.model_name, disabled, isMock, status, threadId]);
 
+  // Sync follow-ups state to context so the panel (rendered at the end of
+  // MessageList) can display the data without floating over the input area.
+  // NOTE: depend only on the stable setters (from useState/useCallback), not
+  // on the whole context object — otherwise the effect re-runs every time the
+  // Provider's value identity changes, calling setData again and looping.
+  useEffect(() => {
+    setCtxFollowupsData({
+      suggestions: showFollowups ? followups : [],
+      loading: showFollowups ? followupsLoading : false,
+    });
+  }, [setCtxFollowupsData, showFollowups, followups, followupsLoading]);
+
+  useEffect(() => {
+    setCtxFollowupsHidden(followupsHidden);
+  }, [setCtxFollowupsHidden, followupsHidden]);
+
+  useEffect(() => {
+    registerCtxClickHandler(handleFollowupClick);
+  }, [registerCtxClickHandler, handleFollowupClick]);
+
   return (
     <div ref={promptRootRef} className="relative flex flex-col gap-4">
-      {showFollowups && (
-        <div className="flex items-center justify-center pb-2">
-          <div className="flex items-center gap-2">
-            {followupsLoading ? (
-              <div className="text-muted-foreground bg-background/80 rounded-full border px-4 py-2 text-xs backdrop-blur-sm">
-                {t.inputBox.followupLoading}
-              </div>
-            ) : (
-              <Suggestions className="min-h-16 w-fit items-start">
-                {followups.map((s) => (
-                  <Suggestion
-                    key={s}
-                    suggestion={s}
-                    onClick={() => handleFollowupClick(s)}
-                  />
-                ))}
-                <Button
-                  aria-label={t.common.close}
-                  className="text-muted-foreground cursor-pointer rounded-full px-3 text-xs font-normal"
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setFollowupsHidden(true)}
-                >
-                  <XIcon className="size-4" />
-                </Button>
-              </Suggestions>
-            )}
-          </div>
-        </div>
-      )}
       <PromptInput
         className={cn(
           "bg-background/85 rounded-2xl backdrop-blur-sm transition-all duration-300 ease-out *:data-[slot='input-group']:rounded-2xl",

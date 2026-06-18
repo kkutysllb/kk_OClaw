@@ -39,10 +39,12 @@ import {
   getKkoclawHome,
   getLogsDir,
   getSkillsDir,
+  getSkillModelsEnvPath,
   isPackaged,
   REPO_ROOT,
 } from "./paths.js";
 import { migrateDesktopConfigYaml } from "./config-migration.js";
+import { initSkillModelsEnv, parseEnvFile } from "./skill-models-env.js";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -130,6 +132,7 @@ export class BackendManager extends EventEmitter {
     this.initConfig();
     this.migrateConfig();
     this.initExtensionsConfig();
+    this.initSkillModelsEnv();
     this.initSkills();
     this.openLogStream();
 
@@ -251,8 +254,15 @@ export class BackendManager extends EventEmitter {
    * (see backend `runtime_paths.project_root()`).
    */
   private buildEnv(port: number): NodeJS.ProcessEnv {
+    // Skill model credentials (GEMINI_API_KEY, MINIMAX_API_KEY, …) parsed from
+    // `<KKOCLAW_HOME>/.env`. These are the desktop equivalent of the web
+    // deployment's repo-root `.env`; without them, image/video/music skills
+    // abort with "No provider configured" / "*_API_KEY is not set".
+    const skillModelVars = this.loadSkillModelsEnv();
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      ...skillModelVars,
       // Isolation: desktop state lives under userData, not the repo.
       KKOCLAW_HOME: getKkoclawHome(),
       KKOCLAW_DATA_DIR: join(getKkoclawHome(), "data"),
@@ -532,6 +542,45 @@ export class BackendManager extends EventEmitter {
       this.appendLog(
         `[backend] failed to initialize desktop extensions config: ${e instanceof Error ? e.message : String(e)}`,
       );
+    }
+  }
+
+  /**
+   * Seed the skill-model credentials `.env` on first run.
+   *
+   * Creates an empty template so the user can discover & edit it manually;
+   * the Settings UI populates it via IPC. The gateway loads these vars in
+   * `buildEnv()` below so skill scripts inherit them via `os.environ`.
+   */
+  private initSkillModelsEnv(): void {
+    const envPath = getSkillModelsEnvPath();
+    if (existsSync(envPath)) return;
+    try {
+      initSkillModelsEnv();
+      this.appendLog(`[backend] initialized skill models env at ${envPath}`);
+    } catch (e) {
+      this.appendLog(
+        `[backend] failed to initialize skill models env: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  /**
+   * Parse the skill-model `.env` and return every key/value pair it defines.
+   *
+   * Used by `buildEnv()` to inject credentials into the gateway environment.
+   * Missing or unreadable file yields an empty object (non-fatal).
+   */
+  private loadSkillModelsEnv(): Record<string, string> {
+    const envPath = getSkillModelsEnvPath();
+    if (!existsSync(envPath)) return {};
+    try {
+      return parseEnvFile(readFileSync(envPath, "utf8"));
+    } catch (e) {
+      this.appendLog(
+        `[backend] failed to read skill models env: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      return {};
     }
   }
 

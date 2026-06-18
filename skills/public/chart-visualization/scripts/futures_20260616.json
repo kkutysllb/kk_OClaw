@@ -1,0 +1,3280 @@
+正在采集期货数据...
+
+{
+  "symbols": {
+    "IF": {
+      "price": {
+        "latest_date": "2026-06-16",
+        "close": 4767.0,
+        "settle": 4773.2,
+        "pct_chg": 0.0,
+        "change_pct": 0.0,
+        "trend": "横盘整理",
+        "ma5": 4686.72,
+        "ma10": 4694.34,
+        "ma20": 4719.62,
+        "ma_signal": "空头排列",
+        "high20": 4868.8,
+        "low20": 4547.2,
+        "amplitude": 0.85,
+        "avg_amplitude_10d": 1.64,
+        "oi": 123822,
+        "oi_chg": 5427,
+        "oi_trend": "持续增仓",
+        "vol": 42585,
+        "vol_5d_avg": 37466,
+        "vol_signal": "正常",
+        "volume_change_pct": -5.6
+      },
+      "contango": {
+        "spot_price": 4884.23,
+        "near_contract": "IF2609.CFX",
+        "near_basis": -117.23,
+        "near_basis_rate": -2.4002,
+        "avg_basis_rate": -2.5448,
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "basis_signal": "深度贴水",
+        "term_structure": "近低远高(contango)",
+        "term_slope": 3.6689,
+        "term_structure_signal": "升水加深，远期看空"
+      },
+      "holding": {
+        "latest_date": "2026-06-16",
+        "total_long": 92507,
+        "total_short": 102901,
+        "net_position": -10394,
+        "long_chg": 4884,
+        "short_chg": 5207,
+        "net_chg": -323,
+        "ls_ratio": 0.899,
+        "position_signal": "空头占优",
+        "chg_signal": "持仓变化不大",
+        "citic_long": 10913,
+        "citic_short": 17333,
+        "citic_net": -6420,
+        "citic_long_chg": 79,
+        "citic_short_chg": 1766,
+        "citic_net_chg": -1687,
+        "citic_signal": "偏空",
+        "others_long": 81594,
+        "others_short": 85568,
+        "others_net": -3974,
+        "others_long_chg": 4805,
+        "others_short_chg": 3441,
+        "others_net_chg": 1364,
+        "others_signal": "中性偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "citic_vs_others_daily_ops": {
+          "citic_long_chg": 79,
+          "citic_short_chg": 1766,
+          "citic_net_chg": -1687,
+          "citic_long_action": "加多",
+          "citic_short_action": "加空",
+          "citic_ops_mode": "双开",
+          "citic_net_dir": "加空",
+          "citic_strength": 1687,
+          "others_long_chg": 4805,
+          "others_short_chg": 3441,
+          "others_net_chg": 1364,
+          "others_long_action": "加多",
+          "others_short_action": "加空",
+          "others_ops_mode": "双开",
+          "others_net_dir": "加多",
+          "others_strength": 1364,
+          "direction_compare": "分歧",
+          "ops_intensity": "中信略强"
+        },
+        "top10_long": [
+          {
+            "rank": 1,
+            "broker": "国泰君安(代客)",
+            "long_hld": 25234,
+            "long_chg": 514
+          },
+          {
+            "rank": 2,
+            "broker": "中信期货(代客)",
+            "long_hld": 10913,
+            "long_chg": 79
+          },
+          {
+            "rank": 3,
+            "broker": "海通期货(代客)",
+            "long_hld": 9459,
+            "long_chg": 866
+          },
+          {
+            "rank": 4,
+            "broker": "广发期货(代客)",
+            "long_hld": 5951,
+            "long_chg": 599
+          },
+          {
+            "rank": 5,
+            "broker": "东证期货(代客)",
+            "long_hld": 4627,
+            "long_chg": 671
+          },
+          {
+            "rank": 6,
+            "broker": "银河期货(代客)",
+            "long_hld": 4582,
+            "long_chg": 900
+          },
+          {
+            "rank": 7,
+            "broker": "招商期货(代客)",
+            "long_hld": 3327,
+            "long_chg": 148
+          },
+          {
+            "rank": 8,
+            "broker": "浙商期货(代客)",
+            "long_hld": 3176,
+            "long_chg": -205
+          },
+          {
+            "rank": 9,
+            "broker": "光大期货(代客)",
+            "long_hld": 2703,
+            "long_chg": 142
+          },
+          {
+            "rank": 10,
+            "broker": "国投期货(代客)",
+            "long_hld": 2641,
+            "long_chg": 113
+          }
+        ],
+        "top10_short": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "short_hld": 17333,
+            "short_chg": 1766
+          },
+          {
+            "rank": 2,
+            "broker": "华泰期货(代客)",
+            "short_hld": 16132,
+            "short_chg": 260
+          },
+          {
+            "rank": 3,
+            "broker": "国泰君安(代客)",
+            "short_hld": 12874,
+            "short_chg": 523
+          },
+          {
+            "rank": 4,
+            "broker": "海通期货(代客)",
+            "short_hld": 6660,
+            "short_chg": 206
+          },
+          {
+            "rank": 5,
+            "broker": "国信期货(代客)",
+            "short_hld": 5797,
+            "short_chg": 100
+          },
+          {
+            "rank": 6,
+            "broker": "东证期货(代客)",
+            "short_hld": 4802,
+            "short_chg": 680
+          },
+          {
+            "rank": 7,
+            "broker": "银河期货(代客)",
+            "short_hld": 4491,
+            "short_chg": 330
+          },
+          {
+            "rank": 8,
+            "broker": "摩根大通(代客)",
+            "short_hld": 4457,
+            "short_chg": 20
+          },
+          {
+            "rank": 9,
+            "broker": "广发期货(代客)",
+            "short_hld": 4351,
+            "short_chg": 375
+          },
+          {
+            "rank": 10,
+            "broker": "瑞银期货(代客)",
+            "short_hld": 3818,
+            "short_chg": 26
+          }
+        ],
+        "top20_institutions": [
+          {
+            "rank": 1,
+            "broker": "华泰期货(代客)",
+            "long_hld": 2517,
+            "short_hld": 16132,
+            "net_position": -13615,
+            "long_chg": 25,
+            "short_chg": 260,
+            "net_chg": -235,
+            "vol": 1999,
+            "vol_chg": 220
+          },
+          {
+            "rank": 2,
+            "broker": "国泰君安(代客)",
+            "long_hld": 25234,
+            "short_hld": 12874,
+            "net_position": 12360,
+            "long_chg": 514,
+            "short_chg": 523,
+            "net_chg": -9,
+            "vol": 12935,
+            "vol_chg": -1583
+          },
+          {
+            "rank": 3,
+            "broker": "中信期货(代客)",
+            "long_hld": 10913,
+            "short_hld": 17333,
+            "net_position": -6420,
+            "long_chg": 79,
+            "short_chg": 1766,
+            "net_chg": -1687,
+            "vol": 15145,
+            "vol_chg": 1139
+          },
+          {
+            "rank": 4,
+            "broker": "摩根大通(代客)",
+            "long_hld": 0,
+            "short_hld": 4457,
+            "net_position": -4457,
+            "long_chg": 0,
+            "short_chg": 20,
+            "net_chg": -20,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 5,
+            "broker": "瑞银期货(代客)",
+            "long_hld": 0,
+            "short_hld": 3818,
+            "net_position": -3818,
+            "long_chg": 0,
+            "short_chg": 26,
+            "net_chg": -26,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 6,
+            "broker": "国信期货(代客)",
+            "long_hld": 2072,
+            "short_hld": 5797,
+            "net_position": -3725,
+            "long_chg": 374,
+            "short_chg": 100,
+            "net_chg": 274,
+            "vol": 4182,
+            "vol_chg": -377
+          },
+          {
+            "rank": 7,
+            "broker": "浙商期货(代客)",
+            "long_hld": 3176,
+            "short_hld": 0,
+            "net_position": 3176,
+            "long_chg": -205,
+            "short_chg": 0,
+            "net_chg": -205,
+            "vol": 1270,
+            "vol_chg": 120
+          },
+          {
+            "rank": 8,
+            "broker": "方正中期(代客)",
+            "long_hld": 0,
+            "short_hld": 2997,
+            "net_position": -2997,
+            "long_chg": 0,
+            "short_chg": 349,
+            "net_chg": -349,
+            "vol": 1172,
+            "vol_chg": 498
+          },
+          {
+            "rank": 9,
+            "broker": "海通期货(代客)",
+            "long_hld": 9459,
+            "short_hld": 6660,
+            "net_position": 2799,
+            "long_chg": 866,
+            "short_chg": 206,
+            "net_chg": 660,
+            "vol": 6358,
+            "vol_chg": 341
+          },
+          {
+            "rank": 10,
+            "broker": "宝城期货(代客)",
+            "long_hld": 2423,
+            "short_hld": 0,
+            "net_position": 2423,
+            "long_chg": 11,
+            "short_chg": 0,
+            "net_chg": 11,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 11,
+            "broker": "五矿期货(代客)",
+            "long_hld": 2121,
+            "short_hld": 0,
+            "net_position": 2121,
+            "long_chg": 83,
+            "short_chg": 0,
+            "net_chg": 83,
+            "vol": 1184,
+            "vol_chg": -27
+          },
+          {
+            "rank": 12,
+            "broker": "中金财富(代客)",
+            "long_hld": 0,
+            "short_hld": 2088,
+            "net_position": -2088,
+            "long_chg": 0,
+            "short_chg": -4,
+            "net_chg": 4,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 13,
+            "broker": "大越期货(代客)",
+            "long_hld": 2009,
+            "short_hld": 0,
+            "net_position": 2009,
+            "long_chg": 21,
+            "short_chg": 0,
+            "net_chg": 21,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 14,
+            "broker": "广发期货(代客)",
+            "long_hld": 5951,
+            "short_hld": 4351,
+            "net_position": 1600,
+            "long_chg": 599,
+            "short_chg": 375,
+            "net_chg": 224,
+            "vol": 2096,
+            "vol_chg": 665
+          },
+          {
+            "rank": 15,
+            "broker": "兴业期货(代客)",
+            "long_hld": 1443,
+            "short_hld": 0,
+            "net_position": 1443,
+            "long_chg": 74,
+            "short_chg": 0,
+            "net_chg": 74,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 16,
+            "broker": "兴证期货(代客)",
+            "long_hld": 1434,
+            "short_hld": 0,
+            "net_position": 1434,
+            "long_chg": -21,
+            "short_chg": 0,
+            "net_chg": -21,
+            "vol": 1047,
+            "vol_chg": 171
+          },
+          {
+            "rank": 17,
+            "broker": "申银万国(代客)",
+            "long_hld": 1518,
+            "short_hld": 2718,
+            "net_position": -1200,
+            "long_chg": -47,
+            "short_chg": 75,
+            "net_chg": -122,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 18,
+            "broker": "平安期货(代客)",
+            "long_hld": 0,
+            "short_hld": 1146,
+            "net_position": -1146,
+            "long_chg": 0,
+            "short_chg": 180,
+            "net_chg": -180,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 19,
+            "broker": "宏源期货(代客)",
+            "long_hld": 0,
+            "short_hld": 1121,
+            "net_position": -1121,
+            "long_chg": 0,
+            "short_chg": 5,
+            "net_chg": -5,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 20,
+            "broker": "永安期货(代客)",
+            "long_hld": 2579,
+            "short_hld": 2093,
+            "net_position": 486,
+            "long_chg": 344,
+            "short_chg": 117,
+            "net_chg": 227,
+            "vol": 1499,
+            "vol_chg": 304
+          }
+        ],
+        "daily_trends": [
+          {
+            "trade_date": "2026-06-08",
+            "total_long": 78685,
+            "total_short": 88664,
+            "net_position": -9979,
+            "total_long_chg": 1506,
+            "total_short_chg": 2091,
+            "net_position_chg": -585,
+            "institution_count": 30,
+            "citic_long": 8164,
+            "citic_short": 15136,
+            "citic_net": -6972,
+            "citic_long_chg": 218,
+            "citic_short_chg": 474,
+            "citic_net_chg": -256,
+            "others_long": 70521,
+            "others_short": 73528,
+            "others_net": -3007,
+            "others_long_chg": 1288,
+            "others_short_chg": 1617,
+            "others_net_chg": -329
+          },
+          {
+            "trade_date": "2026-06-09",
+            "total_long": 77686,
+            "total_short": 86436,
+            "net_position": -8750,
+            "total_long_chg": -937,
+            "total_short_chg": -2228,
+            "net_position_chg": 1291,
+            "institution_count": 30,
+            "citic_long": 7663,
+            "citic_short": 13967,
+            "citic_net": -6304,
+            "citic_long_chg": -501,
+            "citic_short_chg": -1169,
+            "citic_net_chg": 668,
+            "others_long": 70023,
+            "others_short": 72469,
+            "others_net": -2446,
+            "others_long_chg": -436,
+            "others_short_chg": -1059,
+            "others_net_chg": 623
+          },
+          {
+            "trade_date": "2026-06-10",
+            "total_long": 79145,
+            "total_short": 88392,
+            "net_position": -9247,
+            "total_long_chg": 1459,
+            "total_short_chg": 2390,
+            "net_position_chg": -931,
+            "institution_count": 30,
+            "citic_long": 7658,
+            "citic_short": 13946,
+            "citic_net": -6288,
+            "citic_long_chg": -5,
+            "citic_short_chg": -21,
+            "citic_net_chg": 16,
+            "others_long": 71487,
+            "others_short": 74446,
+            "others_net": -2959,
+            "others_long_chg": 1464,
+            "others_short_chg": 2411,
+            "others_net_chg": -947
+          },
+          {
+            "trade_date": "2026-06-11",
+            "total_long": 80964,
+            "total_short": 90366,
+            "net_position": -9402,
+            "total_long_chg": 1819,
+            "total_short_chg": 2015,
+            "net_position_chg": -196,
+            "institution_count": 30,
+            "citic_long": 7883,
+            "citic_short": 14443,
+            "citic_net": -6560,
+            "citic_long_chg": 225,
+            "citic_short_chg": 497,
+            "citic_net_chg": -272,
+            "others_long": 73081,
+            "others_short": 75923,
+            "others_net": -2842,
+            "others_long_chg": 1594,
+            "others_short_chg": 1518,
+            "others_net_chg": 76
+          },
+          {
+            "trade_date": "2026-06-12",
+            "total_long": 85193,
+            "total_short": 93164,
+            "net_position": -7971,
+            "total_long_chg": 4503,
+            "total_short_chg": 2798,
+            "net_position_chg": 1705,
+            "institution_count": 30,
+            "citic_long": 9774,
+            "citic_short": 14541,
+            "citic_net": -4767,
+            "citic_long_chg": 1891,
+            "citic_short_chg": 98,
+            "citic_net_chg": 1793,
+            "others_long": 75419,
+            "others_short": 78623,
+            "others_net": -3204,
+            "others_long_chg": 2612,
+            "others_short_chg": 2700,
+            "others_net_chg": -88
+          },
+          {
+            "trade_date": "2026-06-15",
+            "total_long": 87623,
+            "total_short": 97994,
+            "net_position": -10371,
+            "total_long_chg": 2764,
+            "total_short_chg": 4830,
+            "net_position_chg": -2066,
+            "institution_count": 29,
+            "citic_long": 10834,
+            "citic_short": 15567,
+            "citic_net": -4733,
+            "citic_long_chg": 1060,
+            "citic_short_chg": 1026,
+            "citic_net_chg": 34,
+            "others_long": 76789,
+            "others_short": 82427,
+            "others_net": -5638,
+            "others_long_chg": 1704,
+            "others_short_chg": 3804,
+            "others_net_chg": -2100
+          },
+          {
+            "trade_date": "2026-06-16",
+            "total_long": 92507,
+            "total_short": 102901,
+            "net_position": -10394,
+            "total_long_chg": 4884,
+            "total_short_chg": 5207,
+            "net_position_chg": -323,
+            "institution_count": 30,
+            "citic_long": 10913,
+            "citic_short": 17333,
+            "citic_net": -6420,
+            "citic_long_chg": 79,
+            "citic_short_chg": 1766,
+            "citic_net_chg": -1687,
+            "others_long": 81594,
+            "others_short": 85568,
+            "others_net": -3974,
+            "others_long_chg": 4805,
+            "others_short_chg": 3441,
+            "others_net_chg": 1364
+          }
+        ]
+      },
+      "spread": {
+        "near_contract": "IF2609.CFX",
+        "far_contract": "IFL2.CFX",
+        "near_price": 4486.2,
+        "far_price": 4569.6,
+        "spread": 83.4,
+        "spread_rate": 1.859,
+        "spread_zscore": 1.33,
+        "term_structure_shape": "近低远高(Contango)",
+        "spread_trend": "收窄中",
+        "arbitrage_space": "较小(Z-Score正常区间)",
+        "spread_matrix": [
+          {
+            "pair": "IF2609.CFX/IFL2.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IF2609.CFX/IF2606.CFX",
+            "spread": 108.2,
+            "spread_rate": 2.2698,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IF2609.CFX/IF.CFX",
+            "spread": 108.2,
+            "spread_rate": 2.2698,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IFL2.CFX/IF2606.CFX",
+            "spread": 108.2,
+            "spread_rate": 2.2698,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IFL2.CFX/IF.CFX",
+            "spread": 108.2,
+            "spread_rate": 2.2698,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IF2606.CFX/IF.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.33
+          }
+        ],
+        "score": 47.0
+      },
+      "correlation": {
+        "north_signal": "-",
+        "spot_futures_correlation": "高度正相关(0.97)",
+        "volume_correlation": "量价独立(-0.14)",
+        "lead_lag_signal": "无明显领先滞后",
+        "index_ranking": [
+          {
+            "name": "上证指数",
+            "pct_chg": 0.97,
+            "strength": "偏强"
+          },
+          {
+            "name": "沪深300",
+            "pct_chg": -1.04,
+            "strength": "偏弱"
+          },
+          {
+            "name": "创业板指",
+            "pct_chg": -4.58,
+            "strength": "弱势"
+          }
+        ],
+        "cross_market_signal": "偏多",
+        "score": 63.0
+      },
+      "keylevels": {
+        "current_price": 4767.0,
+        "pivot": 4774.13,
+        "support_levels": [
+          {
+            "label": "S1",
+            "price": 4750.27,
+            "strength": "强"
+          },
+          {
+            "label": "S2",
+            "price": 4733.53,
+            "strength": "强"
+          },
+          {
+            "label": "MA支撑",
+            "price": 4719.62,
+            "strength": "中"
+          },
+          {
+            "label": "S3",
+            "price": 4709.67,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日低点",
+            "price": 4547.2,
+            "strength": "强"
+          }
+        ],
+        "resistance_levels": [
+          {
+            "label": "R1",
+            "price": 4790.87,
+            "strength": "强"
+          },
+          {
+            "label": "R2",
+            "price": 4814.73,
+            "strength": "强"
+          },
+          {
+            "label": "R3",
+            "price": 4831.47,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日高点",
+            "price": 4868.8,
+            "strength": "强"
+          }
+        ],
+        "gaps": [
+          {
+            "date": "20260615",
+            "type": "向上缺口",
+            "upper": 4710.0,
+            "lower": 4690.0,
+            "size": 20.0
+          },
+          {
+            "date": "20260608",
+            "type": "向下缺口",
+            "upper": 4667.0,
+            "lower": 4652.0,
+            "size": 15.0
+          }
+        ],
+        "ma_levels": [
+          {
+            "period": 5,
+            "value": 4686.72
+          },
+          {
+            "period": 10,
+            "value": 4694.34
+          },
+          {
+            "period": 20,
+            "value": 4719.62
+          }
+        ],
+        "nearest_support": 4750.27,
+        "nearest_resistance": 4790.87,
+        "upside_space": 0.5,
+        "downside_space": 0.35,
+        "key_signal": "多空空间均衡, 中性",
+        "score": 42.0
+      },
+      "arbitrage": {
+        "spot_futures_arbitrage": {
+          "basis": -103.92,
+          "basis_rate": -2.1501,
+          "carry_cost": 42.68,
+          "net_basis": 61.24,
+          "signal": "反套(卖现买期)",
+          "arbitrage_space": "较大",
+          "days_to_expiry": 105
+        },
+        "cross_period_arbitrage": {
+          "near_contract": "IF2609.CFX",
+          "far_contract": "IFL2.CFX",
+          "spread": 83.4,
+          "spread_rate": 1.859,
+          "zscore": 1.33,
+          "signal": "轻仓反套",
+          "arbitrage_space": "较小",
+          "spread_trend": "收窄中"
+        },
+        "hedge_ratio": {
+          "beta": 0.9289,
+          "optimal_ratio": 0.93,
+          "method": "OLS回归",
+          "signal": "做多期货对冲"
+        },
+        "overall_signal": "反套(卖现买期)",
+        "score": 65.0
+      }
+    },
+    "IC": {
+      "price": {
+        "latest_date": "2026-06-16",
+        "close": 8278.0,
+        "settle": 8284.2,
+        "pct_chg": 0.0,
+        "change_pct": 0.0,
+        "trend": "多头趋势",
+        "ma5": 8008.96,
+        "ma10": 7997.5,
+        "ma20": 8118.12,
+        "ma_signal": "偏多震荡",
+        "high20": 8560.0,
+        "low20": 7662.2,
+        "amplitude": 1.75,
+        "avg_amplitude_10d": 2.16,
+        "oi": 133993,
+        "oi_chg": 4317,
+        "oi_trend": "持续增仓",
+        "vol": 58829,
+        "vol_5d_avg": 54502,
+        "vol_signal": "正常",
+        "volume_change_pct": -4.38
+      },
+      "contango": {
+        "spot_price": 8507.98,
+        "near_contract": "IC2609.CFX",
+        "near_basis": -229.98,
+        "near_basis_rate": -2.7031,
+        "avg_basis_rate": -2.8129,
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "basis_signal": "深度贴水",
+        "term_structure": "近低远高(contango)",
+        "term_slope": 4.4405,
+        "term_structure_signal": "升水加深，远期看空"
+      },
+      "holding": {
+        "latest_date": "2026-06-16",
+        "total_long": 91770,
+        "total_short": 109296,
+        "net_position": -17526,
+        "long_chg": 4088,
+        "short_chg": 3098,
+        "net_chg": 990,
+        "ls_ratio": 0.8396,
+        "position_signal": "空头占优",
+        "chg_signal": "多头小幅增仓",
+        "citic_long": 17106,
+        "citic_short": 21661,
+        "citic_net": -4555,
+        "citic_long_chg": 623,
+        "citic_short_chg": 1749,
+        "citic_net_chg": -1126,
+        "citic_signal": "偏空",
+        "others_long": 74664,
+        "others_short": 87635,
+        "others_net": -12971,
+        "others_long_chg": 3465,
+        "others_short_chg": 1349,
+        "others_net_chg": 2116,
+        "others_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "citic_vs_others_daily_ops": {
+          "citic_long_chg": 623,
+          "citic_short_chg": 1749,
+          "citic_net_chg": -1126,
+          "citic_long_action": "加多",
+          "citic_short_action": "加空",
+          "citic_ops_mode": "双开",
+          "citic_net_dir": "加空",
+          "citic_strength": 1126,
+          "others_long_chg": 3465,
+          "others_short_chg": 1349,
+          "others_net_chg": 2116,
+          "others_long_action": "加多",
+          "others_short_action": "加空",
+          "others_ops_mode": "双开",
+          "others_net_dir": "加多",
+          "others_strength": 2116,
+          "direction_compare": "分歧",
+          "ops_intensity": "其他机构主导"
+        },
+        "top10_long": [
+          {
+            "rank": 1,
+            "broker": "国泰君安(代客)",
+            "long_hld": 17420,
+            "long_chg": 499
+          },
+          {
+            "rank": 2,
+            "broker": "中信期货(代客)",
+            "long_hld": 17106,
+            "long_chg": 623
+          },
+          {
+            "rank": 3,
+            "broker": "一德期货(代客)",
+            "long_hld": 6068,
+            "long_chg": 14
+          },
+          {
+            "rank": 4,
+            "broker": "海通期货(代客)",
+            "long_hld": 5234,
+            "long_chg": 1500
+          },
+          {
+            "rank": 5,
+            "broker": "银河期货(代客)",
+            "long_hld": 4835,
+            "long_chg": 159
+          },
+          {
+            "rank": 6,
+            "broker": "华泰期货(代客)",
+            "long_hld": 4688,
+            "long_chg": 95
+          },
+          {
+            "rank": 7,
+            "broker": "招商期货(代客)",
+            "long_hld": 4544,
+            "long_chg": 143
+          },
+          {
+            "rank": 8,
+            "broker": "东证期货(代客)",
+            "long_hld": 3949,
+            "long_chg": 357
+          },
+          {
+            "rank": 9,
+            "broker": "宝城期货(代客)",
+            "long_hld": 3593,
+            "long_chg": 11
+          },
+          {
+            "rank": 10,
+            "broker": "光大期货(代客)",
+            "long_hld": 2894,
+            "long_chg": -16
+          }
+        ],
+        "top10_short": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "short_hld": 21661,
+            "short_chg": 1749
+          },
+          {
+            "rank": 2,
+            "broker": "国泰君安(代客)",
+            "short_hld": 19860,
+            "short_chg": -291
+          },
+          {
+            "rank": 3,
+            "broker": "华泰期货(代客)",
+            "short_hld": 12646,
+            "short_chg": -125
+          },
+          {
+            "rank": 4,
+            "broker": "海通期货(代客)",
+            "short_hld": 7115,
+            "short_chg": 554
+          },
+          {
+            "rank": 5,
+            "broker": "广发期货(代客)",
+            "short_hld": 4595,
+            "short_chg": 352
+          },
+          {
+            "rank": 6,
+            "broker": "银河期货(代客)",
+            "short_hld": 4495,
+            "short_chg": 304
+          },
+          {
+            "rank": 7,
+            "broker": "摩根大通(代客)",
+            "short_hld": 4236,
+            "short_chg": 2
+          },
+          {
+            "rank": 8,
+            "broker": "光大期货(代客)",
+            "short_hld": 3472,
+            "short_chg": 37
+          },
+          {
+            "rank": 9,
+            "broker": "东证期货(代客)",
+            "short_hld": 3457,
+            "short_chg": 87
+          },
+          {
+            "rank": 10,
+            "broker": "国投期货(代客)",
+            "short_hld": 3430,
+            "short_chg": 38
+          }
+        ],
+        "top20_institutions": [
+          {
+            "rank": 1,
+            "broker": "华泰期货(代客)",
+            "long_hld": 4688,
+            "short_hld": 12646,
+            "net_position": -7958,
+            "long_chg": 95,
+            "short_chg": -125,
+            "net_chg": 220,
+            "vol": 2096,
+            "vol_chg": -281
+          },
+          {
+            "rank": 2,
+            "broker": "一德期货(代客)",
+            "long_hld": 6068,
+            "short_hld": 0,
+            "net_position": 6068,
+            "long_chg": 14,
+            "short_chg": 0,
+            "net_chg": 14,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 3,
+            "broker": "中信期货(代客)",
+            "long_hld": 17106,
+            "short_hld": 21661,
+            "net_position": -4555,
+            "long_chg": 623,
+            "short_chg": 1749,
+            "net_chg": -1126,
+            "vol": 24566,
+            "vol_chg": -1436
+          },
+          {
+            "rank": 4,
+            "broker": "摩根大通(代客)",
+            "long_hld": 0,
+            "short_hld": 4236,
+            "net_position": -4236,
+            "long_chg": 0,
+            "short_chg": 2,
+            "net_chg": -2,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 5,
+            "broker": "宝城期货(代客)",
+            "long_hld": 3593,
+            "short_hld": 0,
+            "net_position": 3593,
+            "long_chg": 11,
+            "short_chg": 0,
+            "net_chg": 11,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 6,
+            "broker": "中信建投(代客)",
+            "long_hld": 0,
+            "short_hld": 2871,
+            "net_position": -2871,
+            "long_chg": 0,
+            "short_chg": 45,
+            "net_chg": -45,
+            "vol": 1420,
+            "vol_chg": -198
+          },
+          {
+            "rank": 7,
+            "broker": "瑞银期货(代客)",
+            "long_hld": 0,
+            "short_hld": 2750,
+            "net_position": -2750,
+            "long_chg": 0,
+            "short_chg": 0,
+            "net_chg": 0,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 8,
+            "broker": "浙商期货(代客)",
+            "long_hld": 2599,
+            "short_hld": 0,
+            "net_position": 2599,
+            "long_chg": 121,
+            "short_chg": 0,
+            "net_chg": 121,
+            "vol": 1490,
+            "vol_chg": 84
+          },
+          {
+            "rank": 9,
+            "broker": "国联期货(代客)",
+            "long_hld": 2558,
+            "short_hld": 0,
+            "net_position": 2558,
+            "long_chg": 134,
+            "short_chg": 0,
+            "net_chg": 134,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 10,
+            "broker": "国泰君安(代客)",
+            "long_hld": 17420,
+            "short_hld": 19860,
+            "net_position": -2440,
+            "long_chg": 499,
+            "short_chg": -291,
+            "net_chg": 790,
+            "vol": 19550,
+            "vol_chg": -697
+          },
+          {
+            "rank": 11,
+            "broker": "永安期货(代客)",
+            "long_hld": 2325,
+            "short_hld": 0,
+            "net_position": 2325,
+            "long_chg": -28,
+            "short_chg": 0,
+            "net_chg": -28,
+            "vol": 1690,
+            "vol_chg": -105
+          },
+          {
+            "rank": 12,
+            "broker": "招商期货(代客)",
+            "long_hld": 4544,
+            "short_hld": 2320,
+            "net_position": 2224,
+            "long_chg": 143,
+            "short_chg": 153,
+            "net_chg": -10,
+            "vol": 1570,
+            "vol_chg": -126
+          },
+          {
+            "rank": 13,
+            "broker": "中银期货(代客)",
+            "long_hld": 0,
+            "short_hld": 2222,
+            "net_position": -2222,
+            "long_chg": 0,
+            "short_chg": 33,
+            "net_chg": -33,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 14,
+            "broker": "中金财富(代客)",
+            "long_hld": 0,
+            "short_hld": 2170,
+            "net_position": -2170,
+            "long_chg": 0,
+            "short_chg": 5,
+            "net_chg": -5,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 15,
+            "broker": "申银万国(代客)",
+            "long_hld": 0,
+            "short_hld": 2153,
+            "net_position": -2153,
+            "long_chg": 0,
+            "short_chg": 428,
+            "net_chg": -428,
+            "vol": 1940,
+            "vol_chg": 446
+          },
+          {
+            "rank": 16,
+            "broker": "广发期货(代客)",
+            "long_hld": 2451,
+            "short_hld": 4595,
+            "net_position": -2144,
+            "long_chg": 194,
+            "short_chg": 352,
+            "net_chg": -158,
+            "vol": 1820,
+            "vol_chg": -463
+          },
+          {
+            "rank": 17,
+            "broker": "五矿期货(代客)",
+            "long_hld": 1900,
+            "short_hld": 0,
+            "net_position": 1900,
+            "long_chg": 290,
+            "short_chg": 0,
+            "net_chg": 290,
+            "vol": 1697,
+            "vol_chg": 96
+          },
+          {
+            "rank": 18,
+            "broker": "海通期货(代客)",
+            "long_hld": 5234,
+            "short_hld": 7115,
+            "net_position": -1881,
+            "long_chg": 1500,
+            "short_chg": 554,
+            "net_chg": 946,
+            "vol": 8040,
+            "vol_chg": 1325
+          },
+          {
+            "rank": 19,
+            "broker": "大地期货(代客)",
+            "long_hld": 1863,
+            "short_hld": 0,
+            "net_position": 1863,
+            "long_chg": 3,
+            "short_chg": 0,
+            "net_chg": 3,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 20,
+            "broker": "国信期货(代客)",
+            "long_hld": 1757,
+            "short_hld": 3430,
+            "net_position": -1673,
+            "long_chg": -14,
+            "short_chg": -200,
+            "net_chg": 186,
+            "vol": 3414,
+            "vol_chg": -1122
+          }
+        ],
+        "daily_trends": [
+          {
+            "trade_date": "2026-06-08",
+            "total_long": 80352,
+            "total_short": 95412,
+            "net_position": -15060,
+            "total_long_chg": 1067,
+            "total_short_chg": 2327,
+            "net_position_chg": -1260,
+            "institution_count": 30,
+            "citic_long": 15811,
+            "citic_short": 17175,
+            "citic_net": -1364,
+            "citic_long_chg": 170,
+            "citic_short_chg": -191,
+            "citic_net_chg": 361,
+            "others_long": 64541,
+            "others_short": 78237,
+            "others_net": -13696,
+            "others_long_chg": 897,
+            "others_short_chg": 2518,
+            "others_net_chg": -1621
+          },
+          {
+            "trade_date": "2026-06-09",
+            "total_long": 78152,
+            "total_short": 92048,
+            "net_position": -13896,
+            "total_long_chg": -1578,
+            "total_short_chg": -3364,
+            "net_position_chg": 1786,
+            "institution_count": 29,
+            "citic_long": 15338,
+            "citic_short": 16016,
+            "citic_net": -678,
+            "citic_long_chg": -473,
+            "citic_short_chg": -1159,
+            "citic_net_chg": 686,
+            "others_long": 62814,
+            "others_short": 76032,
+            "others_net": -13218,
+            "others_long_chg": -1105,
+            "others_short_chg": -2205,
+            "others_net_chg": 1100
+          },
+          {
+            "trade_date": "2026-06-10",
+            "total_long": 80941,
+            "total_short": 95016,
+            "net_position": -14075,
+            "total_long_chg": 3216,
+            "total_short_chg": 3334,
+            "net_position_chg": -118,
+            "institution_count": 32,
+            "citic_long": 15922,
+            "citic_short": 16688,
+            "citic_net": -766,
+            "citic_long_chg": 584,
+            "citic_short_chg": 672,
+            "citic_net_chg": -88,
+            "others_long": 65019,
+            "others_short": 78328,
+            "others_net": -13309,
+            "others_long_chg": 2632,
+            "others_short_chg": 2662,
+            "others_net_chg": -30
+          },
+          {
+            "trade_date": "2026-06-11",
+            "total_long": 81419,
+            "total_short": 95970,
+            "net_position": -14551,
+            "total_long_chg": 808,
+            "total_short_chg": 954,
+            "net_position_chg": -146,
+            "institution_count": 32,
+            "citic_long": 15875,
+            "citic_short": 16660,
+            "citic_net": -785,
+            "citic_long_chg": -47,
+            "citic_short_chg": -28,
+            "citic_net_chg": -19,
+            "others_long": 65544,
+            "others_short": 79310,
+            "others_net": -13766,
+            "others_long_chg": 855,
+            "others_short_chg": 982,
+            "others_net_chg": -127
+          },
+          {
+            "trade_date": "2026-06-12",
+            "total_long": 84040,
+            "total_short": 98543,
+            "net_position": -14503,
+            "total_long_chg": 2621,
+            "total_short_chg": 2573,
+            "net_position_chg": 48,
+            "institution_count": 31,
+            "citic_long": 16460,
+            "citic_short": 18137,
+            "citic_net": -1677,
+            "citic_long_chg": 585,
+            "citic_short_chg": 1477,
+            "citic_net_chg": -892,
+            "others_long": 67580,
+            "others_short": 80406,
+            "others_net": -12826,
+            "others_long_chg": 2036,
+            "others_short_chg": 1096,
+            "others_net_chg": 940
+          },
+          {
+            "trade_date": "2026-06-15",
+            "total_long": 87682,
+            "total_short": 106198,
+            "net_position": -18516,
+            "total_long_chg": 4133,
+            "total_short_chg": 7655,
+            "net_position_chg": -3522,
+            "institution_count": 29,
+            "citic_long": 16483,
+            "citic_short": 19912,
+            "citic_net": -3429,
+            "citic_long_chg": 23,
+            "citic_short_chg": 1775,
+            "citic_net_chg": -1752,
+            "others_long": 71199,
+            "others_short": 86286,
+            "others_net": -15087,
+            "others_long_chg": 4110,
+            "others_short_chg": 5880,
+            "others_net_chg": -1770
+          },
+          {
+            "trade_date": "2026-06-16",
+            "total_long": 91770,
+            "total_short": 109296,
+            "net_position": -17526,
+            "total_long_chg": 4088,
+            "total_short_chg": 3098,
+            "net_position_chg": 990,
+            "institution_count": 30,
+            "citic_long": 17106,
+            "citic_short": 21661,
+            "citic_net": -4555,
+            "citic_long_chg": 623,
+            "citic_short_chg": 1749,
+            "citic_net_chg": -1126,
+            "others_long": 74664,
+            "others_short": 87635,
+            "others_net": -12971,
+            "others_long_chg": 3465,
+            "others_short_chg": 1349,
+            "others_net_chg": 2116
+          }
+        ]
+      },
+      "spread": {
+        "near_contract": "IC2609.CFX",
+        "far_contract": "ICL2.CFX",
+        "near_price": 7714.2,
+        "far_price": 7884.4,
+        "spread": 170.2,
+        "spread_rate": 2.2063,
+        "spread_zscore": 1.34,
+        "term_structure_shape": "近低远高(Contango)",
+        "spread_trend": "收窄中",
+        "arbitrage_space": "较小(Z-Score正常区间)",
+        "spread_matrix": [
+          {
+            "pair": "IC2609.CFX/ICL2.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.34
+          },
+          {
+            "pair": "IC2609.CFX/IC2606.CFX",
+            "spread": 197.8,
+            "spread_rate": 2.3895,
+            "zscore": 1.34
+          },
+          {
+            "pair": "IC2609.CFX/IC.CFX",
+            "spread": 197.8,
+            "spread_rate": 2.3895,
+            "zscore": 1.34
+          },
+          {
+            "pair": "ICL2.CFX/IC2606.CFX",
+            "spread": 197.8,
+            "spread_rate": 2.3895,
+            "zscore": 1.34
+          },
+          {
+            "pair": "ICL2.CFX/IC.CFX",
+            "spread": 197.8,
+            "spread_rate": 2.3895,
+            "zscore": 1.34
+          },
+          {
+            "pair": "IC2606.CFX/IC.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.34
+          }
+        ],
+        "score": 47.0
+      },
+      "correlation": {
+        "north_signal": "-",
+        "spot_futures_correlation": "高度正相关(0.99)",
+        "volume_correlation": "量价背离(-0.40)",
+        "lead_lag_signal": "无明显领先滞后",
+        "index_ranking": [
+          {
+            "name": "中证500",
+            "pct_chg": 0.54,
+            "strength": "偏强"
+          },
+          {
+            "name": "沪深300",
+            "pct_chg": -1.04,
+            "strength": "偏弱"
+          },
+          {
+            "name": "创业板指",
+            "pct_chg": -4.58,
+            "strength": "弱势"
+          }
+        ],
+        "cross_market_signal": "偏多",
+        "score": 63.0
+      },
+      "keylevels": {
+        "current_price": 8278.0,
+        "pivot": 8261.27,
+        "support_levels": [
+          {
+            "label": "S1",
+            "price": 8197.93,
+            "strength": "强"
+          },
+          {
+            "label": "MA支撑",
+            "price": 8118.12,
+            "strength": "中"
+          },
+          {
+            "label": "S2",
+            "price": 8117.87,
+            "strength": "强"
+          },
+          {
+            "label": "S3",
+            "price": 8054.53,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日低点",
+            "price": 7662.2,
+            "strength": "强"
+          }
+        ],
+        "resistance_levels": [
+          {
+            "label": "R1",
+            "price": 8341.33,
+            "strength": "强"
+          },
+          {
+            "label": "R2",
+            "price": 8404.67,
+            "strength": "强"
+          },
+          {
+            "label": "R3",
+            "price": 8484.73,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日高点",
+            "price": 8560.0,
+            "strength": "强"
+          }
+        ],
+        "gaps": [
+          {
+            "date": "20260612",
+            "type": "向上缺口",
+            "upper": 7891.8,
+            "lower": 7861.4,
+            "size": 30.4
+          },
+          {
+            "date": "20260608",
+            "type": "向下缺口",
+            "upper": 7976.0,
+            "lower": 7918.8,
+            "size": 57.2
+          }
+        ],
+        "ma_levels": [
+          {
+            "period": 5,
+            "value": 8008.96
+          },
+          {
+            "period": 10,
+            "value": 7997.5
+          },
+          {
+            "period": 20,
+            "value": 8118.12
+          }
+        ],
+        "nearest_support": 8197.93,
+        "nearest_resistance": 8341.33,
+        "upside_space": 0.77,
+        "downside_space": 0.97,
+        "key_signal": "多空空间均衡, 中性",
+        "score": 58.0
+      },
+      "arbitrage": {
+        "spot_futures_arbitrage": {
+          "basis": -222.24,
+          "basis_rate": -2.598,
+          "carry_cost": 75.54,
+          "net_basis": 146.7,
+          "signal": "反套(卖现买期)",
+          "arbitrage_space": "较大",
+          "days_to_expiry": 105
+        },
+        "cross_period_arbitrage": {
+          "near_contract": "IC2609.CFX",
+          "far_contract": "ICL2.CFX",
+          "spread": 170.2,
+          "spread_rate": 2.2063,
+          "zscore": 1.34,
+          "signal": "轻仓反套",
+          "arbitrage_space": "较小",
+          "spread_trend": "收窄中"
+        },
+        "hedge_ratio": {
+          "beta": 0.9271,
+          "optimal_ratio": 0.93,
+          "method": "OLS回归",
+          "signal": "做多期货对冲"
+        },
+        "overall_signal": "反套(卖现买期)",
+        "score": 65.0
+      }
+    },
+    "IH": {
+      "price": {
+        "latest_date": "2026-06-16",
+        "close": 2872.0,
+        "settle": 2875.6,
+        "pct_chg": 0.0,
+        "change_pct": 0.0,
+        "trend": "多头趋势",
+        "ma5": 2840.84,
+        "ma10": 2823.18,
+        "ma20": 2846.63,
+        "ma_signal": "偏多震荡",
+        "high20": 2946.0,
+        "low20": 2747.0,
+        "amplitude": 1.08,
+        "avg_amplitude_10d": 1.33,
+        "oi": 55128,
+        "oi_chg": 5319,
+        "oi_trend": "持续增仓",
+        "vol": 22676,
+        "vol_5d_avg": 19050,
+        "vol_signal": "正常",
+        "volume_change_pct": -5.6
+      },
+      "contango": {
+        "spot_price": 2913.99,
+        "near_contract": "IH2609.CFX",
+        "near_basis": -41.99,
+        "near_basis_rate": -1.4408,
+        "avg_basis_rate": -1.9078,
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "basis_signal": "深度贴水",
+        "term_structure": "近低远高(contango)",
+        "term_slope": 1.9424,
+        "term_structure_signal": "升水加深，远期看空"
+      },
+      "holding": {
+        "latest_date": "2026-06-16",
+        "total_long": 36822,
+        "total_short": 49865,
+        "net_position": -13043,
+        "long_chg": 4230,
+        "short_chg": 4549,
+        "net_chg": -319,
+        "ls_ratio": 0.7384,
+        "position_signal": "空头占优",
+        "chg_signal": "持仓变化不大",
+        "citic_long": 4864,
+        "citic_short": 13825,
+        "citic_net": -8961,
+        "citic_long_chg": -56,
+        "citic_short_chg": 644,
+        "citic_net_chg": -700,
+        "citic_signal": "偏空",
+        "others_long": 31958,
+        "others_short": 36040,
+        "others_net": -4082,
+        "others_long_chg": 4286,
+        "others_short_chg": 3905,
+        "others_net_chg": 381,
+        "others_signal": "中性偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "citic_vs_others_daily_ops": {
+          "citic_long_chg": -56,
+          "citic_short_chg": 644,
+          "citic_net_chg": -700,
+          "citic_long_action": "减多",
+          "citic_short_action": "加空",
+          "citic_ops_mode": "减多加空",
+          "citic_net_dir": "加空",
+          "citic_strength": 700,
+          "others_long_chg": 4286,
+          "others_short_chg": 3905,
+          "others_net_chg": 381,
+          "others_long_action": "加多",
+          "others_short_action": "加空",
+          "others_ops_mode": "双开",
+          "others_net_dir": "加多",
+          "others_strength": 381,
+          "direction_compare": "分歧",
+          "ops_intensity": "中信主导"
+        },
+        "top10_long": [
+          {
+            "rank": 1,
+            "broker": "国泰君安(代客)",
+            "long_hld": 5858,
+            "long_chg": 917
+          },
+          {
+            "rank": 2,
+            "broker": "中信期货(代客)",
+            "long_hld": 4864,
+            "long_chg": -56
+          },
+          {
+            "rank": 3,
+            "broker": "海通期货(代客)",
+            "long_hld": 3128,
+            "long_chg": 431
+          },
+          {
+            "rank": 4,
+            "broker": "东证期货(代客)",
+            "long_hld": 2204,
+            "long_chg": 392
+          },
+          {
+            "rank": 5,
+            "broker": "银河期货(代客)",
+            "long_hld": 1954,
+            "long_chg": 645
+          },
+          {
+            "rank": 6,
+            "broker": "国投期货(代客)",
+            "long_hld": 1784,
+            "long_chg": 349
+          },
+          {
+            "rank": 7,
+            "broker": "永安期货(代客)",
+            "long_hld": 1688,
+            "long_chg": 242
+          },
+          {
+            "rank": 8,
+            "broker": "广发期货(代客)",
+            "long_hld": 1609,
+            "long_chg": 182
+          },
+          {
+            "rank": 9,
+            "broker": "兴证期货(代客)",
+            "long_hld": 1529,
+            "long_chg": 142
+          },
+          {
+            "rank": 10,
+            "broker": "光大期货(代客)",
+            "long_hld": 1526,
+            "long_chg": -119
+          }
+        ],
+        "top10_short": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "short_hld": 13825,
+            "short_chg": 644
+          },
+          {
+            "rank": 2,
+            "broker": "光大期货(代客)",
+            "short_hld": 7993,
+            "short_chg": -16
+          },
+          {
+            "rank": 3,
+            "broker": "国泰君安(代客)",
+            "short_hld": 7621,
+            "short_chg": 1942
+          },
+          {
+            "rank": 4,
+            "broker": "国信期货(代客)",
+            "short_hld": 2542,
+            "short_chg": 150
+          },
+          {
+            "rank": 5,
+            "broker": "东证期货(代客)",
+            "short_hld": 2430,
+            "short_chg": 207
+          },
+          {
+            "rank": 6,
+            "broker": "海通期货(代客)",
+            "short_hld": 2124,
+            "short_chg": 297
+          },
+          {
+            "rank": 7,
+            "broker": "中信建投(代客)",
+            "short_hld": 1976,
+            "short_chg": 212
+          },
+          {
+            "rank": 8,
+            "broker": "广发期货(代客)",
+            "short_hld": 1835,
+            "short_chg": -44
+          },
+          {
+            "rank": 9,
+            "broker": "中金期货(代客)",
+            "short_hld": 1298,
+            "short_chg": 600
+          },
+          {
+            "rank": 10,
+            "broker": "宏源期货(代客)",
+            "short_hld": 1293,
+            "short_chg": -31
+          }
+        ],
+        "top20_institutions": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "long_hld": 4864,
+            "short_hld": 13825,
+            "net_position": -8961,
+            "long_chg": -56,
+            "short_chg": 644,
+            "net_chg": -700,
+            "vol": 6702,
+            "vol_chg": 45
+          },
+          {
+            "rank": 2,
+            "broker": "光大期货(代客)",
+            "long_hld": 1526,
+            "short_hld": 7993,
+            "net_position": -6467,
+            "long_chg": -119,
+            "short_chg": -16,
+            "net_chg": -103,
+            "vol": 873,
+            "vol_chg": -206
+          },
+          {
+            "rank": 3,
+            "broker": "国信期货(代客)",
+            "long_hld": 0,
+            "short_hld": 2542,
+            "net_position": -2542,
+            "long_chg": 0,
+            "short_chg": 150,
+            "net_chg": -150,
+            "vol": 1975,
+            "vol_chg": -930
+          },
+          {
+            "rank": 4,
+            "broker": "国泰君安(代客)",
+            "long_hld": 5858,
+            "short_hld": 7621,
+            "net_position": -1763,
+            "long_chg": 917,
+            "short_chg": 1942,
+            "net_chg": -1025,
+            "vol": 7981,
+            "vol_chg": 852
+          },
+          {
+            "rank": 5,
+            "broker": "永安期货(代客)",
+            "long_hld": 1688,
+            "short_hld": 0,
+            "net_position": 1688,
+            "long_chg": 242,
+            "short_chg": 0,
+            "net_chg": 242,
+            "vol": 585,
+            "vol_chg": 146
+          },
+          {
+            "rank": 6,
+            "broker": "兴证期货(代客)",
+            "long_hld": 1529,
+            "short_hld": 0,
+            "net_position": 1529,
+            "long_chg": 142,
+            "short_chg": 0,
+            "net_chg": 142,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 7,
+            "broker": "国贸期货(代客)",
+            "long_hld": 1351,
+            "short_hld": 0,
+            "net_position": 1351,
+            "long_chg": 52,
+            "short_chg": 0,
+            "net_chg": 52,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 8,
+            "broker": "中金期货(代客)",
+            "long_hld": 0,
+            "short_hld": 1298,
+            "net_position": -1298,
+            "long_chg": 0,
+            "short_chg": 600,
+            "net_chg": -600,
+            "vol": 600,
+            "vol_chg": 600
+          },
+          {
+            "rank": 9,
+            "broker": "宏源期货(代客)",
+            "long_hld": 0,
+            "short_hld": 1293,
+            "net_position": -1293,
+            "long_chg": 0,
+            "short_chg": -31,
+            "net_chg": 31,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 10,
+            "broker": "建信期货(代客)",
+            "long_hld": 1050,
+            "short_hld": 0,
+            "net_position": 1050,
+            "long_chg": 102,
+            "short_chg": 0,
+            "net_chg": 102,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 11,
+            "broker": "浙商期货(代客)",
+            "long_hld": 1040,
+            "short_hld": 0,
+            "net_position": 1040,
+            "long_chg": 407,
+            "short_chg": 0,
+            "net_chg": 407,
+            "vol": 752,
+            "vol_chg": 76
+          },
+          {
+            "rank": 12,
+            "broker": "南华期货(代客)",
+            "long_hld": 1024,
+            "short_hld": 0,
+            "net_position": 1024,
+            "long_chg": 4,
+            "short_chg": 0,
+            "net_chg": 4,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 13,
+            "broker": "海通期货(代客)",
+            "long_hld": 3128,
+            "short_hld": 2124,
+            "net_position": 1004,
+            "long_chg": 431,
+            "short_chg": 297,
+            "net_chg": 134,
+            "vol": 2846,
+            "vol_chg": -1
+          },
+          {
+            "rank": 14,
+            "broker": "银河期货(代客)",
+            "long_hld": 1954,
+            "short_hld": 1032,
+            "net_position": 922,
+            "long_chg": 645,
+            "short_chg": 250,
+            "net_chg": 395,
+            "vol": 1553,
+            "vol_chg": 499
+          },
+          {
+            "rank": 15,
+            "broker": "融达期货(代客)",
+            "long_hld": 911,
+            "short_hld": 0,
+            "net_position": 911,
+            "long_chg": 14,
+            "short_chg": 0,
+            "net_chg": 14,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 16,
+            "broker": "中信建投(代客)",
+            "long_hld": 1092,
+            "short_hld": 1976,
+            "net_position": -884,
+            "long_chg": 226,
+            "short_chg": 212,
+            "net_chg": 14,
+            "vol": 884,
+            "vol_chg": 67
+          },
+          {
+            "rank": 17,
+            "broker": "国投期货(代客)",
+            "long_hld": 1784,
+            "short_hld": 930,
+            "net_position": 854,
+            "long_chg": 349,
+            "short_chg": 352,
+            "net_chg": -3,
+            "vol": 989,
+            "vol_chg": 509
+          },
+          {
+            "rank": 18,
+            "broker": "华闻期货(代客)",
+            "long_hld": 0,
+            "short_hld": 626,
+            "net_position": -626,
+            "long_chg": 0,
+            "short_chg": 53,
+            "net_chg": -53,
+            "vol": 942,
+            "vol_chg": -409
+          },
+          {
+            "rank": 19,
+            "broker": "平安期货(代客)",
+            "long_hld": 985,
+            "short_hld": 407,
+            "net_position": 578,
+            "long_chg": 50,
+            "short_chg": 51,
+            "net_chg": -1,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 20,
+            "broker": "中泰期货(代客)",
+            "long_hld": 0,
+            "short_hld": 399,
+            "net_position": -399,
+            "long_chg": 0,
+            "short_chg": -207,
+            "net_chg": 207,
+            "vol": 1534,
+            "vol_chg": 2
+          }
+        ],
+        "daily_trends": [
+          {
+            "trade_date": "2026-06-08",
+            "total_long": 30379,
+            "total_short": 40917,
+            "net_position": -10538,
+            "total_long_chg": -13,
+            "total_short_chg": 544,
+            "net_position_chg": -557,
+            "institution_count": 33,
+            "citic_long": 4701,
+            "citic_short": 11712,
+            "citic_net": -7011,
+            "citic_long_chg": 41,
+            "citic_short_chg": -94,
+            "citic_net_chg": 135,
+            "others_long": 25678,
+            "others_short": 29205,
+            "others_net": -3527,
+            "others_long_chg": -54,
+            "others_short_chg": 638,
+            "others_net_chg": -692
+          },
+          {
+            "trade_date": "2026-06-09",
+            "total_long": 29335,
+            "total_short": 40174,
+            "net_position": -10839,
+            "total_long_chg": -1030,
+            "total_short_chg": -604,
+            "net_position_chg": -426,
+            "institution_count": 31,
+            "citic_long": 3910,
+            "citic_short": 11357,
+            "citic_net": -7447,
+            "citic_long_chg": -791,
+            "citic_short_chg": -355,
+            "citic_net_chg": -436,
+            "others_long": 25425,
+            "others_short": 28817,
+            "others_net": -3392,
+            "others_long_chg": -239,
+            "others_short_chg": -249,
+            "others_net_chg": 10
+          },
+          {
+            "trade_date": "2026-06-10",
+            "total_long": 30271,
+            "total_short": 40732,
+            "net_position": -10461,
+            "total_long_chg": 960,
+            "total_short_chg": 592,
+            "net_position_chg": 368,
+            "institution_count": 31,
+            "citic_long": 4082,
+            "citic_short": 11631,
+            "citic_net": -7549,
+            "citic_long_chg": 172,
+            "citic_short_chg": 274,
+            "citic_net_chg": -102,
+            "others_long": 26189,
+            "others_short": 29101,
+            "others_net": -2912,
+            "others_long_chg": 788,
+            "others_short_chg": 318,
+            "others_net_chg": 470
+          },
+          {
+            "trade_date": "2026-06-11",
+            "total_long": 29991,
+            "total_short": 40842,
+            "net_position": -10851,
+            "total_long_chg": -260,
+            "total_short_chg": 110,
+            "net_position_chg": -370,
+            "institution_count": 33,
+            "citic_long": 4077,
+            "citic_short": 11566,
+            "citic_net": -7489,
+            "citic_long_chg": -5,
+            "citic_short_chg": -65,
+            "citic_net_chg": 60,
+            "others_long": 25914,
+            "others_short": 29276,
+            "others_net": -3362,
+            "others_long_chg": -255,
+            "others_short_chg": 175,
+            "others_net_chg": -430
+          },
+          {
+            "trade_date": "2026-06-12",
+            "total_long": 31579,
+            "total_short": 41975,
+            "net_position": -10396,
+            "total_long_chg": 1636,
+            "total_short_chg": 1416,
+            "net_position_chg": 220,
+            "institution_count": 33,
+            "citic_long": 4285,
+            "citic_short": 12189,
+            "citic_net": -7904,
+            "citic_long_chg": 208,
+            "citic_short_chg": 623,
+            "citic_net_chg": -415,
+            "others_long": 27294,
+            "others_short": 29786,
+            "others_net": -2492,
+            "others_long_chg": 1428,
+            "others_short_chg": 793,
+            "others_net_chg": 635
+          },
+          {
+            "trade_date": "2026-06-15",
+            "total_long": 33003,
+            "total_short": 45386,
+            "net_position": -12383,
+            "total_long_chg": 1468,
+            "total_short_chg": 3862,
+            "net_position_chg": -2394,
+            "institution_count": 32,
+            "citic_long": 4920,
+            "citic_short": 13181,
+            "citic_net": -8261,
+            "citic_long_chg": 635,
+            "citic_short_chg": 992,
+            "citic_net_chg": -357,
+            "others_long": 28083,
+            "others_short": 32205,
+            "others_net": -4122,
+            "others_long_chg": 833,
+            "others_short_chg": 2870,
+            "others_net_chg": -2037
+          },
+          {
+            "trade_date": "2026-06-16",
+            "total_long": 36822,
+            "total_short": 49865,
+            "net_position": -13043,
+            "total_long_chg": 4230,
+            "total_short_chg": 4549,
+            "net_position_chg": -319,
+            "institution_count": 30,
+            "citic_long": 4864,
+            "citic_short": 13825,
+            "citic_net": -8961,
+            "citic_long_chg": -56,
+            "citic_short_chg": 644,
+            "citic_net_chg": -700,
+            "others_long": 31958,
+            "others_short": 36040,
+            "others_net": -4082,
+            "others_long_chg": 4286,
+            "others_short_chg": 3905,
+            "others_net_chg": 381
+          }
+        ]
+      },
+      "spread": {
+        "near_contract": "IH2609.CFX",
+        "far_contract": "IHL2.CFX",
+        "near_price": 2905.4,
+        "far_price": 2942.2,
+        "spread": 36.8,
+        "spread_rate": 1.2666,
+        "spread_zscore": 1.11,
+        "term_structure_shape": "近低远高(Contango)",
+        "spread_trend": "收窄中",
+        "arbitrage_space": "较小(Z-Score正常区间)",
+        "spread_matrix": [
+          {
+            "pair": "IH2609.CFX/IHL2.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.11
+          },
+          {
+            "pair": "IH2609.CFX/IH2606.CFX",
+            "spread": 39.0,
+            "spread_rate": 1.3579,
+            "zscore": 1.11
+          },
+          {
+            "pair": "IH2609.CFX/IHL.CFX",
+            "spread": 39.0,
+            "spread_rate": 1.3579,
+            "zscore": 1.11
+          },
+          {
+            "pair": "IHL2.CFX/IH2606.CFX",
+            "spread": 39.0,
+            "spread_rate": 1.3579,
+            "zscore": 1.11
+          },
+          {
+            "pair": "IHL2.CFX/IHL.CFX",
+            "spread": 39.0,
+            "spread_rate": 1.3579,
+            "zscore": 1.11
+          },
+          {
+            "pair": "IH2606.CFX/IHL.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.11
+          }
+        ],
+        "score": 47.0
+      },
+      "correlation": {
+        "north_signal": "-",
+        "spot_futures_correlation": "高度正相关(0.96)",
+        "volume_correlation": "量价独立(0.14)",
+        "lead_lag_signal": "无明显领先滞后",
+        "index_ranking": [
+          {
+            "name": "上证50",
+            "pct_chg": 0.72,
+            "strength": "偏强"
+          },
+          {
+            "name": "中证500",
+            "pct_chg": 0.54,
+            "strength": "偏强"
+          },
+          {
+            "name": "沪深300",
+            "pct_chg": -1.04,
+            "strength": "偏弱"
+          }
+        ],
+        "cross_market_signal": "偏多",
+        "score": 63.0
+      },
+      "keylevels": {
+        "current_price": 2872.0,
+        "pivot": 2879.13,
+        "support_levels": [
+          {
+            "label": "S1",
+            "price": 2859.87,
+            "strength": "强"
+          },
+          {
+            "label": "S2",
+            "price": 2847.73,
+            "strength": "强"
+          },
+          {
+            "label": "MA支撑",
+            "price": 2846.63,
+            "strength": "中"
+          },
+          {
+            "label": "S3",
+            "price": 2828.47,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日低点",
+            "price": 2747.0,
+            "strength": "强"
+          }
+        ],
+        "resistance_levels": [
+          {
+            "label": "R1",
+            "price": 2891.27,
+            "strength": "强"
+          },
+          {
+            "label": "R2",
+            "price": 2910.53,
+            "strength": "强"
+          },
+          {
+            "label": "R3",
+            "price": 2922.67,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日高点",
+            "price": 2946.0,
+            "strength": "强"
+          }
+        ],
+        "gaps": [
+          {
+            "date": "20260615",
+            "type": "向上缺口",
+            "upper": 2870.4,
+            "lower": 2856.8,
+            "size": 13.6
+          },
+          {
+            "date": "20260612",
+            "type": "向上缺口",
+            "upper": 2798.4,
+            "lower": 2796.6,
+            "size": 1.8
+          },
+          {
+            "date": "20260608",
+            "type": "向下缺口",
+            "upper": 2795.6,
+            "lower": 2787.4,
+            "size": 8.2
+          }
+        ],
+        "ma_levels": [
+          {
+            "period": 5,
+            "value": 2840.84
+          },
+          {
+            "period": 10,
+            "value": 2823.18
+          },
+          {
+            "period": 20,
+            "value": 2846.63
+          }
+        ],
+        "nearest_support": 2859.87,
+        "nearest_resistance": 2891.27,
+        "upside_space": 0.67,
+        "downside_space": 0.42,
+        "key_signal": "上方空间较大, 偏多",
+        "score": 52.0
+      },
+      "arbitrage": {
+        "spot_futures_arbitrage": {
+          "basis": -44.16,
+          "basis_rate": -1.5046,
+          "carry_cost": 25.92,
+          "net_basis": 18.24,
+          "signal": "反套(卖现买期)",
+          "arbitrage_space": "较大",
+          "days_to_expiry": 105
+        },
+        "cross_period_arbitrage": {
+          "near_contract": "IH2609.CFX",
+          "far_contract": "IHL2.CFX",
+          "spread": 36.8,
+          "spread_rate": 1.2666,
+          "zscore": 1.11,
+          "signal": "轻仓反套",
+          "arbitrage_space": "较小",
+          "spread_trend": "收窄中"
+        },
+        "hedge_ratio": {
+          "beta": 0.9972,
+          "optimal_ratio": 1.0,
+          "method": "OLS回归",
+          "signal": "做多期货对冲"
+        },
+        "overall_signal": "反套(卖现买期)",
+        "score": 65.0
+      }
+    },
+    "IM": {
+      "price": {
+        "latest_date": "2026-06-16",
+        "close": 8349.0,
+        "settle": 8358.8,
+        "pct_chg": 0.0,
+        "change_pct": 0.0,
+        "trend": "多头趋势",
+        "ma5": 8071.16,
+        "ma10": 8051.18,
+        "ma20": 8159.78,
+        "ma_signal": "偏多震荡",
+        "high20": 8580.4,
+        "low20": 7740.0,
+        "amplitude": 2.13,
+        "avg_amplitude_10d": 2.13,
+        "oi": 177643,
+        "oi_chg": 9911,
+        "oi_trend": "持续增仓",
+        "vol": 89065,
+        "vol_5d_avg": 77711,
+        "vol_signal": "正常",
+        "volume_change_pct": 4.26
+      },
+      "contango": {
+        "spot_price": 8646.4,
+        "near_contract": "IM2609.CFX",
+        "near_basis": -297.4,
+        "near_basis_rate": -3.4396,
+        "avg_basis_rate": -3.5064,
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "basis_signal": "深度贴水",
+        "term_structure": "近低远高(contango)",
+        "term_slope": 5.6972,
+        "term_structure_signal": "升水加深，远期看空"
+      },
+      "holding": {
+        "latest_date": "2026-06-16",
+        "total_long": 118759,
+        "total_short": 141040,
+        "net_position": -22281,
+        "long_chg": 8498,
+        "short_chg": 7200,
+        "net_chg": 1298,
+        "ls_ratio": 0.842,
+        "position_signal": "空头占优",
+        "chg_signal": "多头小幅增仓",
+        "citic_long": 22504,
+        "citic_short": 31706,
+        "citic_net": -9202,
+        "citic_long_chg": 1651,
+        "citic_short_chg": 2599,
+        "citic_net_chg": -948,
+        "citic_signal": "偏空",
+        "others_long": 96255,
+        "others_short": 109334,
+        "others_net": -13079,
+        "others_long_chg": 6847,
+        "others_short_chg": 4601,
+        "others_net_chg": 2246,
+        "others_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "citic_vs_others_daily_ops": {
+          "citic_long_chg": 1651,
+          "citic_short_chg": 2599,
+          "citic_net_chg": -948,
+          "citic_long_action": "加多",
+          "citic_short_action": "加空",
+          "citic_ops_mode": "双开",
+          "citic_net_dir": "加空",
+          "citic_strength": 948,
+          "others_long_chg": 6847,
+          "others_short_chg": 4601,
+          "others_net_chg": 2246,
+          "others_long_action": "加多",
+          "others_short_action": "加空",
+          "others_ops_mode": "双开",
+          "others_net_dir": "加多",
+          "others_strength": 2246,
+          "direction_compare": "分歧",
+          "ops_intensity": "其他机构主导"
+        },
+        "top10_long": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "long_hld": 22504,
+            "long_chg": 1651
+          },
+          {
+            "rank": 2,
+            "broker": "国泰君安(代客)",
+            "long_hld": 22280,
+            "long_chg": 1081
+          },
+          {
+            "rank": 3,
+            "broker": "海通期货(代客)",
+            "long_hld": 9696,
+            "long_chg": 2411
+          },
+          {
+            "rank": 4,
+            "broker": "一德期货(代客)",
+            "long_hld": 6641,
+            "long_chg": 178
+          },
+          {
+            "rank": 5,
+            "broker": "东证期货(代客)",
+            "long_hld": 6203,
+            "long_chg": 419
+          },
+          {
+            "rank": 6,
+            "broker": "银河期货(代客)",
+            "long_hld": 6102,
+            "long_chg": 119
+          },
+          {
+            "rank": 7,
+            "broker": "华泰期货(代客)",
+            "long_hld": 4729,
+            "long_chg": 518
+          },
+          {
+            "rank": 8,
+            "broker": "光大期货(代客)",
+            "long_hld": 4340,
+            "long_chg": 94
+          },
+          {
+            "rank": 9,
+            "broker": "国投期货(代客)",
+            "long_hld": 4025,
+            "long_chg": -65
+          },
+          {
+            "rank": 10,
+            "broker": "宝城期货(代客)",
+            "long_hld": 3919,
+            "long_chg": -8
+          }
+        ],
+        "top10_short": [
+          {
+            "rank": 1,
+            "broker": "中信期货(代客)",
+            "short_hld": 31706,
+            "short_chg": 2599
+          },
+          {
+            "rank": 2,
+            "broker": "国泰君安(代客)",
+            "short_hld": 22640,
+            "short_chg": 1385
+          },
+          {
+            "rank": 3,
+            "broker": "华泰期货(代客)",
+            "short_hld": 15457,
+            "short_chg": -227
+          },
+          {
+            "rank": 4,
+            "broker": "海通期货(代客)",
+            "short_hld": 8640,
+            "short_chg": 1188
+          },
+          {
+            "rank": 5,
+            "broker": "银河期货(代客)",
+            "short_hld": 6144,
+            "short_chg": 370
+          },
+          {
+            "rank": 6,
+            "broker": "东证期货(代客)",
+            "short_hld": 5894,
+            "short_chg": 142
+          },
+          {
+            "rank": 7,
+            "broker": "广发期货(代客)",
+            "short_hld": 4321,
+            "short_chg": 832
+          },
+          {
+            "rank": 8,
+            "broker": "瑞银期货(代客)",
+            "short_hld": 4247,
+            "short_chg": 0
+          },
+          {
+            "rank": 9,
+            "broker": "中金财富(代客)",
+            "short_hld": 4228,
+            "short_chg": -87
+          },
+          {
+            "rank": 10,
+            "broker": "国投期货(代客)",
+            "short_hld": 4083,
+            "short_chg": 517
+          }
+        ],
+        "top20_institutions": [
+          {
+            "rank": 1,
+            "broker": "华泰期货(代客)",
+            "long_hld": 4729,
+            "short_hld": 15457,
+            "net_position": -10728,
+            "long_chg": 518,
+            "short_chg": -227,
+            "net_chg": 745,
+            "vol": 4757,
+            "vol_chg": 653
+          },
+          {
+            "rank": 2,
+            "broker": "中信期货(代客)",
+            "long_hld": 22504,
+            "short_hld": 31706,
+            "net_position": -9202,
+            "long_chg": 1651,
+            "short_chg": 2599,
+            "net_chg": -948,
+            "vol": 34076,
+            "vol_chg": 188
+          },
+          {
+            "rank": 3,
+            "broker": "一德期货(代客)",
+            "long_hld": 6641,
+            "short_hld": 0,
+            "net_position": 6641,
+            "long_chg": 178,
+            "short_chg": 0,
+            "net_chg": 178,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 4,
+            "broker": "瑞银期货(代客)",
+            "long_hld": 0,
+            "short_hld": 4247,
+            "net_position": -4247,
+            "long_chg": 0,
+            "short_chg": 0,
+            "net_chg": 0,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 5,
+            "broker": "中金财富(代客)",
+            "long_hld": 0,
+            "short_hld": 4228,
+            "net_position": -4228,
+            "long_chg": 0,
+            "short_chg": -87,
+            "net_chg": 87,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 6,
+            "broker": "摩根大通(代客)",
+            "long_hld": 0,
+            "short_hld": 4049,
+            "net_position": -4049,
+            "long_chg": 0,
+            "short_chg": 5,
+            "net_chg": -5,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 7,
+            "broker": "宝城期货(代客)",
+            "long_hld": 3919,
+            "short_hld": 0,
+            "net_position": 3919,
+            "long_chg": -8,
+            "short_chg": 0,
+            "net_chg": -8,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 8,
+            "broker": "浙商期货(代客)",
+            "long_hld": 3360,
+            "short_hld": 0,
+            "net_position": 3360,
+            "long_chg": 56,
+            "short_chg": 0,
+            "net_chg": 56,
+            "vol": 1891,
+            "vol_chg": 363
+          },
+          {
+            "rank": 9,
+            "broker": "兴证期货(代客)",
+            "long_hld": 3274,
+            "short_hld": 0,
+            "net_position": 3274,
+            "long_chg": 560,
+            "short_chg": 0,
+            "net_chg": 560,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 10,
+            "broker": "中金期货(代客)",
+            "long_hld": 0,
+            "short_hld": 3035,
+            "net_position": -3035,
+            "long_chg": 0,
+            "short_chg": -10,
+            "net_chg": 10,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 11,
+            "broker": "申银万国(代客)",
+            "long_hld": 0,
+            "short_hld": 2891,
+            "net_position": -2891,
+            "long_chg": 0,
+            "short_chg": 188,
+            "net_chg": -188,
+            "vol": 2605,
+            "vol_chg": -1677
+          },
+          {
+            "rank": 12,
+            "broker": "招商期货(代客)",
+            "long_hld": 0,
+            "short_hld": 2886,
+            "net_position": -2886,
+            "long_chg": 0,
+            "short_chg": 97,
+            "net_chg": -97,
+            "vol": 1843,
+            "vol_chg": -95
+          },
+          {
+            "rank": 13,
+            "broker": "华闻期货(代客)",
+            "long_hld": 0,
+            "short_hld": 2693,
+            "net_position": -2693,
+            "long_chg": 0,
+            "short_chg": -433,
+            "net_chg": 433,
+            "vol": 4343,
+            "vol_chg": -1363
+          },
+          {
+            "rank": 14,
+            "broker": "南华期货(代客)",
+            "long_hld": 2517,
+            "short_hld": 0,
+            "net_position": 2517,
+            "long_chg": 456,
+            "short_chg": 0,
+            "net_chg": 456,
+            "vol": 1870,
+            "vol_chg": 602
+          },
+          {
+            "rank": 15,
+            "broker": "方正中期(代客)",
+            "long_hld": 2331,
+            "short_hld": 0,
+            "net_position": 2331,
+            "long_chg": 11,
+            "short_chg": 0,
+            "net_chg": 11,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 16,
+            "broker": "大地期货(代客)",
+            "long_hld": 2138,
+            "short_hld": 0,
+            "net_position": 2138,
+            "long_chg": 24,
+            "short_chg": 0,
+            "net_chg": 24,
+            "vol": 0,
+            "vol_chg": 0
+          },
+          {
+            "rank": 17,
+            "broker": "国信期货(代客)",
+            "long_hld": 2535,
+            "short_hld": 4022,
+            "net_position": -1487,
+            "long_chg": 364,
+            "short_chg": -13,
+            "net_chg": 377,
+            "vol": 5153,
+            "vol_chg": 440
+          },
+          {
+            "rank": 18,
+            "broker": "中信建投(代客)",
+            "long_hld": 2913,
+            "short_hld": 4014,
+            "net_position": -1101,
+            "long_chg": 250,
+            "short_chg": 157,
+            "net_chg": 93,
+            "vol": 3381,
+            "vol_chg": 566
+          },
+          {
+            "rank": 19,
+            "broker": "光大期货(代客)",
+            "long_hld": 4340,
+            "short_hld": 3282,
+            "net_position": 1058,
+            "long_chg": 94,
+            "short_chg": 104,
+            "net_chg": -10,
+            "vol": 3114,
+            "vol_chg": 136
+          },
+          {
+            "rank": 20,
+            "broker": "海通期货(代客)",
+            "long_hld": 9696,
+            "short_hld": 8640,
+            "net_position": 1056,
+            "long_chg": 2411,
+            "short_chg": 1188,
+            "net_chg": 1223,
+            "vol": 11547,
+            "vol_chg": 2635
+          }
+        ],
+        "daily_trends": [
+          {
+            "trade_date": "2026-06-08",
+            "total_long": 104686,
+            "total_short": 124021,
+            "net_position": -19335,
+            "total_long_chg": 4007,
+            "total_short_chg": 3722,
+            "net_position_chg": 285,
+            "institution_count": 28,
+            "citic_long": 20306,
+            "citic_short": 26346,
+            "citic_net": -6040,
+            "citic_long_chg": 362,
+            "citic_short_chg": 824,
+            "citic_net_chg": -462,
+            "others_long": 84380,
+            "others_short": 97675,
+            "others_net": -13295,
+            "others_long_chg": 3645,
+            "others_short_chg": 2898,
+            "others_net_chg": 747
+          },
+          {
+            "trade_date": "2026-06-09",
+            "total_long": 101905,
+            "total_short": 119838,
+            "net_position": -17933,
+            "total_long_chg": -2133,
+            "total_short_chg": -4183,
+            "net_position_chg": 2050,
+            "institution_count": 28,
+            "citic_long": 18849,
+            "citic_short": 25164,
+            "citic_net": -6315,
+            "citic_long_chg": -1457,
+            "citic_short_chg": -1182,
+            "citic_net_chg": -275,
+            "others_long": 83056,
+            "others_short": 94674,
+            "others_net": -11618,
+            "others_long_chg": -676,
+            "others_short_chg": -3001,
+            "others_net_chg": 2325
+          },
+          {
+            "trade_date": "2026-06-10",
+            "total_long": 106455,
+            "total_short": 125098,
+            "net_position": -18643,
+            "total_long_chg": 4651,
+            "total_short_chg": 5260,
+            "net_position_chg": -609,
+            "institution_count": 29,
+            "citic_long": 19958,
+            "citic_short": 27164,
+            "citic_net": -7206,
+            "citic_long_chg": 1109,
+            "citic_short_chg": 2000,
+            "citic_net_chg": -891,
+            "others_long": 86497,
+            "others_short": 97934,
+            "others_net": -11437,
+            "others_long_chg": 3542,
+            "others_short_chg": 3260,
+            "others_net_chg": 282
+          },
+          {
+            "trade_date": "2026-06-11",
+            "total_long": 106477,
+            "total_short": 125814,
+            "net_position": -19337,
+            "total_long_chg": 22,
+            "total_short_chg": 716,
+            "net_position_chg": -694,
+            "institution_count": 29,
+            "citic_long": 20227,
+            "citic_short": 27015,
+            "citic_net": -6788,
+            "citic_long_chg": 269,
+            "citic_short_chg": -149,
+            "citic_net_chg": 418,
+            "others_long": 86250,
+            "others_short": 98799,
+            "others_net": -12549,
+            "others_long_chg": -247,
+            "others_short_chg": 865,
+            "others_net_chg": -1112
+          },
+          {
+            "trade_date": "2026-06-12",
+            "total_long": 109877,
+            "total_short": 131271,
+            "net_position": -21394,
+            "total_long_chg": 3400,
+            "total_short_chg": 5457,
+            "net_position_chg": -2057,
+            "institution_count": 29,
+            "citic_long": 20597,
+            "citic_short": 29033,
+            "citic_net": -8436,
+            "citic_long_chg": 370,
+            "citic_short_chg": 2018,
+            "citic_net_chg": -1648,
+            "others_long": 89280,
+            "others_short": 102238,
+            "others_net": -12958,
+            "others_long_chg": 3030,
+            "others_short_chg": 3439,
+            "others_net_chg": -409
+          },
+          {
+            "trade_date": "2026-06-15",
+            "total_long": 110507,
+            "total_short": 133840,
+            "net_position": -23333,
+            "total_long_chg": 849,
+            "total_short_chg": 2569,
+            "net_position_chg": -1720,
+            "institution_count": 28,
+            "citic_long": 20853,
+            "citic_short": 29107,
+            "citic_net": -8254,
+            "citic_long_chg": 256,
+            "citic_short_chg": 74,
+            "citic_net_chg": 182,
+            "others_long": 89654,
+            "others_short": 104733,
+            "others_net": -15079,
+            "others_long_chg": 593,
+            "others_short_chg": 2495,
+            "others_net_chg": -1902
+          },
+          {
+            "trade_date": "2026-06-16",
+            "total_long": 118759,
+            "total_short": 141040,
+            "net_position": -22281,
+            "total_long_chg": 8498,
+            "total_short_chg": 7200,
+            "net_position_chg": 1298,
+            "institution_count": 30,
+            "citic_long": 22504,
+            "citic_short": 31706,
+            "citic_net": -9202,
+            "citic_long_chg": 1651,
+            "citic_short_chg": 2599,
+            "citic_net_chg": -948,
+            "others_long": 96255,
+            "others_short": 109334,
+            "others_net": -13079,
+            "others_long_chg": 6847,
+            "others_short_chg": 4601,
+            "others_net_chg": 2246
+          }
+        ]
+      },
+      "spread": {
+        "near_contract": "IM2609.CFX",
+        "far_contract": "IML2.CFX",
+        "near_price": 7622.6,
+        "far_price": 7844.6,
+        "spread": 222.0,
+        "spread_rate": 2.9124,
+        "spread_zscore": 1.33,
+        "term_structure_shape": "近低远高(Contango)",
+        "spread_trend": "扩大中",
+        "arbitrage_space": "较小(Z-Score正常区间)",
+        "spread_matrix": [
+          {
+            "pair": "IM2609.CFX/IML2.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IM2609.CFX/IM2606.CFX",
+            "spread": 253.4,
+            "spread_rate": 3.0351,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IM2609.CFX/IML.CFX",
+            "spread": 253.4,
+            "spread_rate": 3.0351,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IML2.CFX/IM2606.CFX",
+            "spread": 253.4,
+            "spread_rate": 3.0351,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IML2.CFX/IML.CFX",
+            "spread": 253.4,
+            "spread_rate": 3.0351,
+            "zscore": 1.33
+          },
+          {
+            "pair": "IM2606.CFX/IML.CFX",
+            "spread": 0.0,
+            "spread_rate": 0.0,
+            "zscore": 1.33
+          }
+        ],
+        "score": 37.0
+      },
+      "correlation": {
+        "north_signal": "-",
+        "spot_futures_correlation": "高度正相关(0.99)",
+        "volume_correlation": "量价背离(-0.49)",
+        "lead_lag_signal": "无明显领先滞后",
+        "index_ranking": [
+          {
+            "name": "中证1000",
+            "pct_chg": 0.85,
+            "strength": "偏强"
+          },
+          {
+            "name": "中证500",
+            "pct_chg": 0.54,
+            "strength": "偏强"
+          },
+          {
+            "name": "创业板指",
+            "pct_chg": -4.58,
+            "strength": "弱势"
+          }
+        ],
+        "cross_market_signal": "偏多",
+        "score": 63.0
+      },
+      "keylevels": {
+        "current_price": 8349.0,
+        "pivot": 8318.13,
+        "support_levels": [
+          {
+            "label": "S1",
+            "price": 8245.87,
+            "strength": "强"
+          },
+          {
+            "label": "MA支撑",
+            "price": 8159.78,
+            "strength": "中"
+          },
+          {
+            "label": "S2",
+            "price": 8142.73,
+            "strength": "强"
+          },
+          {
+            "label": "S3",
+            "price": 8070.47,
+            "strength": "弱"
+          },
+          {
+            "label": "近20日低点",
+            "price": 7740.0,
+            "strength": "强"
+          }
+        ],
+        "resistance_levels": [
+          {
+            "label": "R1",
+            "price": 8421.27,
+            "strength": "强"
+          },
+          {
+            "label": "R2",
+            "price": 8493.53,
+            "strength": "强"
+          },
+          {
+            "label": "近20日高点",
+            "price": 8580.4,
+            "strength": "强"
+          },
+          {
+            "label": "R3",
+            "price": 8596.67,
+            "strength": "弱"
+          }
+        ],
+        "gaps": [
+          {
+            "date": "20260608",
+            "type": "向下缺口",
+            "upper": 8012.4,
+            "lower": 7995.0,
+            "size": 17.4
+          }
+        ],
+        "ma_levels": [
+          {
+            "period": 5,
+            "value": 8071.16
+          },
+          {
+            "period": 10,
+            "value": 8051.18
+          },
+          {
+            "period": 20,
+            "value": 8159.78
+          }
+        ],
+        "nearest_support": 8245.87,
+        "nearest_resistance": 8421.27,
+        "upside_space": 0.87,
+        "downside_space": 1.24,
+        "key_signal": "多空空间均衡, 中性",
+        "score": 58.0
+      },
+      "arbitrage": {
+        "spot_futures_arbitrage": {
+          "basis": -300.01,
+          "basis_rate": -3.4404,
+          "carry_cost": 77.0,
+          "net_basis": 223.01,
+          "signal": "反套(卖现买期)",
+          "arbitrage_space": "较大",
+          "days_to_expiry": 105
+        },
+        "cross_period_arbitrage": {
+          "near_contract": "IM2609.CFX",
+          "far_contract": "IML2.CFX",
+          "spread": 222.0,
+          "spread_rate": 2.9124,
+          "zscore": 1.33,
+          "signal": "轻仓反套",
+          "arbitrage_space": "较小",
+          "spread_trend": "扩大中"
+        },
+        "hedge_ratio": {
+          "beta": 0.8334,
+          "optimal_ratio": 0.83,
+          "method": "OLS回归",
+          "signal": "做多期货对冲"
+        },
+        "overall_signal": "反套(卖现买期)",
+        "score": 65.0
+      }
+    }
+  },
+  "composite": {
+    "avg_score": 54.4,
+    "market_env": "中性",
+    "divergence_signal": "低分化（品种走势趋同）",
+    "symbol_scores": {
+      "IF": 47.5,
+      "IC": 57.8,
+      "IH": 56.0,
+      "IM": 56.3
+    },
+    "details": {
+      "IF": {
+        "trend": "横盘整理",
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "position_signal": "空头占优",
+        "citic_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "trend_score": 40,
+        "sentiment_score": 65,
+        "holding_score": 25,
+        "spread_score": 47.0,
+        "corr_score": 63.0,
+        "keylevels_score": 42.0,
+        "arb_score": 65.0
+      },
+      "IC": {
+        "trend": "多头趋势",
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "position_signal": "空头占优",
+        "citic_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "trend_score": 70,
+        "sentiment_score": 65,
+        "holding_score": 33,
+        "spread_score": 47.0,
+        "corr_score": 63.0,
+        "keylevels_score": 58.0,
+        "arb_score": 65.0
+      },
+      "IH": {
+        "trend": "多头趋势",
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "position_signal": "空头占优",
+        "citic_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "trend_score": 70,
+        "sentiment_score": 65,
+        "holding_score": 25,
+        "spread_score": 47.0,
+        "corr_score": 63.0,
+        "keylevels_score": 52.0,
+        "arb_score": 65.0
+      },
+      "IM": {
+        "trend": "多头趋势",
+        "sentiment": "贴水偏深，市场偏多预期强",
+        "position_signal": "空头占优",
+        "citic_signal": "偏空",
+        "citic_vs_others_signal": "方向一致（空头）",
+        "trend_score": 70,
+        "sentiment_score": 65,
+        "holding_score": 33,
+        "spread_score": 37.0,
+        "corr_score": 63.0,
+        "keylevels_score": 58.0,
+        "arb_score": 65.0
+      }
+    },
+    "suggestions": [
+      "市场情绪中性，建议观望为主，等待方向明确后再做决策。",
+      "中信期货在 IF、IC、IH、IM 上偏空，需警惕下行风险。",
+      "建议关注宏观经济数据和政策面变化，结合技术面综合判断。"
+    ]
+  }
+}

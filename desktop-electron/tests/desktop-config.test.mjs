@@ -29,6 +29,13 @@ test("desktop default config enables the agents API used by the desktop UI", () 
   assert.match(embeddedConfig, /agents_api:\s*\n\s+enabled:\s+true/);
 });
 
+test("desktop default config includes coding agent settings", () => {
+  assert.match(embeddedConfig, /coding_agent:\s*\n\s+enabled:\s+true/);
+  assert.match(embeddedConfig, /default_permission_mode:\s+safe-only/);
+  assert.match(embeddedConfig, /worktree:\s*\n\s+enabled:\s+true/);
+  assert.match(embeddedConfig, /frameworks:\s*\n\s+- pytest\n\s+- jest\n\s+- vitest\n\s+- go test/);
+});
+
 test("desktop default config stores sqlite under the desktop data directory", () => {
   assert.match(embeddedConfig, /database:\s*\n\s+backend:\s+sqlite\n\s+sqlite_dir:\s+\$KKOCLAW_DATA_DIR/);
 });

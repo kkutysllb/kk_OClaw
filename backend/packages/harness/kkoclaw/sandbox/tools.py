@@ -10,6 +10,7 @@ from langchain.tools import tool
 from kkoclaw.agents.thread_state import ThreadDataState
 from kkoclaw.config import get_app_config
 from kkoclaw.config.paths import VIRTUAL_PATH_PREFIX
+from kkoclaw.coding_core.change_tracking import record_runtime_file_change
 from kkoclaw.sandbox.exceptions import (
     SandboxError,
     SandboxNotFoundError,
@@ -673,6 +674,18 @@ def validate_local_tool_path(path: str, thread_data: ThreadDataState | None, *, 
             raise PermissionError(f"Write access to read-only mount is not allowed: {path}")
         return
 
+    # Project-root paths (Coding Agent) — real absolute paths pointing
+    # into the user's project directory. The project_root is set by
+    # ThreadDataMiddleware when run config includes ``project_root``.
+    project_root = thread_data.get("project_root")
+    if project_root and Path(path).is_absolute():
+        _reject_path_traversal(path)
+        try:
+            Path(path).resolve().relative_to(Path(project_root).resolve())
+            return
+        except ValueError:
+            raise PermissionError(f"Access denied: path is outside the project root ({project_root})")
+
     raise PermissionError(f"Only paths under {VIRTUAL_PATH_PREFIX}/, {_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, or configured mount paths are allowed")
 
 
@@ -704,6 +717,17 @@ def _validate_resolved_user_data_path(resolved: Path, thread_data: ThreadDataSta
     raise PermissionError("Access denied: path traversal detected")
 
 
+def _validate_resolved_project_root_path(resolved: Path, thread_data: ThreadDataState) -> bool:
+    project_root = thread_data.get("project_root")
+    if not project_root:
+        return False
+    try:
+        resolved.relative_to(Path(project_root).resolve())
+        return True
+    except ValueError:
+        raise PermissionError(f"Access denied: path is outside the project root ({project_root})") from None
+
+
 def _resolve_and_validate_user_data_path(path: str, thread_data: ThreadDataState) -> str:
     """Resolve a /mnt/user-data virtual path and validate it stays in bounds.
 
@@ -711,6 +735,8 @@ def _resolve_and_validate_user_data_path(path: str, thread_data: ThreadDataState
     """
     resolved_str = replace_virtual_path(path, thread_data)
     resolved = Path(resolved_str).resolve()
+    if Path(path).is_absolute() and _validate_resolved_project_root_path(resolved, thread_data):
+        return str(resolved)
     _validate_resolved_user_data_path(resolved, thread_data)
     return str(resolved)
 
@@ -953,6 +979,9 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
 
     unsafe_paths: list[str] = []
     allowed_paths = _get_mcp_allowed_paths()
+    project_root = thread_data.get("project_root")
+    if project_root:
+        allowed_paths.append(str(Path(project_root).resolve()) + "/")
     _validate_local_bash_shell_tokens(command, allowed_paths)
     url_spans = _non_file_url_spans(command)
 
@@ -1699,7 +1728,18 @@ def write_file_tool(
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):
+            try:
+                before = sandbox.read_file(path)
+            except FileNotFoundError:
+                before = None
             sandbox.write_file(path, content, append)
+            after = sandbox.read_file(path)
+            record_runtime_file_change(
+                runtime,
+                file_path=path,
+                before=before,
+                after=after,
+            )
         return "OK"
     except SandboxError as e:
         return _format_write_file_error(requested_path, e, runtime)
@@ -1765,6 +1805,7 @@ def str_replace_tool(
             content = sandbox.read_file(path)
             if not content:
                 return "OK"
+            before = content
             if old_str not in content:
                 return f"Error: String to replace not found in file: {requested_path}"
             if replace_all:
@@ -1772,6 +1813,12 @@ def str_replace_tool(
             else:
                 content = content.replace(old_str, new_str, 1)
             sandbox.write_file(path, content)
+            record_runtime_file_change(
+                runtime,
+                file_path=path,
+                before=before,
+                after=content,
+            )
         return "OK"
     except SandboxError as e:
         return f"Error: {e}"

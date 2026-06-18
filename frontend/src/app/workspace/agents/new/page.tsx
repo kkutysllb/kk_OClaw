@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
+import { FollowupsProvider } from "@/components/workspace/followups-context";
 import { MessageList } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import type { Agent } from "@/core/agents";
@@ -351,8 +352,9 @@ export default function NewAgentPage() {
   }
 
   return (
-    <ThreadContext.Provider value={{ thread }}>
-      <ArtifactsProvider>
+    <FollowupsProvider>
+      <ThreadContext.Provider value={{ thread }}>
+        <ArtifactsProvider>
         <div className="flex size-full flex-col">
           {header}
 
@@ -418,7 +420,8 @@ export default function NewAgentPage() {
             </div>
           </main>
         </div>
-      </ArtifactsProvider>
-    </ThreadContext.Provider>
+        </ArtifactsProvider>
+      </ThreadContext.Provider>
+    </FollowupsProvider>
   );
 }

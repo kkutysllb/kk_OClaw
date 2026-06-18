@@ -1,8 +1,9 @@
+from .coding_agent import make_coding_agent
 from .factory import create_kkoclaw_agent
 from .features import Next, Prev, RuntimeFeatures
 from .lead_agent import make_lead_agent
 from .lead_agent.prompt import prime_enabled_skills_cache
-from .thread_state import SandboxState, ThreadState
+from .thread_state import CodingThreadState, SandboxState, ThreadState
 
 # LangGraph imports kkoclaw.agents when registering the graph. Prime the
 # enabled-skills cache here so the request path can usually read a warm cache
@@ -15,6 +16,8 @@ __all__ = [
     "Next",
     "Prev",
     "make_lead_agent",
+    "make_coding_agent",
     "SandboxState",
     "ThreadState",
+    "CodingThreadState",
 ]

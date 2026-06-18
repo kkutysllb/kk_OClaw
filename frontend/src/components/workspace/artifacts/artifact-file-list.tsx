@@ -13,9 +13,7 @@ import {
 import { urlOfArtifact } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { installSkill } from "@/core/skills/api";
-import {
-  downloadArtifactUrl,
-} from "@/core/artifacts/authenticated-url";
+import { downloadArtifactUrl } from "@/core/artifacts/authenticated-url";
 import {
   getFileExtensionDisplayName,
   getFileIcon,
@@ -28,10 +26,12 @@ import { useArtifacts } from "./context";
 export function ArtifactFileList({
   className,
   files,
+  onSelectFile,
   threadId,
 }: {
   className?: string;
   files: string[];
+  onSelectFile?: (filepath: string) => void;
   threadId: string;
 }) {
   const { t } = useI18n();
@@ -41,10 +41,14 @@ export function ArtifactFileList({
 
   const handleClick = useCallback(
     (filepath: string) => {
+      if (onSelectFile) {
+        onSelectFile?.(filepath);
+        return;
+      }
       selectArtifact(filepath);
       setOpen(true);
     },
-    [selectArtifact, setOpen],
+    [onSelectFile, selectArtifact, setOpen],
   );
 
   const handleInstallSkill = useCallback(

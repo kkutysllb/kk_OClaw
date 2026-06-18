@@ -44,7 +44,7 @@ import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 import { ArtifactLink } from "../citations/artifact-link";
-import { useThread } from "../messages/context";
+import { useOptionalThread } from "../messages/context";
 import { Tooltip } from "../tooltip";
 
 import { useArtifacts } from "./context";
@@ -53,14 +53,17 @@ export function ArtifactFileDetail({
   className,
   filepath: filepathFromProps,
   threadId,
+  isMock: isMockFromProps = false,
 }: {
   className?: string;
   filepath: string;
   threadId: string;
+  isMock?: boolean;
 }) {
   const { t } = useI18n();
   const { artifacts, setOpen, select } = useArtifacts();
-  const { isMock } = useThread();
+  const threadContext = useOptionalThread();
+  const isMock = threadContext?.isMock ?? isMockFromProps;
   const isWriteFile = useMemo(() => {
     return filepathFromProps.startsWith("write-file:");
   }, [filepathFromProps]);

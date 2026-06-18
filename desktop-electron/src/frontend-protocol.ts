@@ -112,6 +112,16 @@ export function resolveFrontendRequestPath(input: string): string {
     return "workspace/chats/new.html";
   }
 
+  // Coding workspace: "workspace/coding" is pre-rendered as a static page,
+  // but "workspace/coding/<projectId>" is a dynamic route. Fall back to the
+  // coding page shell — the client-side router renders the correct project.
+  if (
+    clean.startsWith("workspace/coding/") &&
+    !clean.startsWith("workspace/coding/new")
+  ) {
+    return "workspace/coding.html";
+  }
+
   return `${clean}.html`;
 }
 

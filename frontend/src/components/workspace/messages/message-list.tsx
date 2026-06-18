@@ -16,7 +16,6 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
-  hasToolCalls,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { Subtask } from "@/core/tasks";
@@ -25,12 +24,12 @@ import type { AgentThreadState } from "@/core/threads";
 import { cn } from "@/lib/utils";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
+import { FollowupPanel } from "../followups-context";
 import { StreamingIndicator } from "../streaming-indicator";
 
 import { MarkdownContent } from "./markdown-content";
 import { MessageGroup } from "./message-group";
 import { MessageListItem } from "./message-list-item";
-import { MessageTokenUsageList } from "./message-token-usage";
 import { MessageListSkeleton } from "./skeleton";
 import { SubtaskCard } from "./subtask-card";
 
@@ -149,7 +148,6 @@ export function MessageList({
   threadId,
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
-  tokenUsageEnabled = false,
   hasMoreHistory,
   loadMoreHistory,
   isHistoryLoading,
@@ -158,7 +156,6 @@ export function MessageList({
   threadId: string;
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
-  tokenUsageEnabled?: boolean;
   hasMoreHistory?: boolean;
   loadMoreHistory?: () => void;
   isHistoryLoading?: boolean;
@@ -194,7 +191,6 @@ export function MessageList({
                   threadId={threadId}
                   message={msg}
                   isLoading={thread.isLoading}
-                  tokenUsageEnabled={tokenUsageEnabled}
                 />
               );
             });
@@ -207,11 +203,6 @@ export function MessageList({
                     content={extractContentFromMessage(message)}
                     isLoading={thread.isLoading}
                     rehypePlugins={rehypePlugins}
-                  />
-                  <MessageTokenUsageList
-                    enabled={tokenUsageEnabled}
-                    isLoading={thread.isLoading}
-                    messages={group.messages}
                   />
                 </div>
               );
@@ -236,11 +227,6 @@ export function MessageList({
                   />
                 )}
                 <ArtifactFileList files={files} threadId={threadId} />
-                <MessageTokenUsageList
-                  enabled={tokenUsageEnabled}
-                  isLoading={thread.isLoading}
-                  messages={group.messages}
-                />
               </div>
             );
           } else if (group.type === "assistant:subagent") {
@@ -333,34 +319,26 @@ export function MessageList({
                 className="relative z-1 flex flex-col gap-2"
               >
                 {results}
-                <MessageTokenUsageList
-                  enabled={tokenUsageEnabled}
-                  isLoading={thread.isLoading}
-                  messages={group.messages}
-                />
               </div>
             );
           }
-          const tokenUsageMessages = group.messages.filter(
-            (message) =>
-              message.type === "ai" &&
-              (hasToolCalls(message) ? true : !hasContent(message)),
-          );
           return (
             <div key={"group-" + group.id} className="w-full">
               <MessageGroup
                 messages={group.messages}
                 isLoading={thread.isLoading}
               />
-              <MessageTokenUsageList
-                enabled={tokenUsageEnabled}
-                isLoading={thread.isLoading}
-                messages={tokenUsageMessages}
-              />
             </div>
           );
         })}
         {thread.isLoading && <StreamingIndicator className="my-4" />}
+        {/*
+          Follow-up suggestions are rendered as the last element of the
+          conversation flow instead of a floating overlay above the input box.
+          Data & click handling are supplied via FollowupsContext (owned by
+          InputBox), so this panel stays anchored to the page content.
+        */}
+        {!thread.isLoading && <FollowupPanel className="my-4" />}
         <div style={{ height: `${paddingBottom}px` }} />
       </ConversationContent>
     </Conversation>

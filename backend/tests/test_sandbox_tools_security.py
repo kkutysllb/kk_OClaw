@@ -183,6 +183,26 @@ def test_validate_local_tool_path_allows_user_data_write() -> None:
     validate_local_tool_path(f"{VIRTUAL_PATH_PREFIX}/workspace/file.txt", _THREAD_DATA, read_only=False)
 
 
+def test_validate_local_tool_path_allows_coding_project_root_absolute_path() -> None:
+    thread_data = {
+        **_THREAD_DATA,
+        "project_root": "/Users/test/project",
+    }
+
+    validate_local_tool_path("/Users/test/project/src/app.py", thread_data)
+    validate_local_tool_path("/Users/test/project/src/app.py", thread_data, read_only=True)
+
+
+def test_validate_local_tool_path_blocks_absolute_path_outside_coding_project_root() -> None:
+    thread_data = {
+        **_THREAD_DATA,
+        "project_root": "/Users/test/project",
+    }
+
+    with pytest.raises(PermissionError, match="outside the project root"):
+        validate_local_tool_path("/Users/test/other/notes.md", thread_data)
+
+
 def test_validate_local_tool_path_rejects_traversal_in_user_data() -> None:
     """Path traversal via .. in user-data paths must be rejected."""
     with pytest.raises(PermissionError, match="path traversal"):
@@ -267,6 +287,38 @@ def test_resolve_and_validate_user_data_path_blocks_traversal(tmp_path: Path) ->
         _resolve_and_validate_user_data_path("/mnt/user-data/workspace/../../../etc/passwd", thread_data)
 
 
+def test_resolve_and_validate_user_data_path_allows_coding_project_root_absolute_path(tmp_path: Path) -> None:
+    """Coding Agent project files may be resolved from their real absolute path."""
+    project_root = tmp_path / "project"
+    src = project_root / "src"
+    src.mkdir(parents=True)
+    file_path = src / "app.py"
+    file_path.write_text("print('ok')\n")
+    thread_data = {
+        **_THREAD_DATA,
+        "project_root": str(project_root),
+    }
+
+    resolved = _resolve_and_validate_user_data_path(str(file_path), thread_data)
+
+    assert resolved == str(file_path.resolve())
+
+
+def test_resolve_and_validate_user_data_path_blocks_absolute_path_outside_coding_project_root(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    outside = tmp_path / "other" / "notes.md"
+    outside.parent.mkdir()
+    outside.write_text("secret\n")
+    thread_data = {
+        **_THREAD_DATA,
+        "project_root": str(project_root),
+    }
+
+    with pytest.raises(PermissionError, match="outside the project root"):
+        _resolve_and_validate_user_data_path(str(outside), thread_data)
+
+
 # ---------- replace_virtual_paths_in_command ----------
 
 
@@ -325,6 +377,19 @@ def test_validate_local_bash_command_paths_allows_virtual_and_system_paths() -> 
         "/bin/echo ok > /mnt/user-data/workspace/out.txt && cat /dev/null",
         _THREAD_DATA,
     )
+
+
+def test_validate_local_bash_command_paths_allows_coding_project_root_absolute_path(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    src = project_root / "src"
+    src.mkdir(parents=True)
+    thread_data = {
+        **_THREAD_DATA,
+        "project_root": str(project_root),
+    }
+
+    validate_local_bash_command_paths(f"ls {src}", thread_data)
+    validate_local_bash_command_paths(f"cd {project_root} && rg TODO src", thread_data)
 
 
 def test_validate_local_bash_command_paths_blocks_traversal_in_user_data() -> None:
