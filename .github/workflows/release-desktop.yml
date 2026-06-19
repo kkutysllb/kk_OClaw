@@ -286,16 +286,44 @@ jobs:
 
       - name: Build Electron app
         working-directory: desktop-electron
-        # macOS default ulimit -n is 256, which is far too low for
-        # signing a large Electron bundle (readDirectoryAndSign opens
-        # every file). Bump it to 10240 as a safety net even after the
-        # test-data cleanup above.
+        # MUST use bash on all three platforms: Windows runners default to
+        # PowerShell, which doesn't understand `[[ ]]` or `ulimit`.
+        # GitHub's windows runner ships Git Bash, so `shell: bash` works
+        # everywhere. The `if macOS` guard ensures ulimit only runs where
+        # it's needed (macOS default ulimit -n is 256, too low for signing
+        # a large Electron bundle).
+        #
+        # RETRY: Apple's notarization API (notarytool) intermittently
+        # returns HTTP 500 "Internal Server Error" with "Please try
+        # again at a later time". This is a server-side hiccup on
+        # Apple's end, not a config error — the build typically succeeds
+        # on retry. We wrap electron-builder in a retry loop (up to 3
+        # attempts) so transient Apple outages don't fail the whole
+        # release. Only the notarize step is flaky; signing + packaging
+        # are deterministic, so retrying the whole command is safe.
+        # The 30s sleep gives Apple's service time to recover.
+        shell: bash
         run: |
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             ulimit -n 10240 || true
             echo "ulimit -n = $(ulimit -n)"
           fi
-          pnpm exec electron-builder ${{ matrix.build_args }} --publish always
+
+          MAX_ATTEMPTS=3
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "=== electron-builder attempt $attempt / $MAX_ATTEMPTS ==="
+            if pnpm exec electron-builder ${{ matrix.build_args }} --publish always; then
+              echo "✓ electron-builder succeeded on attempt $attempt"
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "⚠ electron-builder failed (attempt $attempt). Retrying in 30s..."
+              sleep 30
+            fi
+          done
+
+          echo "✗ electron-builder failed after $MAX_ATTEMPTS attempts"
+          exit 1
 
       - name: Show release output
         if: always()

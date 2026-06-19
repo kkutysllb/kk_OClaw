@@ -52,12 +52,16 @@ mac:
   entitlements: build/Entitlements.plist
   entitlementsInherit: build/Entitlements.plist
   icon: build/icon.icns
-  # Notarization is handled automatically by electron-builder v25 when
-  # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID are set.
-  # The afterSign hook below provides an explicit notarize step as a
-  # safety net in case auto-notarize behaviour changes between versions.
-  notarize:
-    teamId: "${env.APPLE_TEAM_ID}"
+  # Notarization: electron-builder v25 auto-notarizes when ALL of these
+  # env vars are present — APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD,
+  # APPLE_TEAM_ID. We intentionally do NOT set `notarize.teamId` here:
+  # v25 deprecated that field and prints a warning asking for the
+  # APPLE_TEAM_ID env var instead. Leaving notarize unset lets
+  # electron-builder pick up the team id directly from the environment,
+  # matching the documented behaviour and silencing the warning.
+  #
+  # If you ever need to DISABLE notarize (e.g. testing a local build),
+  # pass --config.mac.notarize=false on the electron-builder command line.
 
 dmg:
   title: "${productName} ${version}"
