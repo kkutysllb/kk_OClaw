@@ -189,6 +189,49 @@ jobs:
           test -f desktop-electron/resources/gateway/oclaw-gateway || test -f desktop-electron/resources/gateway/oclaw-gateway.exe
 
       # ════════════════════════════════════════════════════════════════
+      # Strip test data / cache / type-stub files from the PyInstaller
+      # gateway bundle.
+      #
+      # collect_all("numpy") / collect_all("scipy") etc. pull in every
+      # file in the package, including test data like
+      #   numpy/typing/tests/data/fail/*.pyi
+      # which is completely useless at runtime but inflates the file
+      # count to tens of thousands. On macOS, electron-builder's
+      # code-signing step (readDirectoryAndSign) opens every file in the
+      # bundle recursively and hits the default `ulimit -n` (256),
+      # failing with:
+      #   EMFILE: too many open files
+      # Removing these dirs cuts the bundle file count dramatically
+      # and also reduces DMG size.
+      # ════════════════════════════════════════════════════════════════
+      - name: Strip test/cache/stub files from gateway bundle
+        shell: bash
+        run: |
+          INTERNAL="desktop-electron/resources/gateway/_internal"
+          if [ ! -d "$INTERNAL" ]; then
+            echo "WARNING: $INTERNAL not found, skipping cleanup"
+            exit 0
+          fi
+
+          echo "=== Before cleanup ==="
+          echo "File count: $(find "$INTERNAL" -type f | wc -l)"
+          echo "Disk usage: $(du -sh "$INTERNAL" | cut -f1)"
+
+          # 1. Remove test directories (numpy/scipy/pandas/etc test data)
+          find "$INTERNAL" -type d \( -name "tests" -o -name "test" -o -name "_tests" \) -prune -exec rm -rf {} +
+          # 2. Remove __pycache__ directories
+          find "$INTERNAL" -type d -name "__pycache__" -prune -exec rm -rf {} +
+          # 3. Remove .pyi type-stub files (not needed at runtime —
+          #    these are the specific files that triggered EMFILE)
+          find "$INTERNAL" -name "*.pyi" -delete
+          # 4. Remove .pyc files inside remaining test-like dirs
+          find "$INTERNAL" -path "*/testing/*" -name "*.pyc" -delete
+
+          echo "=== After cleanup ==="
+          echo "File count: $(find "$INTERNAL" -type f | wc -l)"
+          echo "Disk usage: $(du -sh "$INTERNAL" | cut -f1)"
+
+      # ════════════════════════════════════════════════════════════════
       # Build the Next.js frontend as a static export (frontend/out/).
       # electron-builder.yml references `../frontend/out` in
       # extraResources, so this MUST run before the electron-builder
@@ -243,7 +286,15 @@ jobs:
 
       - name: Build Electron app
         working-directory: desktop-electron
+        # macOS default ulimit -n is 256, which is far too low for
+        # signing a large Electron bundle (readDirectoryAndSign opens
+        # every file). Bump it to 10240 as a safety net even after the
+        # test-data cleanup above.
         run: |
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            ulimit -n 10240 || true
+            echo "ulimit -n = $(ulimit -n)"
+          fi
           pnpm exec electron-builder ${{ matrix.build_args }} --publish always
 
       - name: Show release output
