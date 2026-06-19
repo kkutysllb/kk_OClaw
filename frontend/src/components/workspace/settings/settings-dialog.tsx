@@ -3,6 +3,7 @@
 import {
   BellIcon,
   BrainIcon,
+  DownloadIcon,
   KeyRoundIcon,
   PaletteIcon,
   SettingsIcon,
@@ -22,6 +23,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AccountSettingsPage } from "@/components/workspace/settings/account-settings-page";
 import { AppearanceSettingsPage } from "@/components/workspace/settings/appearance-settings-page";
 import { ConfigSettingsPage } from "@/components/workspace/settings/config-settings-page";
+import { ImportSettingsPage } from "@/components/workspace/settings/import-settings-page";
+import { ImportWizardDialog } from "@/components/workspace/settings/import-wizard-dialog";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
 import { SkillModelsSettingsPage } from "@/components/workspace/settings/skill-models-settings-page";
@@ -37,7 +40,8 @@ type SettingsSection =
   | "memory"
   | "tools"
   | "notification"
-  | "skillModels";
+  | "skillModels"
+  | "import";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -90,6 +94,12 @@ const SECTION_COLORS: Record<
     bar: "from-fuchsia-400 to-violet-500",
     bg: "bg-fuchsia-500/10",
   },
+  import: {
+    iconActive: "text-emerald-400",
+    iconInactive: "text-emerald-500",
+    bar: "from-emerald-400 to-teal-500",
+    bg: "bg-emerald-500/10",
+  },
 };
 
 export function SettingsDialog(props: SettingsDialogProps) {
@@ -97,6 +107,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const { t } = useI18n();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
@@ -143,6 +154,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
           label: t.settings.sections.skillModels,
           icon: KeyRoundIcon,
         });
+        base.push({
+          id: "import" as const,
+          label: t.settings.sections.import,
+          icon: DownloadIcon,
+        });
       }
       return base;
     },
@@ -154,6 +170,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.notification,
       t.settings.sections.config,
       t.settings.sections.skillModels,
+      t.settings.sections.import,
     ],
   );
   return (
@@ -228,9 +245,18 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "notification" && <NotificationSettingsPage />}
               {activeSection === "config" && <ConfigSettingsPage />}
               {activeSection === "skillModels" && <SkillModelsSettingsPage />}
+              {activeSection === "import" && (
+                <ImportSettingsPage onOpenWizard={() => setWizardOpen(true)} />
+              )}
             </div>
           </ScrollArea>
         </div>
+        {isDesktop() && (
+          <ImportWizardDialog
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

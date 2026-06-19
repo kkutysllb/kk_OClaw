@@ -13,6 +13,7 @@ export interface Model {
   supports_thinking?: boolean;
   supports_vision?: boolean;
   supports_reasoning_effort?: boolean;
+  reasoning_effort_values?: string[] | null;
   when_thinking_enabled?: Record<string, unknown> | null;
   when_thinking_disabled?: Record<string, unknown> | null;
 }
@@ -31,6 +32,7 @@ export interface ModelRequest {
   supports_thinking?: boolean;
   supports_vision?: boolean;
   supports_reasoning_effort?: boolean;
+  reasoning_effort_values?: string[] | null;
   when_thinking_enabled?: Record<string, unknown> | null;
   when_thinking_disabled?: Record<string, unknown> | null;
 }

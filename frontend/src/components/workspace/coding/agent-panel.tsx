@@ -7,7 +7,7 @@ import {
   TerminalIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
@@ -69,11 +69,22 @@ export function AgentPanel({ projectId, onThreadIdChange }: AgentPanelProps) {
 function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
   const { project } = useProject(projectId);
   const queryClient = useQueryClient();
-  // Start with no thread; the first sendMessage() call will create one via the
-  // SDK. After creation, track the real thread ID so subsequent messages go to
-  // the same conversation.  Settings are keyed per-project (not per-thread) so
-  // config choices persist across coding sessions.
-  const [threadId, setThreadId] = useState<string | undefined>(undefined);
+  // Persist the coding agent thread ID per-project so switching workspace tabs
+  // (which unmounts this component) and coming back can rejoin the same run.
+  // Without this, the backend keeps the run alive (onDisconnect:"continue") but
+  // the frontend loses track of which thread to reconnect to.
+  const threadIdStorageKey = `coding:thread:${projectId}`;
+  const [threadId, setThreadId] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    return window.localStorage.getItem(threadIdStorageKey) || undefined;
+  });
+  useEffect(() => {
+    if (threadId) {
+      window.localStorage.setItem(threadIdStorageKey, threadId);
+    } else {
+      window.localStorage.removeItem(threadIdStorageKey);
+    }
+  }, [threadId, threadIdStorageKey]);
   const uiThreadId = threadId ?? projectId;
   const [settings, setSettings] = useThreadSettings(`coding:${projectId}`);
   const [showFollowups, setShowFollowups] = useState(false);

@@ -100,6 +100,38 @@ function getStreamErrorMessage(error: unknown): string {
   return "Request failed.";
 }
 
+/**
+ * Detect a 409 Conflict from the backend, raised when a thread already has
+ * an active run and a new run was created with the default "reject"
+ * multitask strategy. In the desktop app this is common: switching tabs
+ * unmounts the chat page (dropping the SSE connection) but
+ * `onDisconnect:"continue"` keeps the run alive, so coming back and
+ * resuming the conversation collides with the orphaned run. Detected in
+ * `sendMessage` to retry with the "interrupt" strategy instead of leaving
+ * the user stuck until the backend is restarted.
+ */
+function isThreadBusyConflict(error: unknown): boolean {
+  if (error == null || typeof error !== "object") {
+    return false;
+  }
+  const status = Reflect.get(error, "status");
+  if (status === 409 || status === "409") {
+    return true;
+  }
+  const message = Reflect.get(error, "message");
+  if (
+    typeof message === "string" &&
+    /409|conflict|already running/i.test(message)
+  ) {
+    return true;
+  }
+  const detail = Reflect.get(error, "detail");
+  if (typeof detail === "string" && /already running|conflict/i.test(detail)) {
+    return true;
+  }
+  return false;
+}
+
 export function useThreadStream({
   threadId,
   context,
@@ -255,6 +287,41 @@ export function useThreadStream({
           message: AIMessage;
         };
         updateSubtask({ id: e.task_id, latestMessage: e.message });
+        return;
+      }
+
+      if (
+        typeof event === "object" &&
+        event !== null &&
+        "type" in event &&
+        event.type === "path_authorization_required"
+      ) {
+        const e = event as {
+          type: "path_authorization_required";
+          path: string;
+          agent_type: string;
+          read_only?: boolean;
+        };
+        // Only the desktop shell has the authorizePath IPC bridge.
+        if (typeof window !== "undefined" && window.oclawDesktop?.authorizePath) {
+          toast.info(
+            `Agent 请求访问路径：\n${e.path}\n请在弹出的对话框中选择是否授权。`,
+          );
+          void window.oclawDesktop
+            .authorizePath({
+              path: e.path,
+              agentType: e.agent_type,
+              threadId: threadIdRef.current ?? undefined,
+            })
+            .then((result) => {
+              if (!result.authorized) {
+                toast.warning(`已拒绝路径访问：${e.path}`);
+              }
+            })
+            .catch(() => {
+              toast.error("路径授权对话框无法显示");
+            });
+        }
         return;
       }
 
@@ -443,56 +510,74 @@ export function useThreadStream({
           }),
         );
 
-        await thread.submit(
-          {
-            messages: [
-              {
-                type: "human",
-                content: [
-                  {
-                    type: "text",
-                    text,
+        // Wrap submit so we can retry with the "interrupt" multitask strategy
+        // when the default "reject" returns 409. Desktop tab-switch leaves an
+        // orphaned run alive (onDisconnect:"continue"); without this retry the
+        // user is stuck and must restart the backend to clear the orphan.
+        const doSubmit = async (strategy?: "interrupt") => {
+          await thread.submit(
+            {
+              messages: [
+                {
+                  type: "human",
+                  content: [
+                    {
+                      type: "text",
+                      text,
+                    },
+                  ],
+                  additional_kwargs: {
+                    ...options?.additionalKwargs,
+                    ...(filesForSubmit.length > 0
+                      ? { files: filesForSubmit }
+                      : {}),
                   },
-                ],
-                additional_kwargs: {
-                  ...options?.additionalKwargs,
-                  ...(filesForSubmit.length > 0
-                    ? { files: filesForSubmit }
-                    : {}),
                 },
+              ],
+            },
+            {
+              threadId: threadId,
+              streamSubgraphs: true,
+              streamResumable: true,
+              // Desktop: keep the task running even if the SSE connection drops
+              // (e.g. macOS App Nap throttling, window switching).  The frontend
+              // will rejoin the stream when it reconnects.
+              onDisconnect: isDesktop() ? "continue" : undefined,
+              multitaskStrategy: strategy,
+              config: {
+                recursion_limit: 10000,
               },
-            ],
-          },
-          {
-            threadId: threadId,
-            streamSubgraphs: true,
-            streamResumable: true,
-            // Desktop: keep the task running even if the SSE connection drops
-            // (e.g. macOS App Nap throttling, window switching).  The frontend
-            // will rejoin the stream when it reconnects.
-            onDisconnect: isDesktop() ? "continue" : undefined,
-            config: {
-              recursion_limit: 10000,
+              context: {
+                ...extraContext,
+                ...context,
+                thinking_enabled: context.mode !== "flash",
+                is_plan_mode: context.mode === "pro" || context.mode === "ultra",
+                subagent_enabled: context.mode === "ultra",
+                reasoning_effort:
+                  context.reasoning_effort ??
+                  (context.mode === "ultra"
+                    ? "high"
+                    : context.mode === "pro"
+                      ? "medium"
+                      : context.mode === "thinking"
+                        ? "low"
+                        : undefined),
+                thread_id: threadId,
+              },
             },
-            context: {
-              ...extraContext,
-              ...context,
-              thinking_enabled: context.mode !== "flash",
-              is_plan_mode: context.mode === "pro" || context.mode === "ultra",
-              subagent_enabled: context.mode === "ultra",
-              reasoning_effort:
-                context.reasoning_effort ??
-                (context.mode === "ultra"
-                  ? "high"
-                  : context.mode === "pro"
-                    ? "medium"
-                    : context.mode === "thinking"
-                      ? "low"
-                      : undefined),
-              thread_id: threadId,
-            },
-          },
-        );
+          );
+        };
+
+        try {
+          await doSubmit();
+        } catch (error) {
+          if (isThreadBusyConflict(error)) {
+            toast.info("已有任务在运行，正在接管并继续…");
+            await doSubmit("interrupt");
+          } else {
+            throw error;
+          }
+        }
         void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
       } catch (error) {
         setOptimisticMessages([]);

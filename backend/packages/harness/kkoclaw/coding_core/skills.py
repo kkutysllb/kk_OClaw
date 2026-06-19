@@ -15,8 +15,13 @@ from typing import Literal
 
 import yaml
 
+from kkoclaw.coding_core.paths import coding_home
+
 logger = logging.getLogger(__name__)
 
+# Relative suffix appended to a project root for project-scoped coding skills.
+# The GLOBAL root is resolved via ``coding_home() / "skills"`` (see ``discover``)
+# so the desktop shell redirects to ``~/.oclaw-coding-desktop/skills``.
 CODING_SKILLS_DIR = ".oclaw-coding/skills"
 SKILL_MD_FILE = "SKILL.md"
 SKILL_JSON_FILE = "skill.json"
@@ -55,7 +60,7 @@ class CodingSkillRegistry:
         roots: list[tuple[Path, Literal["project", "global"]]] = []
         if project_root:
             roots.append((Path(project_root) / CODING_SKILLS_DIR, "project"))
-        roots.append((Path.home() / CODING_SKILLS_DIR, "global"))
+        roots.append((coding_home() / "skills", "global"))
         builtin_root = _builtin_coding_skills_root()
         if builtin_root is not None:
             roots.append((builtin_root, "global"))
@@ -431,7 +436,7 @@ def _state_file_for_scope(*, scope: Literal["project", "global"], project_root: 
         if not project_root:
             raise ValueError("project_root is required for project Coding skill state")
         return Path(project_root).expanduser().resolve() / ".oclaw-coding" / "skill-state.json"
-    return Path.home() / ".oclaw-coding" / "skill-state.json"
+    return coding_home() / "skill-state.json"
 
 
 def _read_state_file(path: Path) -> dict:

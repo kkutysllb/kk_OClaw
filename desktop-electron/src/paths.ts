@@ -9,6 +9,7 @@
 
 import { app } from "electron";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 /**
@@ -86,18 +87,39 @@ export function getFrontendDistDir(): string {
 /**
  * The app's writable data directory.
  *
- * Maps to Electron's `userData` (e.g.
- * `~/Library/Application Support/OClaw` on macOS). The Python gateway's
- * `KKOCLAW_HOME` is set to `<userData>/.kkoclaw` to keep desktop state
- * fully isolated from any local web deployment.
+ * Desktop runs under `~/.kkoclaw-desktop` (NOT Electron's `userData` /
+ * `~/Library/Application Support/...`) so the user can discover and back up
+ * app state directly from their home folder. A `-desktop` suffix keeps it
+ * isolated from a co-located web deployment (which uses `~/.kkoclaw` or
+ * `<repo>/backend/.kkoclaw`). The legacy `userData` layout is migrated on
+ * first run — see `migrateLegacyUserData` in backend.ts.
  */
 export function getAppDataDir(): string {
-  return app.getPath("userData");
+  return join(homedir(), ".kkoclaw-desktop");
 }
 
-/** The gateway state directory (`KKOCLAW_HOME`). */
+/**
+ * The gateway state directory (`KKOCLAW_HOME`).
+ *
+ * On desktop this is the same as `getAppDataDir()` (`~/.kkoclaw-desktop`) —
+ * config.yaml, data/, skills/ etc. all live directly under the home root,
+ * without an extra `.kkoclaw` nesting level. This matches the plan's flat
+ * layout and keeps paths short and user-discoverable.
+ */
 export function getKkoclawHome(): string {
-  return join(getAppDataDir(), ".kkoclaw");
+  return getAppDataDir();
+}
+
+/**
+ * The Coding Agent's dedicated home directory.
+ *
+ * Desktop uses `~/.oclaw-coding-desktop` (suffixed to stay isolated from the
+ * web deployment's `~/.oclaw-coding`). This is injected into the gateway as
+ * `KKOCLAW_CODING_HOME`; the Python side resolves it via
+ * `coding_core.paths.coding_home()`.
+ */
+export function getCodingHome(): string {
+  return join(homedir(), ".oclaw-coding-desktop");
 }
 
 /** The desktop-owned gateway config file. */
@@ -160,12 +182,26 @@ export function getRendererLogPath(): string {
 /**
  * The user-writable skills root.
  *
- * `<userData>/skills/` contains only bundled public skills for the desktop
- * shell. Desktop intentionally does not seed a `custom/` directory so a clean
- * terminal does not inherit or advertise local custom skills.
+ * `~/.kkoclaw-desktop/skills/` contains bundled `public/` skills (seeded on
+ * first run) AND a writable `custom/` directory so users can create their own
+ * skills at runtime. Bundling only ships `public/` (see `oclaw-gateway.spec`);
+ * `custom/` starts empty and is managed by the user via the skills UI.
  */
 export function getSkillsDir(): string {
   return join(getAppDataDir(), "skills");
+}
+
+/**
+ * The persisted file remembering user-granted external paths.
+ *
+ * When an agent tries to read/write outside the default allowed roots
+ * (`~/.kkoclaw-desktop`, `~/.oclaw-coding-desktop`, project roots, system
+ * temp), the desktop shows a system authorization dialog. Accepted paths are
+ * appended here so subsequent access is silent (prefix-matched). File mode is
+ * 0600 — only the current user may read/modify the grant list.
+ */
+export function getGrantedPathsPath(): string {
+  return join(getAppDataDir(), "granted_paths.json");
 }
 
 /**

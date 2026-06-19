@@ -23,6 +23,19 @@ class ModelConfig(BaseModel):
     )
     supports_thinking: bool = Field(default_factory=lambda: False, description="Whether the model supports thinking")
     supports_reasoning_effort: bool = Field(default_factory=lambda: False, description="Whether the model supports reasoning effort")
+    reasoning_effort_values: list[str] | None = Field(
+        default_factory=lambda: None,
+        description=(
+            "Allowed values for the ``reasoning_effort`` parameter accepted by the "
+            "underlying endpoint. When set, any incoming ``reasoning_effort`` value "
+            "that is NOT in this list is mapped to the closest supported value "
+            "(see ``VllmChatModel._normalise_reasoning_effort``). When ``None`` "
+            "(default), the value is forwarded as-is.\n\n"
+            "Example for a vLLM deployment that only accepts 'high'/'max':\n"
+            "  reasoning_effort_values: [high, max]\n"
+            "Then 'low'/'medium' from the frontend will be upgraded to 'high'."
+        ),
+    )
     when_thinking_enabled: dict | None = Field(
         default_factory=lambda: None,
         description="Extra settings to be passed to the model when thinking is enabled",

@@ -117,6 +117,7 @@ export function ModelDialog({
   const [supportsVision, setSupportsVision] = useState(false);
   const [supportsReasoningEffort, setSupportsReasoningEffort] =
     useState(false);
+  const [reasoningEffortValues, setReasoningEffortValues] = useState("");
   const [thinkingEnabled, setThinkingEnabled] = useState("");
   const [thinkingDisabled, setThinkingDisabled] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -144,6 +145,11 @@ export function ModelDialog({
         setSupportsThinking(!!model.supports_thinking);
         setSupportsVision(!!model.supports_vision);
         setSupportsReasoningEffort(!!model.supports_reasoning_effort);
+        setReasoningEffortValues(
+          Array.isArray(model.reasoning_effort_values)
+            ? model.reasoning_effort_values.join(", ")
+            : "",
+        );
         setThinkingEnabled(
           model.when_thinking_enabled
             ? JSON.stringify(model.when_thinking_enabled, null, 2)
@@ -169,6 +175,7 @@ export function ModelDialog({
         setSupportsThinking(false);
         setSupportsVision(false);
         setSupportsReasoningEffort(false);
+        setReasoningEffortValues("");
         setThinkingEnabled("");
         setThinkingDisabled("");
       }
@@ -227,6 +234,12 @@ export function ModelDialog({
         supports_thinking: supportsThinking,
         supports_vision: supportsVision,
         supports_reasoning_effort: supportsReasoningEffort,
+        reasoning_effort_values: reasoningEffortValues.trim()
+          ? reasoningEffortValues
+              .split(",")
+              .map((v) => v.trim())
+              .filter(Boolean)
+          : null,
         when_thinking_enabled: thinkingEnabledParsed,
         when_thinking_disabled: thinkingDisabledParsed,
       });
@@ -496,6 +509,20 @@ export function ModelDialog({
                   onCheckedChange={setSupportsReasoningEffort}
                 />
               </div>
+              {supportsReasoningEffort && (
+                <div className="grid gap-2">
+                  <label htmlFor="md-effort-values" className={labelCls}>
+                    {t.models.reasoningEffortValues}
+                  </label>
+                  <Input
+                    id="md-effort-values"
+                    value={reasoningEffortValues}
+                    onChange={(e) => setReasoningEffortValues(e.target.value)}
+                    placeholder="minimal, low, medium, high"
+                  />
+                  <p className={hintCls}>{t.models.reasoningEffortValuesHint}</p>
+                </div>
+              )}
             </div>
 
             <Collapsible

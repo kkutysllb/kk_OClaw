@@ -1,8 +1,13 @@
 import asyncio
+import logging
+import os
 import posixpath
 import re
 import shlex
+import tempfile
+import time
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 
 from langchain.tools import tool
@@ -11,11 +16,14 @@ from kkoclaw.agents.thread_state import ThreadDataState
 from kkoclaw.config import get_app_config
 from kkoclaw.config.paths import VIRTUAL_PATH_PREFIX
 from kkoclaw.coding_core.change_tracking import record_runtime_file_change
+from kkoclaw.coding_core.paths import coding_home
 from kkoclaw.sandbox.exceptions import (
+    PathAuthorizationRequiredError,
     SandboxError,
     SandboxNotFoundError,
     SandboxRuntimeError,
 )
+from kkoclaw.sandbox.granted_paths import is_path_granted
 from kkoclaw.sandbox.file_operation_lock import get_file_operation_lock
 from kkoclaw.sandbox.sandbox import Sandbox
 from kkoclaw.sandbox.sandbox_provider import get_sandbox_provider
@@ -37,6 +45,102 @@ _LOCAL_BASH_SYSTEM_PATH_PREFIXES = (
     "/opt/homebrew/bin/",
     "/dev/",
 )
+
+
+logger = logging.getLogger(__name__)
+
+#: How long (seconds) to wait for the user to respond to the authorization
+#: dialog before giving up and raising PathAuthorizationRequiredError.
+_AUTHORIZATION_TIMEOUT_SECONDS = 120
+#: Polling interval (seconds) when waiting for a grant to appear on disk.
+_AUTHORIZATION_POLL_INTERVAL = 1.0
+
+
+def _is_desktop_shell() -> bool:
+    """Detect whether we are running inside the Electron desktop shell.
+
+    The desktop shell injects ``KKOCLAW_CODING_HOME`` (see
+    ``desktop-electron/src/backend.ts``). The web deployment never sets this
+    variable, so its presence is a reliable desktop signal. Used to decide
+    whether to raise ``PathAuthorizationRequiredError`` (desktop → dialog) or
+    a plain ``PermissionError`` (web → hard reject).
+    """
+    return bool(os.getenv("KKOCLAW_CODING_HOME"))
+
+
+def _request_path_authorization(path: str, agent_type: str, read_only: bool) -> None:
+    """Emit an SSE ``path_authorization_required`` event and wait for the user.
+
+    The frontend receives the custom event, calls ``authorizePath`` IPC,
+    and the Electron main process shows a system dialog. If the user clicks
+    "Authorize", the grant is written to ``granted_paths.json`` which we
+    poll every second. If the user denies or the timeout expires, we raise
+    :class:`PathAuthorizationRequiredError` so the agent gets a clear error.
+    """
+    # Emit SSE custom event for the frontend to pick up.
+    try:
+        from langgraph.config import get_stream_writer
+
+        writer = get_stream_writer()
+        writer({
+            "type": "path_authorization_required",
+            "path": path,
+            "agent_type": agent_type,
+            "read_only": read_only,
+        })
+    except Exception:
+        logger.debug("No stream writer available — cannot emit authorization event")
+        raise PathAuthorizationRequiredError(
+            path, agent_type=agent_type, read_only=read_only,
+        )
+
+    # Poll granted_paths.json for the user's response.
+    deadline = time.monotonic() + _AUTHORIZATION_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if is_path_granted(path):
+            logger.info("Path authorized by user: %s", path)
+            return  # success — path is now granted
+        time.sleep(_AUTHORIZATION_POLL_INTERVAL)
+
+    # Timeout or denied
+    logger.warning("Path authorization timed out for: %s", path)
+    raise PathAuthorizationRequiredError(
+        path, agent_type=agent_type, read_only=read_only,
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_default_allowed_roots() -> tuple[Path, ...]:
+    """Return the tuple of default-allowed root directories for real paths.
+
+    These roots are ALWAYS trusted — no authorization dialog is needed for
+    access under them:
+      - ``KKOCLAW_HOME`` (app home: ``~/.kkoclaw-desktop`` on desktop,
+        ``backend/.kkoclaw`` on web dev)
+      - Coding Agent home (``~/.oclaw-coding-desktop`` on desktop,
+        ``~/.oclaw-coding`` on web)
+      - System temp dir (``/tmp`` on Linux, ``/var/folders/...`` on macOS)
+
+    Cached because env vars and ``Path.home()`` don't change mid-process.
+    """
+    roots: list[Path] = []
+
+    kkoclaw_home = os.getenv("KKOCLAW_HOME")
+    if kkoclaw_home:
+        roots.append(Path(kkoclaw_home).expanduser().resolve())
+
+    try:
+        roots.append(coding_home())
+    except Exception:  # noqa: BLE001 — coding_home should never fail but be safe
+        pass
+
+    try:
+        roots.append(Path(tempfile.gettempdir()).resolve())
+    except Exception:  # noqa: BLE001
+        pass
+
+    return tuple(roots)
+
 
 _DEFAULT_SKILLS_CONTAINER_PATH = "/mnt/skills"
 _ACP_WORKSPACE_VIRTUAL_PATH = "/mnt/acp-workspace"
@@ -674,19 +778,67 @@ def validate_local_tool_path(path: str, thread_data: ThreadDataState | None, *, 
             raise PermissionError(f"Write access to read-only mount is not allowed: {path}")
         return
 
-    # Project-root paths (Coding Agent) — real absolute paths pointing
-    # into the user's project directory. The project_root is set by
-    # ThreadDataMiddleware when run config includes ``project_root``.
+    # ── Real absolute paths (Coding Agent project files, app home, etc.) ──
+    #
+    # Virtual paths have been exhausted above. What remains are real host
+    # absolute paths — typically from Coding Agent tool calls (read_file,
+    # bash, etc.). These are checked against a tiered allow-list:
+    #
+    #   1. project_root  (set by ThreadDataMiddleware for coding runs)
+    #   2. Default roots: KKOCLAW_HOME, coding home, system temp
+    #   3. User-granted paths (desktop authorization dialog — see granted_paths)
+    #   4. Desktop shell → PathAuthorizationRequiredError (triggers dialog)
+    #      Web deploy  → PermissionError (no dialog infrastructure)
+    if not Path(path).is_absolute():
+        raise PermissionError(
+            f"Only paths under {VIRTUAL_PATH_PREFIX}/, "
+            f"{_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, "
+            f"or configured mount paths are allowed"
+        )
+
+    _reject_path_traversal(path)
+    resolved = Path(path).expanduser().resolve()
     project_root = thread_data.get("project_root")
-    if project_root and Path(path).is_absolute():
-        _reject_path_traversal(path)
+
+    # 1. Project root
+    if project_root:
         try:
-            Path(path).resolve().relative_to(Path(project_root).resolve())
+            resolved.relative_to(Path(project_root).expanduser().resolve())
             return
         except ValueError:
-            raise PermissionError(f"Access denied: path is outside the project root ({project_root})")
+            pass  # not under project_root — try other roots below
 
-    raise PermissionError(f"Only paths under {VIRTUAL_PATH_PREFIX}/, {_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, or configured mount paths are allowed")
+    # 2. Default allowed roots (app home, coding home, system temp)
+    for allowed_root in _get_default_allowed_roots():
+        try:
+            resolved.relative_to(allowed_root)
+            return
+        except ValueError:
+            continue
+
+    # 3. User-granted paths (desktop authorization flow)
+    if is_path_granted(path):
+        return
+
+    # 4. Desktop shell: request authorization via system dialog.
+    #    Web deploy: hard reject — no dialog to show the user.
+    if _is_desktop_shell():
+        agent_type = "coding" if project_root else "general"
+        _request_path_authorization(path, agent_type, read_only)
+        # If we get here, the user authorized the path — re-validate.
+        # (is_path_granted now returns True because the Electron process
+        # wrote to granted_paths.json while we were polling.)
+        return
+
+    if project_root:
+        raise PermissionError(
+            f"Access denied: path is outside the project root ({project_root})"
+        )
+    raise PermissionError(
+        f"Only paths under {VIRTUAL_PATH_PREFIX}/, "
+        f"{_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, "
+        f"or configured mount paths are allowed"
+    )
 
 
 def _validate_resolved_user_data_path(resolved: Path, thread_data: ThreadDataState) -> None:

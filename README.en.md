@@ -466,6 +466,13 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
+- **Desktop Web-data migration wizard + multiple stability fixes (2026-06-19)**
+  - Added a **Web-to-desktop data migration wizard**: after installing the desktop app, users can one-click migrate custom skills, extension config (MCP servers + skill toggles), skill credentials (.env), memory data, and custom agents from an existing web deployment — no re-configuration needed. Shared skills on the web side become private copies on the desktop, free to modify without affecting other web users.
+  - The migration logic correctly handles the difference between the web-side **scattered layout** (skills/custom, .env, extensions_config.json, backend/.kkoclaw/) and the desktop-side **flat layout** (~/.kkoclaw-desktop/). Each category uses a different merge strategy: skills/agents skip existing items, extensions use JSON union-merge, credentials only append missing KEYs, memory is copied only if the target is absent.
+  - First launch auto-detects the web project and prompts via a dialog (`.migration_prompted` sentinel prevents repetition); it can also be triggered manually from Settings → Import Data. 4-step wizard UI: select source → choose content → preview & confirm → execute migration.
+  - **Fixed VllmChatModel field error**: Pydantic models disallow `setattr` on undeclared fields; explicitly declared `reasoning_effort_values: list[str] | None = None` on the class, and added `ValueError` to the factory.py except clause.
+  - **Fixed coding_agent name validation failure**: `AGENT_NAME_PATTERN` previously disallowed underscores, rejecting the built-in `coding_agent`; regex changed to `^[A-Za-z0-9_-]+$`.
+  - **Fixed coding agent task interruption on tab switch**: `threadId` switched from plain `useState` to localStorage persistence (key: `coding:thread:${projectId}`), so the original task can be reconnected after switching tabs.
 - **Coding Agent completed + frontend multi-tab feature implemented (2026-06-18)**
   - Completed the Coding Agent, a dedicated engineering workbench for real code projects. It uses an independent **QiongqiEngine** runtime boundary to isolate code tasks from regular chat, research, and reporting tasks.
   - Completed the frontend multi-tab feature, enabling multiple tasks in parallel within a single page. Synchronized implementation for both web and desktop clients.

@@ -466,6 +466,13 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **桌面端 Web 数据迁移向导 + 多处稳定性修复（2026-06-19）**
+  - 新增 **Web 端数据迁移向导**：桌面端安装后可从已部署的 Web 端项目一键迁移自定义技能、扩展配置（MCP servers + 技能开关）、技能凭证（.env）、记忆数据和自定义 Agent，避免重新配置。Web 端的公共技能迁移到桌面端后变为用户的私有副本，可自由修改而不影响 Web 端其他用户。
+  - 迁移逻辑正确适配 Web 端**分散布局**（skills/custom、.env、extensions_config.json、backend/.kkoclaw/）与桌面端**扁平布局**（~/.kkoclaw-desktop/）的差异，各类别采用不同的合并策略：技能/agent 跳过已存在项、扩展配置 JSON 并联合并、凭证只追加缺失的 KEY、记忆仅当目标不存在时复制。
+  - 首次启动自动检测 Web 端项目并弹窗提示（`.migration_prompted` sentinel 防重复），也可从设置面板 → 数据导入手动触发。4 步向导 UI：选择来源 → 选择内容 → 预览确认 → 执行迁移。
+  - **修复 VllmChatModel 字段错误**：Pydantic 模型不允许 `setattr` 未声明字段，改为在类中显式声明 `reasoning_effort_values: list[str] | None = None`，factory.py 的 except 子句增加 `ValueError` 捕获。
+  - **修复 coding_agent 名称验证失败**：`AGENT_NAME_PATTERN` 原先不允许下划线导致内置 `coding_agent` 被拒绝，正则改为 `^[A-Za-z0-9_-]+$`。
+  - **修复标签切换导致 coding agent 任务中断**：`threadId` 从纯 `useState` 改为通过 localStorage（key: `coding:thread:${projectId}`）持久化，标签切换后可重连原任务。
 - **coding agent功能完成+前端多标签功能实现（2026-06-18）**
   - 完成Coding Agent 面向真实代码项目的独立工程工作台。它通过独立的 **QiongqiEngine（穷奇）** 运行边界，把代码任务和普通聊天、研究、报告等任务隔离开来。
   - 完成前端多标签功能，实现在一个页面内容多任务并行。web端和桌面端同步实现。

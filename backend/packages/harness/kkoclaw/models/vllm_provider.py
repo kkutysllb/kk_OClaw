@@ -62,6 +62,60 @@ def _normalize_vllm_chat_template_kwargs(payload: dict[str, Any]) -> None:
     extra_body["chat_template_kwargs"] = normalized_chat_template_kwargs
 
 
+#: Ordered ranking of reasoning effort values (lowest → highest).
+#: Used to find the closest supported value when the incoming effort is not
+#: in the endpoint's allow-list.
+_REASONING_EFFORT_RANKING: list[str] = [
+    "minimal",
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+]
+
+
+def _normalise_reasoning_effort(
+    payload: dict[str, Any],
+    allowed_values: list[str] | None,
+) -> None:
+    """Clamp ``reasoning_effort`` to the endpoint's supported values.
+
+    Different vLLM deployments accept different subsets of reasoning effort
+    values. Some only support ``['high', 'max']``; others follow OpenAI's
+    ``['minimal', 'low', 'medium', 'high']``. When the caller declares
+    ``reasoning_effort_values`` in ``config.yaml`` and the incoming value is
+    NOT in that allow-list, we map it to the closest supported value by
+    ranking.
+
+    The payload is mutated in place. If ``allowed_values`` is ``None`` or the
+    incoming value is already allowed, no change is made.
+    """
+    if not allowed_values:
+        return
+    effort = payload.get("reasoning_effort")
+    if effort is None:
+        return
+    if effort in allowed_values:
+        return
+
+    # Find the closest value by ranking position.
+    incoming_rank = _REASONING_EFFORT_RANKING.index(effort) if effort in _REASONING_EFFORT_RANKING else len(_REASONING_EFFORT_RANKING) // 2
+    ranked_allowed = sorted(
+        allowed_values,
+        key=lambda v: _REASONING_EFFORT_RANKING.index(v) if v in _REASONING_EFFORT_RANKING else len(_REASONING_EFFORT_RANKING),
+    )
+    # Pick the allowed value with the nearest rank (prefer upgrading over
+    # downgrading when equidistant, since most vLLM deployments that reject
+    # 'medium' do so because they want higher reasoning).
+    best = min(ranked_allowed, key=lambda v: abs(
+        (_REASONING_EFFORT_RANKING.index(v) if v in _REASONING_EFFORT_RANKING else len(_REASONING_EFFORT_RANKING))
+        - incoming_rank
+    ))
+    payload["reasoning_effort"] = best
+
+
 def _reasoning_to_text(reasoning: Any) -> str:
     """Best-effort extraction of readable reasoning text from vLLM payloads."""
     if isinstance(reasoning, str):
@@ -159,6 +213,8 @@ def _restore_reasoning_field(payload_msg: dict[str, Any], orig_msg: AIMessage) -
 class VllmChatModel(ChatOpenAI):
     """ChatOpenAI variant that preserves vLLM reasoning fields across turns."""
 
+    reasoning_effort_values: list[str] | None = None
+
     model_config = {"arbitrary_types_allowed": True}
 
     @property
@@ -172,10 +228,15 @@ class VllmChatModel(ChatOpenAI):
         stop: list[str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Restore assistant reasoning in request payloads for interleaved thinking."""
+        """Restore assistant reasoning and normalise reasoning_effort for vLLM."""
         original_messages = self._convert_input(input_).to_messages()
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         _normalize_vllm_chat_template_kwargs(payload)
+        # Clamp reasoning_effort to the endpoint's supported values, if declared.
+        _normalise_reasoning_effort(
+            payload,
+            getattr(self, "reasoning_effort_values", None),
+        )
         payload_messages = payload.get("messages", [])
 
         if len(payload_messages) == len(original_messages):

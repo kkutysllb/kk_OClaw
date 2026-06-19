@@ -45,6 +45,22 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
     })),
     getSkillModels: vi.fn(async () => ({ providers: [], vars: [], filePath: "" })),
     setSkillModels: vi.fn(async () => ({ providers: [], vars: [], filePath: "" })),
+    authorizePath: vi.fn(async () => ({ authorized: true })),
+    listGrantedPaths: vi.fn(async () => []),
+    revokeGrantedPath: vi.fn(async () => true),
+    detectMigrationSources: vi.fn(async () => []),
+    scanMigrationSource: vi.fn(async () => ({
+      sourceRepoRoot: "",
+      categories: {
+        skills: { available: false, count: 0, description: "", paths: [] },
+        extensions: { available: false, count: 0, description: "", paths: [] },
+        credentials: { available: false, count: 0, description: "", paths: [] },
+        memory: { available: false, count: 0, description: "", paths: [] },
+        agents: { available: false, count: 0, description: "", paths: [] },
+      },
+    })),
+    executeMigration: vi.fn(async () => ({ success: true, results: [], targetHome: "" })),
+    onMigrationAvailable: vi.fn(() => () => {}),
     ...overrides,
   };
 }

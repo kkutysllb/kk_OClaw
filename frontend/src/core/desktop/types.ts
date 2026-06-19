@@ -107,6 +107,78 @@ export interface SkillModelVar {
   isSecret: boolean;
 }
 
+// ── Path authorization ───────────────────────────────────────────────────
+
+/** Result of a path authorization dialog. */
+export interface AuthorizePathResult {
+  authorized: boolean;
+}
+
+/** A single user-granted path entry (mirrors Electron `GrantedPathEntry`). */
+export interface GrantedPathEntry {
+  path: string;
+  granted_at: string;
+  scope: string;
+  thread_id?: string;
+  granted_via: string;
+}
+
+// ── Web-to-desktop migration ──────────────────────────────────────────────
+
+export type MigrationCategory =
+  | "skills"
+  | "extensions"
+  | "credentials"
+  | "memory"
+  | "agents";
+
+export interface MigrationOptions {
+  skills: boolean;
+  extensions: boolean;
+  credentials: boolean;
+  memory: boolean;
+  agents: boolean;
+}
+
+export interface MigrationSourceCategory {
+  available: boolean;
+  count: number;
+  description: string;
+  paths: string[];
+}
+
+export interface MigrationScanResult {
+  sourceRepoRoot: string;
+  categories: {
+    skills: MigrationSourceCategory;
+    extensions: MigrationSourceCategory;
+    credentials: MigrationSourceCategory;
+    memory: MigrationSourceCategory;
+    agents: MigrationSourceCategory;
+  };
+}
+
+export interface MigrationCategoryResult {
+  category: MigrationCategory;
+  copied: number;
+  skipped: number;
+  merged: number;
+  error?: string;
+}
+
+export interface MigrationResult {
+  success: boolean;
+  results: MigrationCategoryResult[];
+  targetHome: string;
+}
+
+export interface DetectedSource {
+  path: string;
+  label: string;
+  exists: boolean;
+  hasData: boolean;
+}
+
 export interface SkillModelsConfig {
   providers: SkillModelProvider[];
   vars: SkillModelVar[];
@@ -160,6 +232,33 @@ export interface DesktopBridge {
   getSkillModels(): Promise<SkillModelsConfig>;
   /** Merge updates into the `.env` (redaction placeholders are preserved). */
   setSkillModels(updates: Record<string, string>): Promise<SkillModelsConfig>;
+
+  // ── Path authorization ─────────────────────────────────────────────
+  /** Show system dialog to authorize an external path. */
+  authorizePath(params: {
+    path: string;
+    agentType: string;
+    threadId?: string;
+  }): Promise<AuthorizePathResult>;
+  /** List all user-granted paths (for settings UI). */
+  listGrantedPaths(): Promise<GrantedPathEntry[]>;
+  /** Revoke a previously granted path. */
+  revokeGrantedPath(path: string): Promise<boolean>;
+
+  // ── Web-to-desktop migration ─────────────────────────────────────────
+  /** Detect web-deployment project roots that have migratable data. */
+  detectMigrationSources(): Promise<DetectedSource[]>;
+  /** Scan a specific web project root and report what can be imported. */
+  scanMigrationSource(sourcePath?: string): Promise<MigrationScanResult>;
+  /** Execute the migration (copy/merge per category). */
+  executeMigration(params: {
+    sourceRepoRoot: string;
+    options: MigrationOptions;
+  }): Promise<MigrationResult>;
+  /** Subscribe to the one-shot "migration available" signal sent on first launch. */
+  onMigrationAvailable(
+    handler: (sources: DetectedSource[]) => void,
+  ): () => void;
 }
 
 declare global {

@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+
+from kkoclaw.coding_core.paths import coding_home
 
 
 def resolve_coding_scratch_root(thread_id: str | None) -> str | None:
-    """Return the Coding scratch root for a thread, if a thread is known."""
+    """Return the Coding scratch root for a thread, if a thread is known.
+
+    Resolves under :func:`coding_home` so the desktop shell (which sets
+    ``KKOCLAW_CODING_HOME``) writes scratch workspaces to its isolated
+    ``~/.oclaw-coding-desktop`` instead of the web's ``~/.oclaw-coding``.
+    """
     if not thread_id:
         return None
-    return str(Path.home() / ".oclaw-coding" / thread_id / "workspace")
+    return str(coding_home() / thread_id / "workspace")
 
 
 @dataclass(frozen=True)

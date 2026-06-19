@@ -166,6 +166,14 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
 
     model_instance = model_class(**kwargs, **model_settings_from_config)
 
+    # Propagate the allowed reasoning_effort values (if declared) so providers
+    # like VllmChatModel can normalise incoming values before sending.
+    if model_config.reasoning_effort_values:
+        try:
+            setattr(model_instance, "reasoning_effort_values", list(model_config.reasoning_effort_values))
+        except (AttributeError, TypeError, ValueError):
+            logger.debug("Could not set reasoning_effort_values on model '%s'", name)
+
     # Inject model profile for non-standard models that are not in LangChain's
     # built-in profile database.  This is required by SummarizationMiddleware's
     # ``fraction`` trigger type which reads ``model.profile["max_input_tokens"]``.

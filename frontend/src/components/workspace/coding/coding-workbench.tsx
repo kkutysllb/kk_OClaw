@@ -78,9 +78,25 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [focusedLine, setFocusedLine] = useState<number | null>(null);
+  // Persist the agent thread ID per-project so switching workspace tabs and
+  // coming back can restore the correct thread. This mirrors the logic in
+  // AgentPanelInner — both components read/write the same localStorage key so
+  // the Results/Diff panels and the Agent chat panel stay in sync after a tab
+  // switch without either having to re-derive the thread ID.
+  const threadIdStorageKey = `coding:thread:${projectId}`;
   const [agentThreadId, setAgentThreadId] = useState<string | undefined>(
-    undefined,
+    () => {
+      if (typeof window === "undefined") return undefined;
+      return window.localStorage.getItem(threadIdStorageKey) || undefined;
+    },
   );
+  useEffect(() => {
+    if (agentThreadId) {
+      window.localStorage.setItem(threadIdStorageKey, agentThreadId);
+    } else {
+      window.localStorage.removeItem(threadIdStorageKey);
+    }
+  }, [agentThreadId, threadIdStorageKey]);
   const codingThreadId = agentThreadId ?? projectId;
   const resultsThreadId = codingThreadId;
   const [activeCodeTab, setActiveCodeTab] = useState<

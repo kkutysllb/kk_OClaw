@@ -3,6 +3,7 @@ import { Toaster } from "sonner";
 import { QueryClientProvider } from "@/components/query-client-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/workspace/command-palette";
+import { MigrationPromptListener } from "@/components/workspace/migration-prompt-listener";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceTaskTabs } from "@/components/workspace/workspace-task-tabs";
 
@@ -20,6 +21,7 @@ export function WorkspaceContent({
         </SidebarInset>
       </SidebarProvider>
       <CommandPalette />
+      <MigrationPromptListener />
       <Toaster position="top-center" />
     </QueryClientProvider>
   );

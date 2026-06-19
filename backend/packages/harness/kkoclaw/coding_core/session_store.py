@@ -1,9 +1,10 @@
 """Persistent Qiongqi Coding session state.
 
 This store is intentionally separate from OClaw's global thread memory. It
-keeps Coding task/session metadata under ``~/.oclaw-coding/{thread_id}`` so the
-Coding Agent can recover its own runtime state without polluting project roots
-or non-coding task memory.
+keeps Coding task/session metadata under the Coding Agent home
+(``~/.oclaw-coding/{thread_id}`` on web, ``~/.oclaw-coding-desktop/{thread_id}``
+on desktop) so the Coding Agent can recover its own runtime state without
+polluting project roots or non-coding task memory.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from kkoclaw.coding_core.events import build_qiongqi_event_record, normalize_qiongqi_event_record
+from kkoclaw.coding_core.paths import coding_home
 from kkoclaw.coding_core.qiongqi import QiongqiRoiReport, QiongqiSession
 from kkoclaw.coding_core.skills import ActiveCodingSkill, CodingSkill
 
@@ -46,7 +48,7 @@ class QiongqiSessionStore:
 
     @classmethod
     def from_home(cls) -> "QiongqiSessionStore":
-        return cls(Path.home() / ".oclaw-coding")
+        return cls(coding_home())
 
     def persist_session(
         self,

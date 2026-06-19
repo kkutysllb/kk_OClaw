@@ -69,3 +69,28 @@ class SandboxFileNotFoundError(SandboxFileError):
     """Raised when a file or directory is not found."""
 
     pass
+
+
+class PathAuthorizationRequiredError(PermissionError):
+    """Raised when a real absolute path needs user authorization via dialog.
+
+    On the desktop shell, when an agent tries to read/write outside the
+    default allowed roots (app home, coding home, project root, system temp),
+    the tool layer catches this exception and sends a ``path_authorization_required``
+    SSE event. The frontend shows a native system dialog; if the user grants
+    access, the path is appended to ``granted_paths.json`` and the tool call is
+    retried. If the user denies, this is re-raised as a regular PermissionError.
+
+    On the web deployment (no dialog infrastructure), the tool layer converts
+    this to a plain PermissionError so the agent sees the standard rejection.
+    """
+
+    def __init__(self, path: str, *, agent_type: str = "general", read_only: bool = False):
+        self.path = path
+        self.agent_type = agent_type
+        self.read_only = read_only
+        op = "read" if read_only else "write"
+        super().__init__(
+            f"Path requires user authorization ({op}): {path}. "
+            f"Approve via the desktop authorization dialog to grant access."
+        )

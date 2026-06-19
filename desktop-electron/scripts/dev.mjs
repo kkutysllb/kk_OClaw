@@ -161,16 +161,17 @@ process.on("SIGTERM", () => teardown("SIGTERM"));
 // ── 1. Gateway (venv) ────────────────────────────────────────────────────
 // In dev mode the gateway is launched here (not via backend.ts), so this
 // script must inject the SAME isolation env vars that backend.ts does in
-// production: KKOCLAW_HOME, KKOCLAW_CONFIG_PATH, and KKOCLAW_SKILLS_PATH.
-// Without these the gateway falls back to CWD-based paths and may reuse the
-// web service's local config/state.
+// production: KKOCLAW_HOME, KKOCLAW_CONFIG_PATH, KKOCLAW_SKILLS_PATH, and
+// KKOCLAW_CODING_HOME.
 //
-// Dev userData dir: Electron uses `app.getName()` which in dev equals the
-// package.json "name" field (kkoclaw-desktop). Keep in sync with
-// desktop-electron/package.json.
-const USER_DATA_DIR =
-  process.env.HOME &&
-  join(process.env.HOME, "Library", "Application Support", "kkoclaw-desktop");
+// IMPORTANT: dev mode paths must mirror paths.ts — the desktop app home is
+// ~/.kkoclaw-desktop (NOT the legacy ~/Library/Application Support/...).
+// This is critical for verifying the new directory layout, granted_paths.json
+// authorization flow, and coding home isolation without a full package build.
+const DESKTOP_HOME =
+  process.env.HOME && join(process.env.HOME, ".kkoclaw-desktop");
+const CODING_HOME =
+  process.env.HOME && join(process.env.HOME, ".oclaw-coding-desktop");
 
 function initDesktopExtensionsConfig(configPath) {
   if (!configPath || existsSync(configPath)) return;
@@ -186,6 +187,11 @@ function syncDesktopPublicSkills(skillsPath) {
   if (!skillsPath) return;
   const publicTarget = join(skillsPath, "public");
   mkdirSync(publicTarget, { recursive: true });
+
+  // Also create the writable custom/ directory so users can create skills
+  // at runtime (mirrors backend.ts initSkills).
+  const customTarget = join(skillsPath, "custom");
+  mkdirSync(customTarget, { recursive: true });
 
   const bundledPublic = join(REPO_ROOT, "skills", "public");
   if (!existsSync(bundledPublic)) {
@@ -211,20 +217,22 @@ function startGateway() {
     return;
   }
 
-  // Mirror backend.ts buildEnv(): isolated KKOCLAW_HOME, extensions config,
-  // and public-only skills under Electron userData.
-  const kkoclawHome = USER_DATA_DIR
-    ? join(USER_DATA_DIR, ".kkoclaw")
-    : undefined;
+  // Mirror backend.ts buildEnv(): flat layout under ~/.kkoclaw-desktop
+  // (same as paths.ts getAppDataDir / getKkoclawHome).
+  const kkoclawHome = DESKTOP_HOME;
   const configPath = kkoclawHome ? join(kkoclawHome, "config.yaml") : undefined;
   const extensionsConfigPath = kkoclawHome ? join(kkoclawHome, "extensions_config.json") : undefined;
   const dataDir = kkoclawHome ? join(kkoclawHome, "data") : undefined;
-  const skillsPath = USER_DATA_DIR ? join(USER_DATA_DIR, "skills") : undefined;
+  const skillsPath = kkoclawHome ? join(kkoclawHome, "skills") : undefined;
 
   // Ensure the isolated state dir exists (matches backend.ts ensureDataDirs).
   if (kkoclawHome) {
     for (const sub of ["", "logs", "data", "threads", "agents"]) {
       mkdirSync(join(kkoclawHome, sub), { recursive: true });
+    }
+    // Ensure coding home exists (matches backend.ts ensureDataDirs).
+    if (CODING_HOME) {
+      mkdirSync(CODING_HOME, { recursive: true });
     }
     if (configPath && !existsSync(configPath) && existsSync(EMBEDDED_CONFIG)) {
       copyFileSync(EMBEDDED_CONFIG, configPath);
@@ -236,6 +244,7 @@ function startGateway() {
 
   console.log(`[dev] starting gateway on port ${GATEWAY_PORT}...`);
   console.log(`[dev]   KKOCLAW_HOME=${kkoclawHome}`);
+  console.log(`[dev]   KKOCLAW_CODING_HOME=${CODING_HOME}`);
   console.log(`[dev]   KKOCLAW_CONFIG_PATH=${configPath}`);
   console.log(`[dev]   KKOCLAW_EXTENSIONS_CONFIG_PATH=${extensionsConfigPath}`);
   console.log(`[dev]   KKOCLAW_DATA_DIR=${dataDir}`);
@@ -250,13 +259,13 @@ function startGateway() {
       CORS_ORIGINS: DESKTOP_DEV_ORIGINS,
       KKOCLAW_DESKTOP_DEV: "1",
       PYTHONUNBUFFERED: "1",
-      // Isolation: desktop state under userData, NOT the repo's backend/.kkoclaw.
+      // Isolation: desktop state under ~/.kkoclaw-desktop (matching paths.ts).
       ...(kkoclawHome ? { KKOCLAW_HOME: kkoclawHome } : {}),
+      ...(CODING_HOME ? { KKOCLAW_CODING_HOME: CODING_HOME } : {}),
       ...(configPath ? { KKOCLAW_CONFIG_PATH: configPath } : {}),
       ...(extensionsConfigPath ? { KKOCLAW_EXTENSIONS_CONFIG_PATH: extensionsConfigPath } : {}),
       ...(dataDir ? { KKOCLAW_DATA_DIR: dataDir } : {}),
       ...(skillsPath ? { KKOCLAW_SKILLS_PATH: skillsPath } : {}),
-      KKOCLAW_PUBLIC_SKILLS_ONLY: "1",
     },
     onExit: () => {
       gatewayProcess = null;

@@ -25,6 +25,13 @@ function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
       getStartupInfo: vi.fn(),
       getSkillModels: vi.fn(),
       setSkillModels: vi.fn(),
+      authorizePath: vi.fn(),
+      listGrantedPaths: vi.fn(),
+      revokeGrantedPath: vi.fn(),
+      detectMigrationSources: vi.fn(),
+      scanMigrationSource: vi.fn(),
+      executeMigration: vi.fn(),
+      onMigrationAvailable: vi.fn(),
       ...bridge,
     } satisfies DesktopBridge;
   } else {

@@ -8,8 +8,8 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { readFile } from "node:fs/promises";
-import { basename, extname } from "node:path";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { basename, dirname, extname } from "node:path";
 
 import { BackendManager, resolveGatewayPort, type BackendStatus } from "./backend.js";
 import {
@@ -18,6 +18,54 @@ import {
   type SkillModelsConfig,
 } from "./skill-models-env.js";
 import { isAllowedExternalUrl } from "./url-policy.js";
+import { getGrantedPathsPath, getKkoclawHome, REPO_ROOT } from "./paths.js";
+import {
+  detectMigrationSources as detectSources,
+  executeMigration as runMigration,
+  scanMigrationSources as scanSources,
+} from "./migration.js";
+
+// ── Granted paths (authorization memory) ─────────────────────────────────
+
+interface GrantedPathEntry {
+  path: string;
+  granted_at: string;
+  scope: string;
+  thread_id?: string;
+  granted_via: string;
+}
+
+interface GrantedPathsStore {
+  granted_paths: GrantedPathEntry[];
+}
+
+async function readGrantedPaths(): Promise<GrantedPathsStore> {
+  const file = getGrantedPathsPath();
+  try {
+    const raw = await readFile(file, "utf-8");
+    const data = JSON.parse(raw) as GrantedPathsStore;
+    if (!Array.isArray(data.granted_paths)) data.granted_paths = [];
+    return data;
+  } catch {
+    return { granted_paths: [] };
+  }
+}
+
+async function writeGrantedPaths(data: GrantedPathsStore): Promise<void> {
+  const file = getGrantedPathsPath();
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(data, null, 2), "utf-8");
+}
+
+/** Prefix-match: returns true if *path* (or a parent) is already granted. */
+function isPathGranted(path: string, entries: GrantedPathEntry[]): boolean {
+  for (const entry of entries) {
+    const granted = entry.path;
+    if (!granted) continue;
+    if (path === granted || path.startsWith(granted + "/")) return true;
+  }
+  return false;
+}
 
 // ── Shared payload types (mirrors frontend `core/desktop/types.ts`) ───────
 
@@ -161,6 +209,120 @@ export function registerIpc(): BackendManager {
     "skill-models:set",
     (_evt, updates: Record<string, string>): SkillModelsConfig =>
       writeSkillModelsEnv(updates),
+  );
+
+  // ── Path authorization dialog ───────────────────────────────────────
+  //
+  // When the backend raises PathAuthorizationRequiredError (path outside the
+  // default allowed roots), the frontend receives a `path_authorization_required`
+  // SSE custom event and calls this handler. We show a system dialog, persist
+  // the user's choice to granted_paths.json, and return the result.
+  //
+  // The Python backend polls granted_paths.json (always re-reading from disk,
+  // no cache) so it picks up the grant within ~1 second of the user clicking
+  // "Authorize".
+  ipcMain.handle(
+    "authorize-path",
+    async (
+      _evt,
+      params: { path: string; agentType: string; threadId?: string },
+    ): Promise<{ authorized: boolean }> => {
+      const { path, agentType, threadId } = params;
+
+      // 1. Check if already granted (skip the dialog)
+      const store = await readGrantedPaths();
+      if (isPathGranted(path, store.granted_paths)) {
+        return { authorized: true };
+      }
+
+      // 2. Show system authorization dialog
+      const win = BrowserWindow.fromWebContents(_evt.sender);
+      const readWriteLabel = agentType === "coding" ? "读写" : "访问";
+      const result = win
+        ? await dialog.showMessageBox(win, {
+            type: "question",
+            buttons: ["授权访问", "拒绝"],
+            defaultId: 0,
+            cancelId: 1,
+            title: "路径授权请求",
+            message: `${agentType} agent 请求${readWriteLabel}以下路径：`,
+            detail: `${path}\n\n授权后该路径及其子目录将被永久加入允许列表，后续访问不再弹窗。`,
+          })
+        : await dialog.showMessageBox({
+            type: "question",
+            buttons: ["授权访问", "拒绝"],
+            defaultId: 0,
+            cancelId: 1,
+            title: "路径授权请求",
+            message: `${agentType} agent 请求${readWriteLabel}以下路径：`,
+            detail: `${path}\n\n授权后该路径及其子目录将被永久加入允许列表，后续访问不再弹窗。`,
+          });
+
+      // 3. Handle user choice
+      if (result.response === 0) {
+        // Authorized — persist to granted_paths.json
+        store.granted_paths.push({
+          path,
+          granted_at: new Date().toISOString(),
+          scope: agentType,
+          thread_id: threadId,
+          granted_via: "system_dialog",
+        });
+        await writeGrantedPaths(store);
+        return { authorized: true };
+      }
+
+      // Denied
+      return { authorized: false };
+    },
+  );
+
+  // ── List / revoke granted paths (for settings UI) ───────────────────
+  ipcMain.handle("granted-paths:list", async (): Promise<GrantedPathEntry[]> => {
+    const store = await readGrantedPaths();
+    return store.granted_paths;
+  });
+
+  ipcMain.handle(
+    "granted-paths:revoke",
+    async (_evt, path: string): Promise<boolean> => {
+      const store = await readGrantedPaths();
+      const before = store.granted_paths.length;
+      store.granted_paths = store.granted_paths.filter(
+        (e) => e.path !== path && !path.startsWith(e.path + "/"),
+      );
+      if (store.granted_paths.length === before) return false;
+      await writeGrantedPaths(store);
+      return true;
+    },
+  );
+
+  // ── Web-to-desktop migration ────────────────────────────────────────────
+  // The source is a web project repo root (NOT a user home). The web app
+  // stores data in a scattered layout inside the repo.
+  ipcMain.handle("migration:detect-sources", async () => {
+    return detectSources(REPO_ROOT);
+  });
+
+  ipcMain.handle(
+    "migration:scan",
+    async (_evt, sourcePath?: string) => {
+      const source = sourcePath && sourcePath.trim() ? sourcePath : REPO_ROOT;
+      return scanSources(source);
+    },
+  );
+
+  ipcMain.handle(
+    "migration:execute",
+    async (
+      _evt,
+      params: {
+        sourceRepoRoot: string;
+        options: import("./migration.js").MigrationOptions;
+      },
+    ) => {
+      return runMigration(params.sourceRepoRoot, getKkoclawHome(), params.options);
+    },
   );
 
   return manager;

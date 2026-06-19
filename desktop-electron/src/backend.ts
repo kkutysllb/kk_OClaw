@@ -10,6 +10,7 @@
  *  - Kill the child cleanly on shutdown (SIGTERM → SIGKILL)
  */
 
+import { app, BrowserWindow, dialog } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import {
   copyFileSync,
@@ -23,7 +24,7 @@ import {
   type WriteStream,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { platform } from "node:os";
+import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
 
@@ -32,6 +33,7 @@ import {
   getBackendDir,
   getBundledConfigTemplatePath,
   getBundledSkillsDir,
+  getCodingHome,
   getDesktopConfigPath,
   getDesktopExtensionsConfigPath,
   getGatewayExecutable,
@@ -44,6 +46,7 @@ import {
   REPO_ROOT,
 } from "./paths.js";
 import { migrateDesktopConfigYaml } from "./config-migration.js";
+import { detectMigrationSources } from "./migration.js";
 import { initSkillModelsEnv, parseEnvFile } from "./skill-models-env.js";
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -128,6 +131,10 @@ export class BackendManager extends EventEmitter {
 
     const port = resolveGatewayPort();
 
+    // Migrate legacy <userData>/.kkoclaw → ~/.kkoclaw-desktop before creating
+    // the new home dirs. Runs at most once (guarded by a marker file).
+    this.migrateLegacyUserData();
+
     this.ensureDataDirs();
     this.initConfig();
     this.migrateConfig();
@@ -135,6 +142,11 @@ export class BackendManager extends EventEmitter {
     this.initSkillModelsEnv();
     this.initSkills();
     this.openLogStream();
+
+    // First-launch detection: if this is a brand-new desktop install AND a
+    // web deployment exists on the machine, notify the renderer so it can
+    // prompt the user to import. Guarded by a marker so we only ask once.
+    this.notifyMigrationIfAvailable();
 
     const cmd = this.resolveCommand(port);
     if (!cmd) {
@@ -241,12 +253,19 @@ export class BackendManager extends EventEmitter {
   /**
    * Build the isolated child-process environment.
    *
-   * `KKOCLAW_HOME` points at the app's userData dir so desktop state never
-   * collides with a local web deployment's `.kkoclaw`.
+   * `KKOCLAW_HOME` points at `~/.kkoclaw-desktop` so desktop state lives in
+   * the user's home folder (discoverable + backup-friendly) and stays isolated
+   * from a co-located web deployment's `~/.kkoclaw` / `<repo>/backend/.kkoclaw`.
    *
-   * `KKOCLAW_SKILLS_PATH` points at `<userData>/skills`, which is seeded with
-   * bundled public skills on first run (see `initSkills`). Desktop does not
-   * create or copy `custom` skills, so it starts as a clean terminal.
+   * `KKOCLAW_CODING_HOME` points at `~/.oclaw-coding-desktop`, the Coding
+   * Agent's dedicated scratch/session store (isolated from the web's
+   * `~/.oclaw-coding`). The Python side reads this via `coding_core.paths`.
+   *
+   * `KKOCLAW_SKILLS_PATH` points at `~/.kkoclaw-desktop/skills`, seeded with
+   * bundled `public/` skills on first run. The `custom/` directory is created
+   * empty so users can author their own skills at runtime — we do NOT set
+   * `KKOCLAW_PUBLIC_SKILLS_ONLY` because that flag was meant to skip stale
+   * custom skills during *bundling*, not to forbid users from creating them.
    *
    * `KKOCLAW_PROJECT_ROOT` is only set in development, where the repo source
    * tree exists. The packaged gateway bundles its own source via PyInstaller
@@ -263,25 +282,25 @@ export class BackendManager extends EventEmitter {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...skillModelVars,
-      // Isolation: desktop state lives under userData, not the repo.
+      // Isolation: desktop state lives under ~/.kkoclaw-desktop.
       KKOCLAW_HOME: getKkoclawHome(),
       KKOCLAW_DATA_DIR: join(getKkoclawHome(), "data"),
-      // Desktop config is copied into userData on first run and never reads
-      // the local web service's config.yaml.
+      // Coding Agent scratch/session store: ~/.oclaw-coding-desktop.
+      KKOCLAW_CODING_HOME: getCodingHome(),
+      // Desktop config is copied into the home dir on first run and never
+      // reads the local web service's config.yaml.
       KKOCLAW_CONFIG_PATH: getDesktopConfigPath(),
       // Desktop extensions config starts empty so MCP/custom skill state never
       // leaks in from the web/repo extensions_config.json.
       KKOCLAW_EXTENSIONS_CONFIG_PATH: getDesktopExtensionsConfigPath(),
-      // Skills root: bundled public skills copied here on first run.
+      // Skills root: bundled public skills + user-created custom skills.
       KKOCLAW_SKILLS_PATH: getSkillsDir(),
-      // Ignore any stale userData/custom skills from older desktop builds.
-      KKOCLAW_PUBLIC_SKILLS_ONLY: "1",
       // Desktop static export talks to the gateway from the app:// origin.
       GATEWAY_CORS_ORIGINS: "app://-",
       CORS_ORIGINS: "app://-",
       // Python backend writes its own rotating log files here too
       // (gateway.log + langgraph.log), so all backend logs are co-located
-      // with the Electron-captured stdout logs under userData/logs.
+      // with the Electron-captured stdout logs under ~/.kkoclaw-desktop/logs.
       KKOCLAW_LOG_DIR: getLogsDir(),
       // Persisted JWT signing secret — prevents session invalidation on
       // every gateway restart. Without this, the gateway generates a new
@@ -480,6 +499,149 @@ export class BackendManager extends EventEmitter {
 
   // ── Data dir bootstrap ────────────────────────────────────────────────
 
+  /**
+   * One-time migration from the legacy `<userData>/.kkoclaw` layout to the
+   * new `~/.kkoclaw-desktop` home.
+   *
+   * Triggered when the legacy dir exists AND the new home has not been
+   * marked as migrated (`.migrated_v2` sentinel). Asks the user via a native
+   * dialog; on accept, recursively copies the old home (and the old coding
+   * home `~/.oclaw-coding` if present) into the new locations. On decline,
+   * the new home starts empty and the old data is left untouched.
+   *
+   * Idempotent: the `.migrated_v2` marker is written on completion (accept or
+   * decline) so the user is only prompted once per machine.
+   */
+  private migrateLegacyUserData(): void {
+    const newHome = getKkoclawHome();
+    const marker = join(newHome, ".migrated_v2");
+    if (existsSync(marker)) return; // already handled on this machine
+
+    const legacyHome = join(app.getPath("userData"), ".kkoclaw");
+    if (!existsSync(legacyHome)) {
+      // Nothing to migrate — write the marker so we never check again.
+      try {
+        mkdirSync(newHome, { recursive: true });
+        writeFileSync(marker, "no-legacy\n", "utf8");
+      } catch {
+        // ignore — ensureDataDirs will create the home shortly
+      }
+      return;
+    }
+
+    const choice = dialog.showMessageBoxSync({
+      type: "question",
+      buttons: ["迁移旧数据", "从零开始", "稍后再问"],
+      defaultId: 0,
+      title: "检测到旧版本数据",
+      message: "检测到旧版本的 OClaw 桌面端数据",
+      detail:
+        `旧数据位置：${legacyHome}\n` +
+        `新位置：${newHome}\n\n` +
+        "是否将旧数据（配置、会话、技能等）迁移到新位置？\n" +
+        "选择「从零开始」将以空状态启动，旧数据保留但不再使用。",
+    });
+
+    if (choice === 2) {
+      // "稍后再问" — don't write the marker, prompt again next launch
+      return;
+    }
+
+    if (choice === 0) {
+      // Migrate the main home: <userData>/.kkoclaw → ~/.kkoclaw-desktop
+      try {
+        mkdirSync(newHome, { recursive: true });
+        cpSync(legacyHome, newHome, { recursive: true });
+        this.appendLog(`[backend] migrated legacy data: ${legacyHome} → ${newHome}`);
+      } catch (e) {
+        this.appendLog(
+          `[backend] WARNING: legacy data migration failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+
+      // The coding home historically lived at ~/.oclaw-coding (real home,
+      // never under userData). Migrate it to ~/.oclaw-coding-desktop if present.
+      const legacyCoding = join(homedir(), ".oclaw-coding");
+      if (existsSync(legacyCoding)) {
+        const newCodingHome = getCodingHome();
+        try {
+          mkdirSync(newCodingHome, { recursive: true });
+          cpSync(legacyCoding, newCodingHome, { recursive: true });
+          this.appendLog(
+            `[backend] migrated legacy coding data: ${legacyCoding} → ${newCodingHome}`,
+          );
+        } catch (e) {
+          this.appendLog(
+            `[backend] WARNING: legacy coding data migration failed: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+    }
+
+    // Write marker (for both "migrate" and "start fresh" choices).
+    try {
+      mkdirSync(newHome, { recursive: true });
+      writeFileSync(
+        marker,
+        choice === 0 ? "migrated\n" : "skipped\n",
+        "utf8",
+      );
+    } catch {
+      // Non-fatal — we'll just re-prompt next launch if the marker is missing.
+    }
+  }
+
+  /**
+   * Detect whether a web deployment's data exists and notify the renderer.
+   *
+   * Fires the one-shot `migration:available` IPC event to every BrowserWindow
+   * so the renderer can show a prompt. Guarded by a `.migration_prompted`
+   * marker so the user is only asked once per machine (matching the pattern
+   * used by `migrateLegacyUserData`). The renderer is still free to open the
+   * wizard manually from the settings panel afterwards.
+   */
+  private notifyMigrationIfAvailable(): void {
+    const home = getKkoclawHome();
+    const marker = join(home, ".migration_prompted");
+    if (existsSync(marker)) return;
+
+    const sources = detectMigrationSources(REPO_ROOT).filter(
+      (s) => s.hasData,
+    );
+    if (sources.length === 0) {
+      // Nothing to import — write the marker so we never scan again.
+      try {
+        mkdirSync(home, { recursive: true });
+        writeFileSync(marker, "no-source\n", "utf8");
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    // Defer the broadcast until the renderer is ready. The launch() call site
+    // runs before any window necessarily exists, so we wait for the next tick
+    // — windows created later still receive the event because we don't write
+    // the marker until the broadcast actually happens.
+    setImmediate(() => {
+      try {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send("migration:available", sources);
+        }
+        // Mark as prompted so we don't keep firing on every relaunch.
+        mkdirSync(home, { recursive: true });
+        writeFileSync(marker, "prompted\n", "utf8");
+        this.appendLog(
+          `[backend] migration sources detected: ${sources.map((s) => s.path).join(", ")}`,
+        );
+      } catch (e) {
+        this.appendLog(
+          `[backend] WARNING: failed to notify migration: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    });
+  }
+
   private ensureDataDirs(): void {
     const home = getKkoclawHome();
     const subdirs = ["", "logs", "data", "threads", "agents"];
@@ -487,6 +649,11 @@ export class BackendManager extends EventEmitter {
       const dir = join(home, sub);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     }
+    // Coding Agent home must exist so its session/skill stores can write into
+    // it on first use. Created here (not in Python) to match the pattern of
+    // the main home dir above.
+    const codingHome = getCodingHome();
+    if (!existsSync(codingHome)) mkdirSync(codingHome, { recursive: true });
   }
 
   private initConfig(): void {
@@ -632,8 +799,12 @@ export class BackendManager extends EventEmitter {
     const skillsRoot = getSkillsDir();
     const publicTarget = join(skillsRoot, "public");
 
-    // Desktop starts with bundled public skills only.
+    // Desktop seeds bundled public skills AND creates an empty custom/ dir
+    // so users can author their own skills at runtime. We intentionally do
+    // NOT set KKOCLAW_PUBLIC_SKILLS_ONLY — that flag was for bundling-time,
+    // not runtime. See plan: "修正 PUBLIC_SKILLS_ONLY 语义".
     mkdirSync(publicTarget, { recursive: true });
+    mkdirSync(join(skillsRoot, "custom"), { recursive: true });
 
     if (!bundled) {
       this.appendLog("[backend] no bundled skills source found");

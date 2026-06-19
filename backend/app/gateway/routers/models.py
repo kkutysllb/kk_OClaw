@@ -70,6 +70,7 @@ class ModelRequest(BaseModel):
     supports_thinking: bool = Field(default=False, description="Whether model supports thinking mode")
     supports_vision: bool = Field(default=False, description="Whether model supports vision/image inputs")
     supports_reasoning_effort: bool = Field(default=False, description="Whether model supports reasoning effort")
+    reasoning_effort_values: list[str] | None = Field(None, description="Allowed reasoning_effort values (e.g. ['high','max']). Values outside this list are auto-mapped to the nearest supported one.")
     when_thinking_enabled: dict | None = Field(None, description="Extra settings passed to the model when thinking is enabled")
     when_thinking_disabled: dict | None = Field(None, description="Extra settings passed when thinking is disabled")
 
@@ -90,6 +91,7 @@ class ModelResponse(BaseModel):
     supports_thinking: bool = Field(default=False, description="Whether model supports thinking mode")
     supports_vision: bool = Field(default=False, description="Whether model supports vision/image inputs")
     supports_reasoning_effort: bool = Field(default=False, description="Whether model supports reasoning effort")
+    reasoning_effort_values: list[str] | None = Field(None, description="Allowed reasoning_effort values for this endpoint")
     when_thinking_enabled: dict | None = Field(None, description="Extra settings when thinking enabled")
     when_thinking_disabled: dict | None = Field(None, description="Extra settings when thinking disabled")
 
@@ -130,6 +132,7 @@ def _model_config_to_response(model) -> ModelResponse:
         supports_thinking=model.supports_thinking,
         supports_vision=model.supports_vision,
         supports_reasoning_effort=model.supports_reasoning_effort,
+        reasoning_effort_values=getattr(model, "reasoning_effort_values", None),
         when_thinking_enabled=model.when_thinking_enabled,
         when_thinking_disabled=model.when_thinking_disabled,
     )
@@ -162,6 +165,8 @@ def _request_to_config_dict(req: ModelRequest) -> dict:
         d["supports_vision"] = True
     if req.supports_reasoning_effort:
         d["supports_reasoning_effort"] = True
+    if req.reasoning_effort_values:
+        d["reasoning_effort_values"] = list(req.reasoning_effort_values)
     if req.when_thinking_enabled is not None:
         d["when_thinking_enabled"] = req.when_thinking_enabled
     if req.when_thinking_disabled is not None:

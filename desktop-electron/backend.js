@@ -196,10 +196,8 @@ export class BackendManager extends EventEmitter {
             // Desktop extensions config starts empty so MCP/custom skill state never
             // leaks in from the web/repo extensions_config.json.
             KKOCLAW_EXTENSIONS_CONFIG_PATH: getDesktopExtensionsConfigPath(),
-            // Skills root: bundled public skills copied here on first run.
+            // Skills root: bundled public skills + user-created custom skills.
             KKOCLAW_SKILLS_PATH: getSkillsDir(),
-            // Ignore any stale userData/custom skills from older desktop builds.
-            KKOCLAW_PUBLIC_SKILLS_ONLY: "1",
             // Desktop static export talks to the gateway from the app:// origin.
             GATEWAY_CORS_ORIGINS: "app://-",
             CORS_ORIGINS: "app://-",
