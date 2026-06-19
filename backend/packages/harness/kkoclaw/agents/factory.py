@@ -162,7 +162,7 @@ def _assemble_from_features(
 ) -> tuple[list[AgentMiddleware], list[BaseTool]]:
     """Build an ordered middleware chain + extra tools from *feat*.
 
-    Middleware order matches ``make_lead_agent`` (14 middlewares):
+    Middleware order matches ``make_lead_agent`` (13 middlewares):
 
       0-2. Sandbox infrastructure (ThreadData → Uploads → Sandbox)
       3.   DanglingToolCallMiddleware (always)
@@ -174,8 +174,7 @@ def _assemble_from_features(
       9.   MemoryMiddleware (memory feature)
       10.  ViewImageMiddleware (vision feature)
       11.  SubagentLimitMiddleware (subagent feature)
-      12.  LoopDetectionMiddleware (always)
-      13.  ClarificationMiddleware (always last)
+      12.  ClarificationMiddleware (always last)
 
     Two-phase ordering:
       1. Built-in chain — fixed sequential append.
@@ -272,11 +271,6 @@ def _assemble_from_features(
         from kkoclaw.tools.builtins import task_tool
 
         extra_tools.append(task_tool)
-
-    # --- [12] LoopDetection (always) ---
-    from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
-
-    chain.append(LoopDetectionMiddleware())
 
     # --- [13] Clarification (always last among built-ins) ---
     chain.append(ClarificationMiddleware())

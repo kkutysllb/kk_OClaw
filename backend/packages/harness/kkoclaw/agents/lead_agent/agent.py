@@ -9,7 +9,6 @@ from kkoclaw.agents.memory.summarization_hook import memory_flush_hook
 from kkoclaw.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from kkoclaw.agents.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from kkoclaw.agents.middlewares.internal_content_middleware import InternalContentMiddleware
-from kkoclaw.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from kkoclaw.agents.middlewares.memory_middleware import MemoryMiddleware
 from kkoclaw.agents.middlewares.safety_finish_reason_middleware import SafetyFinishReasonMiddleware
 from kkoclaw.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
@@ -318,9 +317,6 @@ def _build_middlewares(
 
     # InternalContentMiddleware — strip SESSION INTENT/SUMMARY/ARTIFACTS from AI messages
     middlewares.append(InternalContentMiddleware())
-
-    # LoopDetectionMiddleware — detect and break repetitive tool call loops
-    middlewares.append(LoopDetectionMiddleware())
 
     # Inject custom middlewares before ClarificationMiddleware
     if custom_middlewares:

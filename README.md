@@ -466,6 +466,12 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **移除工具循环检测机制 + 死代码清理（2026-06-20）**
+  - **完全移除 `LoopDetectionMiddleware`** 的 3 处注入点（factory.py、lead_agent/agent.py、subagents/executor.py），并彻底清理相关死代码：删除 `loop_detection_middleware.py`、`loop_detection_config.py`、`test_loop_detection_middleware.py`（含桌面端打包镜像文件）。
+  - 原因：4 层循环检测机制（哈希检测 / 频率检测 / 错误收敛 / Storm Breaker）阈值与实际长流程任务冲突，导致任务执行半途中被自动中断，客户体验不佳。移除后，Storm Breaker（同回合重复调用抑制）仍由 `TokenEconomyMiddleware` 提供保护。
+  - 清理 `AppConfig.loop_detection` 死字段（该字段此前从未被任何代码消费，且 config 默认值 30/50 与代码默认值 80/150 不一致）。
+  - 任务中断的 SSE `task_interrupted` 通知机制予以保留，服务于 `SafetyFinishReasonMiddleware` 等其他中断源。
+  - 中英文文档（middlewares.mdx）同步更新中间件列表与说明。
 - **桌面端 Web 数据迁移向导 + 多处稳定性修复（2026-06-19）**
   - 新增 **Web 端数据迁移向导**：桌面端安装后可从已部署的 Web 端项目一键迁移自定义技能、扩展配置（MCP servers + 技能开关）、技能凭证（.env）、记忆数据和自定义 Agent，避免重新配置。Web 端的公共技能迁移到桌面端后变为用户的私有副本，可自由修改而不影响 Web 端其他用户。
   - 迁移逻辑正确适配 Web 端**分散布局**（skills/custom、.env、extensions_config.json、backend/.kkoclaw/）与桌面端**扁平布局**（~/.kkoclaw-desktop/）的差异，各类别采用不同的合并策略：技能/agent 跳过已存在项、扩展配置 JSON 并联合并、凭证只追加缺失的 KEY、记忆仅当目标不存在时复制。
@@ -483,7 +489,7 @@ token_usage:
   - 新增 `TokenEconomyMiddleware`（`token_economy_middleware.py`）：模型调用前自动截断旧 ToolMessage 内容（head+tail 策略），保护代码块/URL/文件路径/错误信号不被破坏；注入简洁响应 system-reminder
   - 新增 `ToolStormBreaker`（`tool_storm_breaker.py`）：滑动窗口跟踪同回合工具调用，相同 name+args 达到阈值后自动抑制；变更类工具自动清除只读记录
   - 新增 `prefix_volatility.py` 诊断模块：扫描 system prompt 中的 UUID/ISO8601/十六进制哈希/JWT 等易变 token，用于定位 prompt cache 失效原因
-  - `LoopDetectionMiddleware` 新增第四层检测：集成 Storm Breaker，在 `wrap_tool_call` 入口拦截同回合重复调用，返回解释性 ToolMessage 而非执行实际工具
+  - `TokenEconomyMiddleware` 集成 Storm Breaker：在 `wrap_tool_call` 入口拦截同回合重复调用，返回解释性 ToolMessage 而非执行实际工具
   - `AppConfig` 注册 `token_economy` 字段，`agent.py` 中间件链在 `ToolOutputBudgetMiddleware` 之后注册 `TokenEconomyMiddleware`
   - 配置同步：`config.yaml`、`config.example.yaml`、`desktop/backend-build/config.embedded.yaml` 三端配置文件均添加 `token_economy` 段
   - 完整单元测试覆盖（`test_token_economy_middleware.py`，26 个测试用例）：历史截断、保护段、信号行、简洁指令、Storm Breaker 抑制/变更清除/turn 重置/参数顺序无关性、易变 token 检测
@@ -502,7 +508,7 @@ token_usage:
   - 安全增强：ZIP 炸弹防护、Origin 验证防 CSRF、MCP 密钥脱敏重构
   - 启动恢复：`deps.py` 自动恢复 Gateway 重启后的孤立运行
 - 修复智谱 GLM-5 模型 1210 错误：创建 `PatchedChatZhipu` 适配器剥离不兼容的 `stream_options` 参数
-- 工具循环中断前端提示：`LoopDetectionMiddleware` 触发 hard_stop 时通过 SSE custom 事件通知前端，前端以 toast 展示中断原因和「继续」操作指引
+- 任务中断前端提示：安全中间件（如 `SafetyFinishReasonMiddleware`）触发硬停时通过 SSE custom 事件通知前端，前端以 toast 展示中断原因和「继续」操作指引
 - `PatchedChatDeepSeek` 增加模型名别名映射机制（`_MODEL_NAME_ALIASES`），支持本地部署模型名（如 `deepseek_v4`）自动映射为 API 接受的名称（如 `deepseek-v4-flash`）
 - 完成基于 `current_context` 的 TF-IDF 相似度检索与 memory facts 加权排序
 - 为 memory retrieval 增加 facts 侧缓存、可查询统计与调试日志
@@ -527,7 +533,6 @@ token_usage:
 
 ### 后续待完成
 
-- 桌面端和coding能力一起发布
 - 池化 sandbox 资源以减少 sandbox 容器数量
 - 添加认证 / 授权层
 - 实现速率限制

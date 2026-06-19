@@ -553,10 +553,11 @@ async def _publish_interrupt_if_present(
 ) -> None:
     """Detect ``task_interrupted`` in a stream chunk and publish a custom SSE event.
 
-    When the ``LoopDetectionMiddleware`` triggers a hard stop, it marks the
-    resulting AIMessage with ``additional_kwargs.task_interrupted = {…}``.
-    This helper scans the chunk for such a marker and, if found, publishes
-    a ``"custom"`` SSE event that the frontend can display as an inline hint.
+    When a middleware (e.g. ``SafetyFinishReasonMiddleware``) triggers a hard
+    stop, it marks the resulting AIMessage with
+    ``additional_kwargs.task_interrupted = {…}``.  This helper scans the
+    chunk for such a marker and, if found, publishes a ``"custom"`` SSE
+    event that the frontend can display as an inline hint.
     """
     interrupt_info: dict | None = None
 

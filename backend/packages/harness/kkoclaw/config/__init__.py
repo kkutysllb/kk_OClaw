@@ -1,7 +1,6 @@
 from .app_config import get_app_config
 from .cron_management_config import CronManagementConfig
 from .extensions_config import ExtensionsConfig, get_extensions_config
-from .loop_detection_config import LoopDetectionConfig
 from .memory_config import MemoryConfig, get_memory_config
 from .paths import Paths, get_paths
 from .skill_evolution_config import SkillEvolutionConfig
@@ -17,7 +16,6 @@ from .tracing_config import (
 __all__ = [
     "get_app_config",
     "CronManagementConfig",
-    "LoopDetectionConfig",
     "SkillEvolutionConfig",
     "Paths",
     "get_paths",

@@ -30,9 +30,8 @@ The middleware chain is built once per agent invocation, based on the current co
 7. `ViewImageMiddleware` — image details injection (if model supports vision)
 8. `DeferredToolFilterMiddleware` — hides deferred tool schemas (if tool search enabled)
 9. `SubagentLimitMiddleware` — limits parallel subagent calls (if subagents enabled)
-10. `LoopDetectionMiddleware` — breaks repetitive tool call loops
-11. Custom middlewares (if any)
-12. `ClarificationMiddleware` — intercepts clarification requests (always last)
+10. Custom middlewares (if any)
+11. `ClarificationMiddleware` — intercepts clarification requests (always last)
 
 The ordering is significant. Summarization runs early to reduce context before other processing. Clarification always runs last so it can intercept after all other middlewares have had their turn.
 
@@ -43,14 +42,6 @@ The ordering is significant. Summarization runs early to reduce context before o
 Intercepts clarification tool calls and converts them into proper user-facing requests for additional information. When the model decides it needs to ask the user something before proceeding, this middleware surfaces that request.
 
 **Configuration**: controlled by `guardrails.clarification` settings.
-
----
-
-### LoopDetectionMiddleware
-
-Detects when the agent is making the same tool call repeatedly without making progress. When a loop is detected, the middleware intervenes to break the cycle and prevents the agent from burning turns indefinitely.
-
-**Configuration**: built-in, no user configuration.
 
 ---
 

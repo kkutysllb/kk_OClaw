@@ -15,7 +15,6 @@ from kkoclaw.config.coding_agent_config import CodingAgentConfig
 from kkoclaw.config.database_config import DatabaseConfig
 from kkoclaw.config.extensions_config import ExtensionsConfig
 from kkoclaw.config.guardrails_config import GuardrailsConfig, load_guardrails_config_from_dict
-from kkoclaw.config.loop_detection_config import LoopDetectionConfig
 from kkoclaw.config.memory_config import MemoryConfig, load_memory_config_from_dict
 from kkoclaw.config.model_config import ModelConfig
 from kkoclaw.config.run_events_config import RunEventsConfig
@@ -106,7 +105,6 @@ class AppConfig(BaseModel):
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")
-    loop_detection: LoopDetectionConfig = Field(default_factory=LoopDetectionConfig, description="Loop detection middleware configuration")
     safety_finish_reason: SafetyFinishReasonConfig = Field(default_factory=SafetyFinishReasonConfig, description="Safety finish reason middleware configuration")
     tool_output: ToolOutputConfig = Field(default_factory=ToolOutputConfig, description="Tool output budget enforcement configuration")
     token_economy: TokenEconomyConfig = Field(default_factory=TokenEconomyConfig, description="Token Economy system configuration (concise responses, history compression, storm breaker)")

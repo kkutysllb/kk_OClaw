@@ -1063,7 +1063,7 @@ cron_management:
 #      （head+tail 策略，保护代码块/URL/文件路径不被破坏）
 #   3. storm_breaker: 抑制同回合内完全相同的工具调用
 #
-# 注意：Storm Breaker 集成在 LoopDetectionMiddleware 中作为第四层检测，
+# 注意：Storm Breaker 集成在 TokenEconomyMiddleware 中，
 # 通过 storm_breaker_* 字段控制。
 # token_economy:
 #   enabled: false                          # 总开关，默认禁用

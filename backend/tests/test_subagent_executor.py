@@ -240,15 +240,6 @@ class TestAgentConstruction:
                 build_subagent_runtime_middlewares=fake_build_subagent_runtime_middlewares,
             ),
         )
-        monkeypatch.setitem(
-            sys.modules,
-            "kkoclaw.agents.middlewares.loop_detection_middleware",
-            _module(
-                "kkoclaw.agents.middlewares.loop_detection_middleware",
-                LoopDetectionMiddleware=lambda **kw: object(),
-            ),
-        )
-
         executor = SubagentExecutor(
             config=base_config,
             tools=[],

@@ -466,6 +466,12 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
+- **Removed tool-loop detection mechanism + dead code cleanup (2026-06-20)**
+  - **Fully removed `LoopDetectionMiddleware`** from all 3 injection points (factory.py, lead_agent/agent.py, subagents/executor.py) and cleaned up all related dead code: deleted `loop_detection_middleware.py`, `loop_detection_config.py`, `test_loop_detection_middleware.py` (including desktop packaged mirrors).
+  - Reason: the 4-layer loop detection mechanism (hash detection / frequency detection / error convergence / Storm Breaker) had thresholds that conflicted with real long-running workflows, causing tasks to be automatically interrupted mid-execution and hurting the customer experience. After removal, Storm Breaker (same-turn repeated-call suppression) still protects via `TokenEconomyMiddleware`.
+  - Cleaned up the dead `AppConfig.loop_detection` field (it was never consumed by any code, and its config defaults of 30/50 were inconsistent with the code defaults of 80/150).
+  - The SSE `task_interrupted` notification mechanism is retained, serving other interrupt sources such as `SafetyFinishReasonMiddleware`.
+  - Documentation (middlewares.mdx, zh + en) updated in sync with the middleware list and descriptions.
 - **Desktop Web-data migration wizard + multiple stability fixes (2026-06-19)**
   - Added a **Web-to-desktop data migration wizard**: after installing the desktop app, users can one-click migrate custom skills, extension config (MCP servers + skill toggles), skill credentials (.env), memory data, and custom agents from an existing web deployment — no re-configuration needed. Shared skills on the web side become private copies on the desktop, free to modify without affecting other web users.
   - The migration logic correctly handles the difference between the web-side **scattered layout** (skills/custom, .env, extensions_config.json, backend/.kkoclaw/) and the desktop-side **flat layout** (~/.kkoclaw-desktop/). Each category uses a different merge strategy: skills/agents skip existing items, extensions use JSON union-merge, credentials only append missing KEYs, memory is copied only if the target is absent.
@@ -483,7 +489,7 @@ This section records recently completed work and near-term pending items. See `d
   - Added `TokenEconomyMiddleware` (`token_economy_middleware.py`): automatically truncates old ToolMessage content before model calls (head+tail strategy), protecting code blocks / URLs / file paths / error signals from being broken; injects a concise response system-reminder
   - Added `ToolStormBreaker` (`tool_storm_breaker.py`): a sliding window tracks tool calls within the same turn; once the same name+args hits the threshold, it auto-suppresses; mutating tools automatically clear read-only records
   - Added the `prefix_volatility.py` diagnostic module: scans the system prompt for volatile tokens like UUID / ISO8601 / hex hashes / JWT to locate prompt cache invalidation causes
-  - `LoopDetectionMiddleware` added a fourth detection layer: integrates Storm Breaker, intercepting repeated calls within the same turn at the `wrap_tool_call` entry, returning an explanatory ToolMessage instead of executing the actual tool
+  - `TokenEconomyMiddleware` integrates Storm Breaker: intercepts repeated calls within the same turn at the `wrap_tool_call` entry, returning an explanatory ToolMessage instead of executing the actual tool
   - `AppConfig` registers the `token_economy` field; the middleware chain in `agent.py` registers `TokenEconomyMiddleware` after `ToolOutputBudgetMiddleware`
   - Config sync: `config.yaml`, `config.example.yaml`, and `desktop/backend-build/config.embedded.yaml` all add the `token_economy` section
   - Full unit test coverage (`test_token_economy_middleware.py`, 26 test cases): historical truncation, protected segments, signal lines, concise directives, Storm Breaker suppression / mutation clearing / turn reset / argument-order independence, volatile token detection
@@ -502,7 +508,7 @@ This section records recently completed work and near-term pending items. See `d
   - Security hardening: ZIP bomb protection, Origin verification against CSRF, MCP key redaction refactor
   - Startup recovery: `deps.py` auto-recovers orphaned runs after Gateway restart
 - Fixed the Zhipu GLM-5 model 1210 error: created the `PatchedChatZhipu` adapter to strip the incompatible `stream_options` parameter
-- Frontend prompt on tool loop interruption: when `LoopDetectionMiddleware` triggers a hard_stop, it notifies the frontend via an SSE custom event; the frontend shows a toast explaining the interruption reason with a "Continue" action
+- Frontend prompt on task interruption: when a safety middleware (e.g. `SafetyFinishReasonMiddleware`) triggers a hard stop, it notifies the frontend via an SSE custom event; the frontend shows a toast explaining the interruption reason with a "Continue" action
 - `PatchedChatDeepSeek` adds a model-name alias mechanism (`_MODEL_NAME_ALIASES`), supporting auto-mapping locally deployed model names (e.g. `deepseek_v4`) to API-accepted names (e.g. `deepseek-v4-flash`)
 - Completed TF-IDF similarity retrieval based on `current_context` with weighted ranking for memory facts
 - Added a facts-side cache, queryable stats, and debug logs for memory retrieval
@@ -527,7 +533,6 @@ This section records recently completed work and near-term pending items. See `d
 
 ### Pending Work
 
-- Release desktop client together with coding capabilities
 - Pool sandbox resources to reduce the number of sandbox containers
 - Add an authentication / authorization layer
 - Implement rate limiting

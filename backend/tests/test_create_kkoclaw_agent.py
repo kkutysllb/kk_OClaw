@@ -602,32 +602,29 @@ def test_extra_with_middleware_takeover_conflict():
 
 
 # ---------------------------------------------------------------------------
-# 29. LoopDetectionMiddleware is always present
+# 29. LoopDetectionMiddleware is NOT present (removed — caused mid-task interruptions)
 # ---------------------------------------------------------------------------
 @patch("kkoclaw.agents.factory.create_agent")
-def test_loop_detection_always_present(mock_create_agent):
+def test_loop_detection_not_present(mock_create_agent):
     mock_create_agent.return_value = MagicMock()
     create_kkoclaw_agent(_make_mock_model(), features=RuntimeFeatures(sandbox=False))
 
     call_kwargs = mock_create_agent.call_args[1]
     mw_types = [type(m).__name__ for m in call_kwargs["middleware"]]
-    assert "LoopDetectionMiddleware" in mw_types
+    assert "LoopDetectionMiddleware" not in mw_types
 
 
 # ---------------------------------------------------------------------------
-# 30. LoopDetection before Clarification
+# 30. ClarificationMiddleware is now the last built-in (LoopDetection removed)
 # ---------------------------------------------------------------------------
 @patch("kkoclaw.agents.factory.create_agent")
-def test_loop_detection_before_clarification(mock_create_agent):
+def test_clarification_is_last_builtin(mock_create_agent):
     mock_create_agent.return_value = MagicMock()
     create_kkoclaw_agent(_make_mock_model(), features=RuntimeFeatures(sandbox=False))
 
     call_kwargs = mock_create_agent.call_args[1]
     mw_types = [type(m).__name__ for m in call_kwargs["middleware"]]
-    loop_idx = mw_types.index("LoopDetectionMiddleware")
-    clar_idx = mw_types.index("ClarificationMiddleware")
-    assert loop_idx < clar_idx
-    assert loop_idx == clar_idx - 1
+    assert mw_types[-1] == "ClarificationMiddleware"
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +755,6 @@ def test_full_chain_order(mock_create_agent):
         "MemoryMiddleware",
         "ViewImageMiddleware",
         "SubagentLimitMiddleware",
-        "LoopDetectionMiddleware",
         "ClarificationMiddleware",
     ]
     assert mw_types == expected_order
