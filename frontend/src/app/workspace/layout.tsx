@@ -4,8 +4,8 @@ import { type ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { AuthProvider } from "@/core/auth/AuthProvider";
+import { getDesktopSessionToken } from "@/core/auth/session";
 import { buildLoginUrl, type User } from "@/core/auth/types";
-import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
 import { GatewayUnavailable } from "./gateway-unavailable";
@@ -31,7 +31,9 @@ export default function WorkspaceLayout({
     async function check() {
       const base = getBackendBaseURL();
       try {
+        const token = getDesktopSessionToken();
         const meRes = await fetch(`${base}/api/v1/auth/me`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           cache: "no-store",
         });
 

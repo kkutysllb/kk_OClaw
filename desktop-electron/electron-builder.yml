@@ -41,13 +41,23 @@ mac:
     - zip
   hardenedRuntime: true
   gatekeeperAssess: false
-  # Skip code signing for local builds. Apple's timestamp service is often
-  # unreachable from China, and unsigned DMGs work fine for local testing.
-  # For distribution, set CSC_LINK + APPLE_ID env vars to enable signing.
-  identity: null
+  # Code signing is enabled automatically when CSC_LINK (base64 .p12) and
+  # CSC_KEY_PASSWORD are present in the environment (set in GitHub Actions
+  # secrets). For local builds where you want to skip signing, run:
+  #   CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac
+  # or override on the command line:
+  #   electron-builder --config.mac.identity=null
+  # Do NOT put `identity: null` here — it permanently disables signing even
+  # in CI where credentials are available, shipping unsigned DMGs.
   entitlements: build/Entitlements.plist
   entitlementsInherit: build/Entitlements.plist
   icon: build/icon.icns
+  # Notarization is handled automatically by electron-builder v25 when
+  # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID are set.
+  # The afterSign hook below provides an explicit notarize step as a
+  # safety net in case auto-notarize behaviour changes between versions.
+  notarize:
+    teamId: "${env.APPLE_TEAM_ID}"
 
 dmg:
   title: "${productName} ${version}"

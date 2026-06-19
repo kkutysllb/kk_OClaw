@@ -1,4 +1,4 @@
-import { ChatProviders } from "@/components/workspace/chats/chat-providers";
+import { ChatProviders } from "./_chat-providers";
 
 export function generateStaticParams() {
   return [{ agent_name: "__init__", thread_id: "new" }];

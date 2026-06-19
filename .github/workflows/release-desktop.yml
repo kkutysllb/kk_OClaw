@@ -230,10 +230,16 @@ jobs:
       # "Publish". The release starts in draft mode.
       # ════════════════════════════════════════════════════════════════
       - name: Compile TypeScript (main + preload)
+        # MUST use `pnpm run build` instead of calling tsc directly.
+        # The build script in package.json includes a critical
+        # `mv -f dist/preload.js dist/preload.cjs` step that renames the
+        # CommonJS preload bundle so Electron's sandbox loader can find it.
+        # main.ts references `preload.cjs`; without the rename the packaged
+        # app ships with `preload.js`, preload fails to load, the
+        # `window.oclawDesktop` bridge is undefined, and the renderer shows
+        # a blank white screen.
         working-directory: desktop-electron
-        run: |
-          pnpm exec tsc -p tsconfig.json
-          pnpm exec tsc -p tsconfig.preload.json
+        run: pnpm run build
 
       - name: Build Electron app
         working-directory: desktop-electron

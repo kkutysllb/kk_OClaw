@@ -9,6 +9,7 @@
 import {
   app,
   BrowserWindow,
+  powerSaveBlocker,
   protocol,
   globalShortcut,
   Menu,
@@ -18,7 +19,8 @@ import {
   type BrowserWindowConstructorOptions,
 } from "electron";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ESM has no __dirname; derive it from this module's URL. Compiled output
@@ -134,6 +136,11 @@ function createAppWindow(options: AppWindowOptions = {}): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Prevent macOS App Nap / Chromium background throttling from killing
+      // long-lived SSE streams (coding agent runs, chat replies). Without this,
+      // switching windows or minimising the app can throttle network activity
+      // enough to break fetch-based SSE connections.
+      backgroundThrottling: false,
       // preload MUST be CommonJS (.cjs): Electron's sandbox loader does not
       // support ESM `import` statements. tsconfig.preload.json compiles
       // preload.ts to CommonJS, and the build script renames it to .cjs.
@@ -241,12 +248,81 @@ function createNewTaskWindow(path = "/workspace/chats/new"): BrowserWindow {
   return createAppWindow({ path });
 }
 
+/**
+ * MIME type mapping for the most common static-export assets.
+ *
+ * The desktop shell serves the entire Next.js static export through a single
+ * `app://` custom-protocol handler.  Unlike the deprecated
+ * `registerFileProtocol` (which inferred Content-Type from the file
+ * extension), `protocol.handle` returns a raw `Response` whose
+ * Content-Type must be set explicitly — otherwise the browser treats `.txt`
+ * RSC payloads as `text/plain` and `.js` chunks as opaque binaries, breaking
+ * both client-side navigation and script loading.
+ */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".txt": "text/x-component; charset=utf-8", // Next.js RSC Flight payload
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".eot": "application/vnd.ms-fontobject",
+};
+
+function contentTypeForPath(relativePath: string): string {
+  return (
+    MIME_BY_EXTENSION[extname(relativePath).toLowerCase()] ??
+    "application/octet-stream"
+  );
+}
+
 function registerFrontendProtocol(): void {
-  protocol.registerFileProtocol(APP_SCHEME, (request, callback) => {
-    const relativePath = getFrontendURLPath(request.url);
-    callback({
-      path: join(getFrontendDistDir(), relativePath),
-    });
+  protocol.handle(APP_SCHEME, async (request) => {
+    // Next.js App Router client-side navigation sends `RSC: 1` to request
+    // the Flight payload instead of the rendered HTML. Detecting this is
+    // critical: without it, dynamic-route navigations (e.g.
+    // /workspace/chats/<id>) receive the HTML fallback and Next.js logs
+    // "Failed to fetch RSC payload ... Falling back to browser navigation",
+    // which forces a full page reload and kills every active SSE stream
+    // (chat replies, coding-agent runs).
+    const isRsc = request.headers.get("rsc") === "1";
+    const relativePath = getFrontendURLPath(request.url, isRsc);
+    const filePath = join(getFrontendDistDir(), relativePath);
+
+    try {
+      const body = await readFile(filePath);
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": contentTypeForPath(relativePath) },
+      });
+    } catch {
+      // File missing (e.g. an unknown dynamic route or a stale chunk URL).
+      // Fall back to the SPA shell so the renderer can recover client-side
+      // — mirroring the behaviour of the old registerFileProtocol path,
+      // which also served index.html for unknown routes.
+      try {
+        const indexBody = await readFile(join(getFrontendDistDir(), "index.html"));
+        return new Response(indexBody, {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      } catch {
+        return new Response("Not Found", { status: 404 });
+      }
+    }
   });
 }
 
@@ -498,6 +574,15 @@ void app.whenReady().then(async () => {
   log.info(`OClaw desktop starting (isPackaged=${app.isPackaged}, version=${app.getVersion()})`);
   log.info(`userData dir: ${app.getPath("userData")}`);
   log.info(`logs dir: ${getLogsDir()}`);
+
+  // Prevent macOS from suspending the app during background activity.
+  // Long-running coding-agent tasks and active SSE streams must not be
+  // throttled when the user switches to another workspace or minimises
+  // the window (macOS App Nap can throttle network enough to kill SSE).
+  if (process.platform === "darwin") {
+    powerSaveBlocker.start("prevent-app-suspension");
+    log.info("powerSaveBlocker started (prevent-app-suspension)");
+  }
 
   registerFrontendProtocol();
   Menu.setApplicationMenu(buildAppMenu());

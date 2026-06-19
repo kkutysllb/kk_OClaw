@@ -18,6 +18,11 @@ import type { UploadedFileInfo } from "../uploads";
 import { promptInputFilePartToFile, uploadFiles } from "../uploads";
 
 import type { AgentThread, AgentThreadState, RunMessage } from "./types";
+import {
+  getCachedThreadState,
+  setCachedThreadState,
+  type CachedThreadState,
+} from "./thread-state-store";
 
 export type ToolEndEvent = {
   name: string;
@@ -143,6 +148,19 @@ export function useThreadStream({
   onToolEnd,
 }: ThreadStreamOptions) {
   const { t } = useI18n();
+  // ── Cross-mount state restoration ───────────────────────────────
+  // On component remount (e.g. desktop workspace-tab switch), `useStream`
+  // reinitialises with empty messages and `isLoading=false`. The user would
+  // see a flash of empty content + ready→streaming state toggle before the
+  // stream reconnects. We bridge that gap with a module-level cache of the
+  // last displayed state so the remounted component renders the previous
+  // messages immediately while the SSE reconnects silently in the background.
+  const restoredStateRef = useRef<CachedThreadState | null | undefined>(
+    undefined,
+  );
+  if (restoredStateRef.current === undefined && threadId) {
+    restoredStateRef.current = getCachedThreadState(threadId) ?? null;
+  }
   // Track the thread ID that is currently streaming to handle thread changes during streaming
   const [onStreamThreadId, setOnStreamThreadId] = useState(() => threadId);
   // Ref to track current thread ID across async callbacks without causing re-renders,
@@ -197,7 +215,24 @@ export function useThreadStream({
     client: getAPIClient(isMock),
     assistantId,
     threadId: onStreamThreadId,
-    reconnectOnMount: true,
+    // SDK calls onThreadId immediately after client.threads.create()
+    // succeeds — BEFORE runs.stream() and thus before onCreated.  This is
+    // the most reliable notification of a new thread ID.  We call
+    // handleStreamStart here so onStart fires and setOnStreamThreadId
+    // updates even if the onCreated callback (which depends on the
+    // onRunCreated SSE event from the server) is delayed or lost.
+    onThreadId: (newThreadId: string) => {
+      handleStreamStart(newThreadId, "");
+    },
+    // Use localStorage (not sessionStorage) for the run-resume key so the
+    // runId survives workspace-tab switches in the desktop app.  The SDK's
+    // default `true` uses sessionStorage which — while technically persistent
+    // across client-side navigations — has been observed to lose the key in
+    // certain Electron packaged-build scenarios (custom scheme, background
+    // throttling).  localStorage is more durable and the key is cleaned up
+    // automatically by the SDK's onSuccess/onError callbacks.
+    reconnectOnMount:
+      typeof window !== "undefined" ? () => window.localStorage : false,
     fetchStateHistory: { limit: 1 },
     onCreated(meta) {
       handleStreamStart(meta.thread_id, meta.run_id);
@@ -218,6 +253,7 @@ export function useThreadStream({
       }
     },
     onUpdateEvent(data) {
+      const keys = Object.keys(data || {});
       if (data["SummarizationMiddleware.before_model"]) {
         const _messages = [
           ...(data["SummarizationMiddleware.before_model"].messages ?? []),
@@ -275,6 +311,7 @@ export function useThreadStream({
       }
     },
     onCustomEvent(event: unknown) {
+      const type = (event as Record<string,unknown>)?.["type"];
       if (
         typeof event === "object" &&
         event !== null &&
@@ -341,7 +378,19 @@ export function useThreadStream({
       // task_interrupted toast disabled per user request
     },
     onError(error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       setOptimisticMessages([]);
+      // In the desktop packaged build, a "TypeError: network error" on the
+      // SSE stream is usually caused by the renderer process being reloaded
+      // (e.g. RSC navigation fallback) rather than a real server error.
+      // Don't show a toast — the fallback reconnection will silently rejoin
+      // the stream once the component remounts.
+      if (
+        isDesktop() &&
+        (errMsg.includes("network error") || errMsg.includes("Failed to fetch"))
+      ) {
+        return;
+      }
       toast.error(getStreamErrorMessage(error));
     },
     onFinish(state) {
@@ -367,6 +416,98 @@ export function useThreadStream({
     startedRef.current = false;
     sendInFlightRef.current = false;
   }, [threadId]);
+
+  // ── Fallback run reconnection ────────────────────────────────────────────
+  //
+  // When the component remounts (e.g. desktop workspace-tab switch), the
+  // SDK's built-in ``reconnectOnMount`` logic reads the stored runId and
+  // calls ``joinStream``.  However this can fail silently if:
+  //   • the stored runId was already cleaned up by a previous onSuccess,
+  //   • the joinStream HTTP request loses a race with state history fetch,
+  //   • macOS App Nap delayed the reconnection past the bridge TTL.
+  //
+  // As a safety net, after mount we poll the backend for any active run on
+  // this thread.  If one exists AND the SDK has not already reconnected
+  // (``thread.isLoading`` is still false), we manually join it.  This is
+  // idempotent — if the SDK already reconnected, the manual join is skipped.
+  //
+  // The polling uses a ref guard (``reconnectAttemptedRef``) so it only runs
+  // once per mount, and the effect cleanup cancels the timeout on unmount.
+  const reconnectAttemptedRef = useRef<string | null>(null);
+  const threadJoinStreamRef = useRef(thread.joinStream);
+  threadJoinStreamRef.current = thread.joinStream;
+  const threadIsLoadingRef = useRef(thread.isLoading);
+  threadIsLoadingRef.current = thread.isLoading;
+
+  useEffect(() => {
+    if (!threadId || isMock) return;
+    // Only attempt once per threadId per mount.
+    if (reconnectAttemptedRef.current === threadId) return;
+    reconnectAttemptedRef.current = threadId;
+
+    let cancelled = false;
+
+    const attemptFallbackReconnect = async () => {
+      // Give the SDK's built-in reconnection a short window (~800ms) to succeed.
+      // Reduced from 2.5s — in the desktop packaged build the reconnectOnMount
+      // joinStream fires synchronously on mount; a long delay just makes the
+      // user stare at a blank panel while the coding agent is running.
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (cancelled) return;
+
+      // If the SDK already reconnected, nothing to do.
+      if (threadIsLoadingRef.current) return;
+
+      try {
+        const apiClient = getAPIClient();
+        const runs = await apiClient.runs.list(threadId!);
+        if (cancelled) return;
+
+        // Find the most recent active run (running or pending).
+        // Runs are typically returned newest-first.
+        const activeRun = runs.find(
+          (r) => r.status === "running" || r.status === "pending",
+        );
+
+        if (activeRun && !threadIsLoadingRef.current) {
+          // Manually join the active run's stream.
+          // Pass explicit stream modes — joinStream doesn't auto-track
+          // modes like submit does, so without this the reconnected
+          // stream would only carry callback modes (updates/custom)
+          // and thread.messages would remain empty.
+          await threadJoinStreamRef.current?.(activeRun.run_id, undefined, {
+            streamMode: ["values", "messages-tuple"],
+          });
+        } else if (!activeRun) {
+          // No active run on the backend — clean up any stale reconnect key
+          // so it doesn't cause spurious joinStream errors on the next mount.
+          // This is especially important now that we use localStorage (which
+          // persists across app restarts) instead of sessionStorage.
+          try {
+            window.localStorage.removeItem(`lg:stream:${threadId}`);
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // Best-effort: if the backend is unreachable or the run list fails,
+        // silently give up. The user can still send a new message.
+      }
+    };
+
+    // Offset the timer so the SDK's reconnectOnMount (which fires in the same
+    // render tick on mount) has a chance to win the race and call joinStream
+    // before we start polling for active runs.
+    const timer = setTimeout(
+      () => void attemptFallbackReconnect(),
+      800,
+    );
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [threadId, isMock]);
 
   // Clear optimistic when server messages arrive (count increases)
   useEffect(() => {
@@ -537,6 +678,13 @@ export function useThreadStream({
             },
             {
               threadId: threadId,
+              // Explicitly request values + messages-tuple stream modes.
+              // In SDK 1.6.0 these modes are auto-tracked via property getters
+              // (thread.messages / thread.values), but the tracking ref can
+              // lose its entries after stream.clear() fires on threadId change.
+              // Without these modes the backend never sends full-state snapshots,
+              // so thread.messages stays empty and the user sees no output.
+              streamMode: ["values", "messages-tuple"],
               streamSubgraphs: true,
               streamResumable: true,
               // Desktop: keep the task running even if the SSE connection drops
@@ -604,21 +752,70 @@ export function useThreadStream({
     }
   );
 
-  // When `threadId` is undefined/null (a brand-new, unsaved thread), force an
-  // empty message list. This avoids a transient race where `isNewThread` has
-  // already flipped to true (InputBox translates to center, Welcome renders)
-  // while the internal `onStreamThreadId` / `useStream` still hold the previous
-  // thread's messages — which previously caused the new-chat UI to "float"
-  // over the previous thread's history until a manual page refresh.
-  const mergedMessages = threadId
-    ? mergeMessages(history, filteredThreadMessages, optimisticMessages)
-    : [];
+  // Always merge all three sources.  When the outer `threadId` prop is still
+  // undefined (brand-new thread — the SDK creates the thread inside submit()
+  // and only later calls onStart → setThreadId in the parent), the SDK's
+  // internal stream may already be delivering messages.  The previous guard
+  // `threadId ? merge : optimistic-only` discarded those live stream messages
+  // during the ~100ms window between stream-start and parent re-render,
+  // causing the user's message to "flash and disappear".
+  //
+  // Safe because when nothing has arrived yet, all three arrays are empty
+  // and mergeMessages returns [].  When history loads for an existing thread,
+  // it merges correctly.  When the stream delivers messages before the parent
+  // propagates the new threadId, they still display.
+  const mergedMessages = mergeMessages(
+    history,
+    filteredThreadMessages,
+    optimisticMessages,
+  );
+
+  // ── Cross-mount display bridge ─────────────────────────────────
+  // While `useStream` is reconnecting after a remount, `thread.messages` is
+  // empty and `thread.isLoading` resets to false — causing a flash of empty
+  // content and a ready→streaming status toggle.  Until the live stream
+  // produces its first message, fall back to the cached display state so the
+  // UI stays visually identical across tab switches.  Once the stream has
+  // data (or has definitively settled with no messages) the live values take
+  // over seamlessly.
+  const restored = restoredStateRef.current;
+  const streamHasData = filteredThreadMessages.length > 0;
+  const inReconnectTransition =
+    !!threadId && !streamHasData && !!restored;
+  const displayMessages = inReconnectTransition
+    ? (restored!.messages as typeof mergedMessages)
+    : mergedMessages;
+  const displayIsLoading = inReconnectTransition
+    ? restored!.isLoading
+    : thread.isLoading;
+
+  // Persist the current display state so the next mount can restore it.
+  // Only cache when we have meaningful data (non-empty messages or an active
+  // streaming state) to avoid overwriting a good cache with an empty one.
+  useEffect(() => {
+    if (!threadId) return;
+    const hasContent = displayMessages.length > 0 || displayIsLoading;
+    if (!hasContent) return;
+    setCachedThreadState(threadId, {
+      messages: displayMessages as Message[],
+      values: thread.values as AgentThreadState,
+      isLoading: displayIsLoading,
+      error: thread.error,
+    });
+  }, [
+    threadId,
+    displayMessages,
+    displayIsLoading,
+    thread.values,
+    thread.error,
+  ]);
 
   // Merge history, live stream, and optimistic messages for display
   // History messages may overlap with thread.messages; thread.messages take precedence
   const mergedThread = {
     ...thread,
-    messages: mergedMessages,
+    messages: displayMessages,
+    isLoading: displayIsLoading,
   } as typeof thread;
 
   return {
@@ -628,6 +825,11 @@ export function useThreadStream({
     isHistoryLoading,
     hasMoreHistory,
     loadMoreHistory,
+    // The real thread ID currently being streamed.  Updated by the SDK's
+    // onCreated callback (handleStreamStart).  Exposed so callers that need
+    // the live thread ID (e.g. coding-workbench panels querying session/event/
+    // roi APIs) don't have to rely solely on the onStart callback chain.
+    streamThreadId: onStreamThreadId ?? undefined,
   } as const;
 }
 

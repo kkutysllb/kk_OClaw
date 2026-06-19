@@ -57,7 +57,38 @@ function normalizeSafeRelativePath(input: string): string | null {
   return normalized === "." ? "" : normalized;
 }
 
-export function resolveFrontendRequestPath(input: string): string {
+/**
+ * Next.js App Router static-export RSC payload file naming.
+ *
+ * During client-side navigation, App Router fetches the destination URL with
+ * `RSC: 1` header to retrieve the RSC Flight payload.  In a static export,
+ * each pre-rendered page emits a `__next.<segments>.__PAGE__.txt` file under
+ * its own directory.  Dynamic segments (e.g. `[thread_id]`) are encoded as
+ * `$d$<paramname>`.
+ *
+ * Only the placeholder variant is pre-rendered for dynamic routes
+ * (e.g. /workspace/chats/new, /workspace/coding/__init__).  All other ids
+ * have no `.txt` file.  Without a dedicated handler, the fetch returns the
+ * fallback HTML and Next.js logs
+ * "Failed to fetch RSC payload for ... Falling back to browser navigation",
+ * which triggers a full page reload — killing active SSE streams and
+ * interrupting running coding-agent / chat tasks on tab switches.
+ *
+ * For RSC requests on dynamic routes, we therefore return the placeholder's
+ * `__PAGE__.txt`.  Because `[thread_id]/page.tsx` is a client component, the
+ * RSC payload only carries component references (not thread-specific data);
+ * the actual id is read from usePathname() at runtime, so serving the
+ * placeholder payload for any id is safe.
+ */
+const CHATS_DYNAMIC_RSC =
+  "workspace/chats/new/__next.workspace.chats.$d$thread_id.__PAGE__.txt";
+const CODING_DYNAMIC_RSC =
+  "workspace/coding/__init__/__next.workspace.coding.$d$projectId.__PAGE__.txt";
+
+export function resolveFrontendRequestPath(
+  input: string,
+  isRsc = false,
+): string {
   const clean = normalizeSafeRelativePath(input);
   if (clean === null) {
     return "index.html";
@@ -87,6 +118,55 @@ export function resolveFrontendRequestPath(input: string): string {
   const ext = extname(clean);
   if (ext && ASSET_EXTENSIONS.has(ext)) {
     return clean;
+  }
+
+  // ── RSC payload requests (Next.js App Router client-side navigation) ──
+  // Next.js sends `RSC: 1` header during client-side navigation to fetch
+  // the Flight payload instead of HTML.  In a static export each pre-rendered
+  // page directory contains a `__next.<segments>.__PAGE__.txt` file.
+  //
+  // If we return HTML for an RSC request, Next.js logs
+  //   "Failed to fetch RSC payload for ... Falling back to browser navigation"
+  // and performs a FULL page reload — which kills every active SSE stream
+  // (chat replies, coding-agent runs).  This is the #1 cause of tab-switch
+  // task interruptions in the desktop packaged build.
+  //
+  // For dynamic routes (e.g. /workspace/chats/<id>) only one placeholder
+  // variant is pre-rendered, so we map every id to that placeholder's
+  // __PAGE__.txt.  For static routes (e.g. /workspace/coding) we compute
+  // the canonical __PAGE__.txt path directly.
+  if (isRsc) {
+    // Dynamic routes → placeholder RSC payload
+    if (
+      clean.startsWith("workspace/chats/") &&
+      !clean.startsWith("workspace/chats/new")
+    ) {
+      return CHATS_DYNAMIC_RSC;
+    }
+    if (
+      clean.startsWith("workspace/agents/") &&
+      clean.includes("/chats/")
+    ) {
+      // Agent chat routes share the ChatPage component; reuse chats RSC.
+      return CHATS_DYNAMIC_RSC;
+    }
+    if (
+      clean.startsWith("workspace/coding/") &&
+      !clean.startsWith("workspace/coding/new") &&
+      !clean.startsWith("workspace/coding/__init__")
+    ) {
+      return CODING_DYNAMIC_RSC;
+    }
+
+    // Static routes → canonical __PAGE__.txt path.
+    //   pathname ""               → "__next.__PAGE__.txt"
+    //   pathname "workspace"      → "workspace/__next.workspace.__PAGE__.txt"
+    //   pathname "workspace/coding"→ "workspace/coding/__next.workspace.coding.__PAGE__.txt"
+    if (!clean) {
+      return "__next.__PAGE__.txt";
+    }
+    const segments = clean.replaceAll("/", ".");
+    return `${clean}/__next.${segments}.__PAGE__.txt`;
   }
 
   // Desktop dynamic route fallback (only for page navigations — paths
@@ -134,7 +214,10 @@ export function resolveFrontendRequestPath(input: string): string {
   return `${clean}.html`;
 }
 
-export function getFrontendURLPath(url: string): string {
+export function getFrontendURLPath(url: string, isRsc = false): string {
   const parsed = new URL(url);
-  return resolveFrontendRequestPath(parsed.pathname + parsed.search + parsed.hash);
+  return resolveFrontendRequestPath(
+    parsed.pathname + parsed.search + parsed.hash,
+    isRsc,
+  );
 }

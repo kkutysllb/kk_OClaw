@@ -99,6 +99,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   }, [agentThreadId, threadIdStorageKey]);
   const codingThreadId = agentThreadId ?? projectId;
   const resultsThreadId = codingThreadId;
+
   const [activeCodeTab, setActiveCodeTab] = useState<
     "code" | "task-changes" | "diff" | "results" | "review"
   >("code");

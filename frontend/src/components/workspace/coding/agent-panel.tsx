@@ -112,6 +112,7 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     isHistoryLoading,
     hasMoreHistory,
     loadMoreHistory,
+    streamThreadId,
   } = useThreadStream({
     threadId,
     assistantId: "coding_agent",
@@ -128,12 +129,36 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
       if (isFileMutationTool(event.name)) {
         refreshProjectFiles();
       }
+      // Invalidate coding session/event/roi queries so the results panels
+      // pick up data written by the backend during the run.  Without this,
+      // the initial fetch (fired at thread-creation time) returns empty and
+      // React Query never refetches.
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "sessions"],
+        exact: false,
+      });
     },
     onFinish: () => {
       refreshProjectFiles();
       setAgentStatus("completed");
+      // Final refresh of all coding session data after the run completes.
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "sessions"],
+        exact: false,
+      });
     },
   });
+
+  // Belt-and-suspenders: propagate the SDK's internal stream thread ID
+  // to the parent (coding-workbench) via useEffect.  The onStart callback
+  // above already does this, but if the callback chain breaks for any
+  // reason (timing, stale closure, SDK internals), this effect ensures
+  // the parent always gets the real thread ID once the stream starts.
+  useEffect(() => {
+    if (streamThreadId) {
+      onThreadIdChange?.(streamThreadId);
+    }
+  }, [streamThreadId, onThreadIdChange]);
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {

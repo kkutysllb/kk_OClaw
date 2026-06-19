@@ -81,70 +81,11 @@ const CONFLICT_DIRS = [
 const CONFLICT_FILES = [];
 
 // ── Temporary files to create for the build, then remove afterwards ────────
-// These files don't exist in the source tree; they are generated specifically
-// for the desktop static export build and deleted in the finally block.
+// NOTE: _chat-providers.tsx used to be listed here as a "temp file", but both
+// web and desktop layouts now permanently import it. It lives in the source
+// tree as a normal file and must NOT be created/deleted by this script —
+// doing so deletes a tracked source file and breaks `next dev` on web.
 const NEW_FILES = [
-  {
-    // Client-component wrapper for the chat providers. The [thread_id] layout
-    // must be a server component to export generateStaticParams, but the
-    // providers (SubtasksProvider, ArtifactsProvider, PromptInputProvider)
-    // live in files without "use client" directives. A server component
-    // cannot import them directly — this wrapper establishes the client
-    // boundary.
-    file: join(APP_DIR, "workspace", "chats", "[thread_id]", "_chat-providers.tsx"),
-    content: `"use client";
-
-import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
-import { ArtifactsProvider } from "@/components/workspace/artifacts";
-import { SubtasksProvider } from "@/core/tasks/context";
-
-export function ChatProviders({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <SubtasksProvider>
-      <ArtifactsProvider>
-        <PromptInputProvider>{children}</PromptInputProvider>
-      </ArtifactsProvider>
-    </SubtasksProvider>
-  );
-}
-`,
-  },
-  {
-    // Same client-component wrapper, but for the agents route.
-    file: join(
-      APP_DIR,
-      "workspace",
-      "agents",
-      "[agent_name]",
-      "chats",
-      "[thread_id]",
-      "_chat-providers.tsx",
-    ),
-    content: `"use client";
-
-import { PromptInputProvider } from "@/components/ai-elements/prompt-input";
-import { ArtifactsProvider } from "@/components/workspace/artifacts";
-import { SubtasksProvider } from "@/core/tasks/context";
-
-export function ChatProviders({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <SubtasksProvider>
-      <ArtifactsProvider>
-        <PromptInputProvider>{children}</PromptInputProvider>
-      </ArtifactsProvider>
-    </SubtasksProvider>
-  );
-}
-`,
-  },
   {
     // Server-component layout for the coding project dynamic route.
     // page.tsx is "use client" and reads projectId from usePathname(), so it
