@@ -226,6 +226,15 @@ jobs:
           find "$INTERNAL" -name "*.pyi" -delete
           # 4. Remove .pyc files inside remaining test-like dirs
           find "$INTERNAL" -path "*/testing/*" -name "*.pyc" -delete
+          # 5. Remove speech_recognition's prebuilt FLAC binaries.
+          #    These are compiled against an SDK older than macOS 10.9,
+          #    which Apple's notarization service HARDFAILS on with:
+          #      "The binary uses an SDK older than the 10.9 SDK."
+          #    The PyInstaller spec excludes the whole package, but this
+          #    is a belt-and-suspenders guard in case a future transitive
+          #    dep resurrects it.
+          rm -f "$INTERNAL"/speech_recognition/flac-* 2>/dev/null || true
+          find "$INTERNAL" \( -name "flac-mac" -o -name "flac-linux" -o -name "flac-win32.exe" \) -delete 2>/dev/null || true
 
           echo "=== After cleanup ==="
           echo "File count: $(find "$INTERNAL" -type f | wc -l)"

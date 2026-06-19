@@ -326,6 +326,15 @@ excludes = [
     "mcp.cli",
     "typer",
     "rich",
+    # speech_recognition: pulled in as a transitive dep, but the gateway
+    # never imports it (0 references in the codebase). The wheel ships a
+    # pre-built `flac-mac` binary compiled against an SDK OLDER than the
+    # macOS 10.9 SDK. Apple's notarization service HARDFAILS on any such
+    # binary with:
+    #   "The binary uses an SDK older than the 10.9 SDK."
+    # status=Invalid / statusCode=4000. Excluding the whole package keeps
+    # the offending binary out of the bundle entirely.
+    "speech_recognition",
 ]
 
 # ── Analysis ───────────────────────────────────────────────────────────────
