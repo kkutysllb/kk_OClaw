@@ -243,14 +243,6 @@ jobs:
 
       - name: Build Electron app
         working-directory: desktop-electron
-        env:
-          # electron-builder reads the package version and uses it as
-          # the release name. On tag pushes the version in
-          # desktop-electron/package.json should already match the tag.
-          # We don't override the publish provider — electron-builder.yml
-          # already declares `publish: github` with owner=kkutysllb
-          # and repo=kk_OClaw.
-          DEBUG: "electron-builder"
         run: |
           pnpm exec electron-builder ${{ matrix.build_args }} --publish always
 
