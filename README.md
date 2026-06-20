@@ -466,6 +466,16 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **修复桌面端更新检查静默失败 + updater 全链路可观测性（2026-06-20）**
+  - **问题**：本地已安装的 v0.1.2 无法自动或手动检测到刚发布的 v0.1.3，手动「检查更新」误报「已是最新版本」。
+  - **根因**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。
+  - **修复**：
+    1. 为 `electron-updater` 注入 `updaterLogger` 适配器（实现 info/warn/error/debug），将其内部日志桥接到 `main.log`。
+    2. 注册 6 个生命周期事件监听器：`checking-for-update` / `update-available` / `update-not-available` / `error` / `download-progress` / `update-downloaded`，全部写入文件日志。
+    3. 在 `updater:check` IPC handler 记录每次检查的完整结果：`latest=X current=Y available=Z`。
+    4. 在 `updater:install` handler 记录下载/安装进度。
+    5. 开发模式下也记录「updater disabled」，避免混淆。
+  - **效果**：下次出现更新失败，`main.log` 中会有完整的请求链路与错误堆栈，不再是黑箱。
 - **核心机制体验优化 + DeepSeek thinking mode 修复（2026-06-20）**
   - **任务调度**：`SubagentLimitMiddleware` 超出并发上限的 task 调用不再静默丢弃，新增 `subagent_limit_truncated` SSE 事件通知前端显示 toast 警告，用户可明确感知被跳过的任务。
   - **子任务结果中文化**：`task_tool` 返回给 LLM 和前端的所有状态消息（成功/失败/超时/取消/轮询超时）全部中文化；新增 `task_failed`/`task_timed_out`/`task_cancelled` 事件的前端处理，显示对应 toast 错误提示。

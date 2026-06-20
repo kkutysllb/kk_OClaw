@@ -466,6 +466,16 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
+- **Fixed silent desktop update-check failure + full updater observability (2026-06-20)**
+  - **Issue**: locally installed v0.1.2 could not auto- or manually detect the freshly published v0.1.3; manual "Check for Updates" falsely reported "Up to date".
+  - **Root cause**: `updater.ts` IPC handlers only `console.warn`-ed exceptions **without writing to the file log**, and `electron-updater` was never given a logger, so all its internal HTTP / rate-limit / parse errors were silently swallowed. The "Up to date" message was actually the default `{ available: false }` returned after a hidden failure.
+  - **Fix**:
+    1. Inject an `updaterLogger` adapter (info/warn/error/debug) into `electron-updater` to bridge its internal logs into `main.log`.
+    2. Register 6 lifecycle event listeners: `checking-for-update` / `update-available` / `update-not-available` / `error` / `download-progress` / `update-downloaded`, all written to the file log.
+    3. In the `updater:check` IPC handler, record the full result of every check: `latest=X current=Y available=Z`.
+    4. In the `updater:install` handler, log download and install progress.
+    5. In dev mode, also log "updater disabled" to avoid confusion.
+  - **Effect**: the next update failure will leave a complete request trail and error stack in `main.log` — no longer a black box.
 - **Core mechanism UX improvements + DeepSeek thinking mode fix (2026-06-20)**
   - **Task scheduling**: `SubagentLimitMiddleware` no longer silently drops excess task calls beyond the concurrency limit. A new `subagent_limit_truncated` SSE event notifies the frontend to show a toast warning so users can clearly see which tasks were skipped.
   - **Subagent result localization**: All status messages returned to the LLM and frontend by `task_tool` (success / failure / timeout / cancellation / polling timeout) are now in Chinese. Added frontend handling for `task_failed` / `task_timed_out` / `task_cancelled` events with corresponding error toasts.
