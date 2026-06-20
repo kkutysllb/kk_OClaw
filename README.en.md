@@ -651,6 +651,12 @@ This section records recently completed work and near-term pending items. See `d
 - **Fixed delete-project confirmation dialog title rendering vertically (2026-06-20, v0.1.5)**
   - **Root cause**: the text "删除项目" was accidentally placed inside a `h-8 w-8` (32×32px) icon-container `<span>` whose width was locked, forcing the text to wrap vertically.
   - **Fix**: moved the text out of the span to be a sibling of the icon, and added `shrink-0` to the icon container to prevent flex compression.
+- **Desktop auto-update download mirror acceleration (2026-06-20, v0.1.5)**
+  - **Problem**: electron-updater downloads directly from `github.com/.../releases/download/...` by default; in regions with poor GitHub connectivity (e.g. mainland China), throughput is ~12 KB/s, so a 286 MB installer takes 6+ hours.
+  - **Fix**: in `updater.ts`, register a `webRequest.onBeforeRequest` hook on electron-updater's dedicated session partition (`session.fromPartition("electron-updater", { cache: false })`) to rewrite GitHub release-download URLs into `https://gh-proxy.com/https://github.com/...` form. Measured mirror throughput ~10 MB/s — an **800×** speedup over direct.
+  - **Precise interception**: only `https://github.com/*/*/releases/download/*` URLs are rewritten; `api.github.com` (small update-metadata queries) and all other traffic are left untouched.
+  - **Configurable**: default mirror is `https://gh-proxy.com`; override with the `OCLAW_GH_MIRROR=https://your-mirror.example.com` env var, or set `OCLAW_GH_MIRROR=` (empty) to disable mirroring and fall back to direct.
+  - **Safe degradation**: if the mirror setup throws for any reason, it logs a warning and falls back to direct downloads — the updater itself is never broken.
 - **Comprehensive fix for desktop auto-update mechanism (2026-06-20)**
   - **Symptom**: installed versions could not auto- or manually detect freshly-published new versions; manual "Check for Updates" falsely reported "Up to date" — the updater was not running at all.
   - **Root cause 1 (missing observability)**: `updater.ts` IPC handlers only `console.warn`-ed exceptions **without writing to the file log**, and `electron-updater` was never given a logger, so all its internal HTTP / rate-limit / parse errors were silently swallowed. The "Up to date" message was actually the default `{ available: false }` returned after a hidden failure.

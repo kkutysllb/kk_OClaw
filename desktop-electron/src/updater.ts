@@ -14,7 +14,7 @@
  * "Already up-to-date" with no clue why.
  */
 
-import { app, ipcMain } from "electron";
+import { app, ipcMain, session } from "electron";
 
 import { log } from "./logger.js";
 
@@ -23,6 +23,79 @@ export interface UpdateInfo {
   version?: string;
   date?: string;
   body?: string;
+}
+
+/**
+ * Default GitHub release mirror for users in regions where raw
+ * ``github.com`` is slow (e.g. mainland China). The mirror proxies the
+ * request and typically delivers 10–500× higher throughput (measured
+ * ~10 MB/s via gh-proxy.com vs. ~12 KB/s direct).
+ *
+ * Only release *download* URLs are rewritten:
+ *
+ *   https://github.com/{owner}/{repo}/releases/download/{tag}/{file}
+ *   → https://gh-proxy.com/https://github.com/.../releases/download/...
+ *
+ * ``api.github.com`` (update metadata feed) is NOT proxied — only the
+ * large release artifacts (dmg/zip/exe/deb, typically 100–300 MB) need
+ * the speedup; the metadata request is small and usually reachable.
+ *
+ * Operators can override via env:
+ *   - ``OCLAW_GH_MIRROR=https://your-mirror.example.com``  use a custom mirror
+ *   - ``OCLAW_GH_MIRROR=`` (empty)                            disable mirroring
+ */
+const DEFAULT_GH_MIRROR = "https://gh-proxy.com";
+
+/**
+ * URL filter passed to ``webRequest.onBeforeRequest`` — only match GitHub
+ * release-download URLs, leaving all other github.com paths untouched.
+ */
+const RELEASE_DL_URL_FILTER = "https://github.com/*/*/releases/download/*";
+const RELEASE_DL_URL_RE =
+  /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//;
+
+/**
+ * Register a URL rewriter on ``electron-updater``'s dedicated session
+ * partition so release downloads go through a mirror.
+ *
+ * ``electron-updater`` uses ``session.fromPartition("electron-updater",
+ * { cache: false })`` for all its HTTP traffic (see
+ * ``electronHttpExecutor.NET_SESSION_NAME``). Hooking the rewriter onto
+ * this specific partition leaves the rest of the app's network traffic
+ * untouched.
+ */
+function setupGitHubReleaseMirror(): void {
+  const mirror = process.env.OCLAW_GH_MIRROR ?? DEFAULT_GH_MIRROR;
+  if (!mirror) {
+    log.info("[updater] GitHub release mirror disabled by OCLAW_GH_MIRROR=''");
+    return;
+  }
+
+  try {
+    const updaterSession = session.fromPartition("electron-updater", {
+      cache: false,
+    });
+    updaterSession.webRequest.onBeforeRequest(
+      { urls: [RELEASE_DL_URL_FILTER] },
+      (details, callback) => {
+        const original = details.url;
+        if (RELEASE_DL_URL_RE.test(original)) {
+          const rewritten = `${mirror}/${original}`;
+          log.info(
+            `[updater] mirror rewrite → ${mirror} (url=${original.slice(0, 96)}...)`,
+          );
+          callback({ redirectURL: rewritten });
+        } else {
+          callback({});
+        }
+      },
+    );
+    log.info(`[updater] GitHub release mirror enabled: ${mirror}`);
+  } catch (e) {
+    // Never let the mirror setup break the updater entirely — fall back
+    // to direct GitHub downloads if the session hook fails for any reason.
+    log.warn(`[updater] mirror setup failed, falling back to direct: ${formatMsg(e)}`);
+  }
 }
 
 /**
@@ -102,6 +175,11 @@ function resolveAutoUpdater(): import("electron-updater").AppUpdater | null {
  * the package to be configured — it only activates in a packaged app.
  */
 export async function registerUpdater(): Promise<void> {
+  // Wire up the release mirror BEFORE the updater makes any HTTP request.
+  // ``session.fromPartition`` is safe to call even in dev (the rewriter
+  // simply never matches in dev because the updater is a no-op there).
+  setupGitHubReleaseMirror();
+
   let autoUpdater: import("electron-updater").AppUpdater | null = null;
 
   try {

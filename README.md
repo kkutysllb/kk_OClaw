@@ -651,6 +651,12 @@ token_usage:
 - **修复删除项目确认对话框标题竖排错乱（2026-06-20，v0.1.5）**
   - **根因**："删除项目"四个字被错误地放入 `h-8 w-8`（32×32px）的 icon 容器 `<span>` 内，容器宽度被锁死，文字挤不下只能竖排。
   - **修复**：将文字移出 span 与 icon 平级，并给 icon 容器加 `shrink-0` 防止 flex 压缩。
+- **桌面端自动更新下载镜像加速（2026-06-20，v0.1.5）**
+  - **问题**：electron-updater 默认直连 `github.com/.../releases/download/...`，国内网络环境下下载速度仅 ~12 KB/s，一个 286MB 的安装包要 6+ 小时。
+  - **修复**：在 `updater.ts` 中，为 electron-updater 专用 session partition（`session.fromPartition("electron-updater", { cache: false })`）注册 `webRequest.onBeforeRequest` 拦截器，将 GitHub release download URL 重写为 `https://gh-proxy.com/https://github.com/...` 形式。实测镜像速度 ~10 MB/s，是直连的 **800 倍**。
+  - **精准拦截**：仅匹配 `https://github.com/*/*/releases/download/*` 模式，不影响 `api.github.com`（更新元数据查询，小请求不受限）也不影响其他任何网络请求。
+  - **可配置**：默认镜像 `https://gh-proxy.com`，可通过环境变量 `OCLAW_GH_MIRROR=https://your-mirror.example.com` 覆盖；设为空字符串 `OCLAW_GH_MIRROR=` 可禁用镜像、回到直连。
+  - **降级安全**：若镜像设置过程出现异常，会 log warn 后退回直连，不阻断更新机制本身。
 - **全面修复桌面端自动更新机制（2026-06-20）**
   - **问题现象**：已安装版本无法自动或手动检测到刚发布的新版本，手动「检查更新」误报「已是最新版本」，实际上 updater 根本没运行。
   - **根因 1（可观测性缺失）**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。
