@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangleIcon,
   FolderGit2Icon,
   FolderOpenIcon,
   GitBranchIcon,
@@ -11,6 +12,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,22 +40,17 @@ interface ProjectCardProps {
 export function ProjectCard({ project }: ProjectCardProps) {
   const router = useRouter();
   const deleteProject = useDeleteProject();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   function handleClick() {
     router.push(`/workspace/coding/${project.id}`);
   }
 
   async function handleDelete() {
-    if (!confirmingDelete) {
-      setConfirmingDelete(true);
-      toast.info("再次点击删除以确认");
-      setTimeout(() => setConfirmingDelete(false), 3000);
-      return;
-    }
     try {
       await deleteProject.mutateAsync(project.id);
       toast.success(`项目「${project.name}」已删除`);
+      setDeleteOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "删除项目失败");
     }
@@ -98,11 +103,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={handleDelete}
+              onClick={() => setDeleteOpen(true)}
               className="text-red-500 focus:text-red-500"
             >
               <Trash2Icon className="mr-2 h-4 w-4" />
-              {confirmingDelete ? "确认删除" : "删除项目"}
+              删除项目
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
@@ -123,6 +128,41 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <div className="mt-4 truncate rounded-md bg-muted/50 px-3 py-1.5 font-mono text-xs text-muted-foreground">
         {project.path}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="p-0">
+          <div className="h-1.5 w-full rounded-t-lg bg-gradient-to-r from-red-400 to-rose-400" />
+          <DialogHeader className="px-6 pt-4">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                <AlertTriangleIcon className="h-4 w-4" />
+              </span>
+              删除项目
+            </DialogTitle>
+            <DialogDescription className="pl-10">
+              确定要删除项目「{project.name}」吗？此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="px-6 pb-5">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleteProject.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteProject.isPending}
+              className="shadow-sm"
+            >
+              {deleteProject.isPending ? "删除中…" : "删除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -20,6 +20,7 @@ from app.gateway.routers import (
     auth,
     channels,
     coding_changes,
+    coding_delivery,
     coding_events,
     coding_review,
     coding_roi,
@@ -506,6 +507,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Qiongqi Coding ROI telemetry API is mounted at /api/coding/sessions/{thread_id}/roi
     app.include_router(coding_roi.router)
+
+    # Qiongqi Coding delivery stage API is mounted at /api/coding/delivery-stages
+    # and /api/coding/projects/{project_id}/stage
+    app.include_router(coding_delivery.router)
 
     # Artifacts API is mounted at /api/threads/{thread_id}/artifacts
     app.include_router(artifacts.router)

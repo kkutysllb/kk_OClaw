@@ -110,9 +110,27 @@ class TodoMiddleware(TodoListMiddleware):
         """Async version of before_model."""
         return self.before_model(state, runtime)
 
-    # Maximum number of completion reminders before allowing the agent to exit.
-    # This prevents infinite loops when the agent cannot make further progress.
-    _MAX_COMPLETION_REMINDERS = 2
+    # Fallback cap used when AppConfig cannot be read (e.g. during early
+    # import or in unit tests that bypass config loading). The real value
+    # comes from ``AppConfig.todo_max_completion_reminders`` (default 10).
+    _MAX_COMPLETION_REMINDERS = 10
+
+    def _effective_max_reminders(self) -> int:
+        """Return the configured completion-reminder cap.
+
+        Reads ``AppConfig.todo_max_completion_reminders`` so operators can
+        tune the safety net from ``config.yaml`` without touching code. Any
+        failure reading config falls back to the class default.
+        """
+        try:
+            from kkoclaw.config.app_config import get_app_config
+
+            value = get_app_config().todo_max_completion_reminders
+            if isinstance(value, int) and value >= 0:
+                return value
+        except Exception:  # noqa: BLE001 — never break the agent loop on config read
+            pass
+        return self._MAX_COMPLETION_REMINDERS
 
     @hook_config(can_jump_to=["model"])
     @override
@@ -149,7 +167,7 @@ class TodoMiddleware(TodoListMiddleware):
             return None
 
         # 4. Enforce a reminder cap to prevent infinite re-engagement loops.
-        if _completion_reminder_count(messages) >= self._MAX_COMPLETION_REMINDERS:
+        if _completion_reminder_count(messages) >= self._effective_max_reminders():
             return None
 
         # 5. Inject a reminder and force the agent back to the model.

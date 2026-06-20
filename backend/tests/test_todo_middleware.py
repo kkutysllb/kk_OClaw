@@ -265,6 +265,9 @@ class TestAfterModel:
 
     def test_allows_exit_after_max_reminders(self):
         mw = TodoMiddleware()
+        # Cap is config-driven (default 10). Override to 2 so the test
+        # stays compact while still exercising the exit-at-cap branch.
+        mw._effective_max_reminders = lambda: 2
         state = {
             "messages": [
                 _completion_reminder_msg(),
@@ -274,6 +277,22 @@ class TestAfterModel:
             "todos": _incomplete_todos(),
         }
         assert mw.after_model(state, _make_runtime()) is None
+
+    def test_allows_exit_after_default_max_reminders(self):
+        # Sanity check: with the production default (10), 2 reminders is
+        # NOT enough to exit — the middleware should keep pushing the agent.
+        mw = TodoMiddleware()
+        state = {
+            "messages": [
+                _completion_reminder_msg(),
+                _completion_reminder_msg(),
+                _ai_no_tool_calls(),
+            ],
+            "todos": _incomplete_todos(),
+        }
+        result = mw.after_model(state, _make_runtime())
+        assert result is not None
+        assert result["jump_to"] == "model"
 
     def test_still_sends_reminder_before_cap(self):
         mw = TodoMiddleware()

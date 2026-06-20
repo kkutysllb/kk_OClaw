@@ -28,6 +28,43 @@ You operate through the Qiongqi runtime boundary.
 - Preserve exact code, paths, commands, identifiers, and quoted errors.
 - Use tools deliberately and avoid repeated identical calls.
 - Write responses in the same language as the user's message.
+
+## Project Delivery Stage Tracking
+
+This project tracks delivery through 7 stages:
+requirements → design → initialization → implementation →
+verification → review → delivery
+
+You will see the **current stage** and its **completion signals** in the
+"Current Delivery Stage" section of your dynamic context.
+
+### When you MUST proactively call `suggest_delivery_stage`
+
+- **You just produced the stage's key deliverable.**
+  (e.g. you wrote `requirements.md` during the `requirements` stage;
+  you produced a design doc during the `design` stage.)
+- **The user explicitly confirmed a key decision** that satisfies one of
+  the stage's completion signals (e.g. tech stack chosen, acceptance
+  criteria signed off).
+- **You're about to start work that clearly belongs to the *next* stage**
+  (e.g. you're in `requirements` but the user is asking you to scaffold
+  the project → suggest `initialization`).
+
+### Attitude: err on the side of proposing
+
+- A false-positive suggestion costs the user **one click** to dismiss.
+- A missed suggestion **strands the project** in the wrong stage until
+  the user manually notices and clicks forward.
+- **When in doubt, call it.** The user is the final arbiter.
+
+### What NOT to do
+
+- Do **not** wait for the user to explicitly say "推进阶段" or "move to
+  the next stage". That defeats the purpose of proactive tracking.
+- Do **not** assume the stage auto-advances. It does not — only your
+  `suggest_delivery_stage` call + the user's accept click moves it.
+- Do **not** batch suggestions at the end of the project. Propose as
+  soon as the signal is met, every time.
 """
 
 
@@ -156,6 +193,55 @@ class QiongqiEngine:
     def build_dynamic_context(self) -> str:
         sections: list[str] = []
         project_root = self.session.context.project_root
+
+        # Surface the current delivery stage so the agent knows where
+        # the project stands without needing to ask the user.
+        if project_root:
+            try:
+                from kkoclaw.coding_core.stage_state import ProjectStageStore
+
+                stage_state = ProjectStageStore.from_home().get_state(project_root)
+                if stage_state.current_stage:
+                    from kkoclaw.coding_core.delivery_stages import get_stage
+
+                    stage = get_stage(stage_state.current_stage)
+                    if stage:
+                        # Build a rich "current stage" block that tells the
+                        # agent: (a) what stage we're in, (b) what its goal is,
+                        # (c) what concrete signals indicate completion, and
+                        # (d) what the next stage is. This is what the agent
+                        # compares against its own progress to decide when to
+                        # call `suggest_delivery_stage`.
+                        signals_block = ""
+                        if stage.completion_signals:
+                            signals_lines = "\n".join(
+                                f"  - {sig}" for sig in stage.completion_signals
+                            )
+                            signals_block = (
+                                f"\n**Completion signals** (any one met → call "
+                                f"`suggest_delivery_stage`):\n{signals_lines}\n"
+                            )
+                        next_block = ""
+                        if stage.next_stage_id:
+                            next_block = (
+                                f"\n**Next stage**: `{stage.next_stage_id}` "
+                                f"(pass this as `stage_id` when you propose)\n"
+                            )
+                        sections.append(
+                            f"\n## Current Delivery Stage\n"
+                            f"You are in the **{stage.title}** (`{stage.id}`) stage.\n"
+                            f"\n**Goal**: {stage.goal}\n"
+                            f"{signals_block}"
+                            f"{next_block}"
+                        )
+                    else:
+                        sections.append(
+                            f"\n## Current Delivery Stage\n"
+                            f"The project is currently in the **{stage_state.current_stage}** stage.\n"
+                        )
+            except Exception:  # noqa: BLE001
+                pass
+
         if project_root:
             sections.append(
                 f"\n## Current Project\n"

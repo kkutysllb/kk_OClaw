@@ -697,6 +697,26 @@ sandbox:
 #     #   OPENAI_API_KEY: $OPENAI_API_KEY  # $VAR resolves from host environment
 
 # ============================================================================
+# Agent 运行时限制
+# ============================================================================
+# Top-level ceilings that govern how long a single agent run can grind
+# before it is forced to stop. These apply to ALL top-level agents
+# (lead_agent / coding_agent / cron / IM channels).
+#
+# 背景：旧版本中 recursion_limit 被硬编码为 100（约 50 个交互轮），
+# 复杂多步骤任务（如代码库分析、长 todo 列表）会被中途截断。
+# 现在默认提升到 500，并允许在此处调节。
+#
+# 调高 = 允许更长任务一直跑到完成；调低 = 更严格的安全网防止失控。
+
+agent_recursion_limit: 500
+
+# TodoMiddleware 在 agent 想提前退出但还有未完成 todo 时，最多强制
+# 重入 model 节点的次数。调高 = 允许 agent 磨完长 todo 列表；
+# 设为 0 = 关闭安全网（不建议，可能引起无限循环烧爆 token）。
+todo_max_completion_reminders: 10
+
+# ============================================================================
 # 技能配置
 # ============================================================================
 # Configure skills directory for specialized agent workflows

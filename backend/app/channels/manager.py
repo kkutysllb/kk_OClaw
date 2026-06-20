@@ -29,7 +29,11 @@ DEFAULT_GATEWAY_URL = f"http://localhost:{os.getenv('GATEWAY_PORT', '9193')}"
 DEFAULT_ASSISTANT_ID = "lead_agent"
 CUSTOM_AGENT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
 
-DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 100}
+# Top-level recursion_limit for channel-driven runs. Mirrors the value
+# used by ``services.build_run_config`` (500) so IM-channel runs enjoy the
+# same longer leash as web-driven runs. Per-channel/per-user ``config``
+# overrides applied in ``_resolve_run_params`` still win.
+DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 500}
 DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "thinking_enabled": True,
     "is_plan_mode": False,

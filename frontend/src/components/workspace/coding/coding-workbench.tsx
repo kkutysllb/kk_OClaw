@@ -39,17 +39,29 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import {
+  useAcceptStageSuggestion,
   useCodingRoiReports,
   useCodingRoiSummary,
   useCodingSession,
   useCodingSessionEvents,
   useCodingSkills,
+  useDeliveryStages,
+  useDismissStageSuggestion,
   useLatestCodingReview,
+  useProjectStage,
   useSetCodingSkillEnabled,
+  useSetProjectStage,
   useProject,
   useWorktrees,
 } from "@/core/projects";
-import type { CodingSkill, QiongqiEvent, QiongqiRoiReport } from "@/core/projects";
+import type {
+  CodingSkill,
+  DeliveryStage,
+  ProjectStageState,
+  QiongqiEvent,
+  QiongqiRoiReport,
+  StageSuggestion,
+} from "@/core/projects";
 import { cn } from "@/lib/utils";
 
 import { AgentPanel } from "./agent-panel";
@@ -1316,51 +1328,6 @@ const SKILL_CATEGORIES = [
   },
 ] as const;
 
-const PROJECT_DELIVERY_STAGES = [
-  {
-    title: "需求",
-    goal: "明确用户、目标、范围和验收标准。",
-    nextPrompt: "请基于当前项目目标进行需求分析，输出用户角色、核心场景、非目标和验收标准。",
-    skills: ["requirements-analysis", "product-spec", "acceptance-criteria"],
-  },
-  {
-    title: "设计",
-    goal: "确定架构、模块边界、数据模型和 API 合约。",
-    nextPrompt: "请基于已确认需求制定技术设计，包含架构边界、数据模型、API 合约、风险和验证计划。",
-    skills: ["technical-design", "architecture", "api-design", "database"],
-  },
-  {
-    title: "初始化",
-    goal: "建立可运行、可测试、可构建的项目骨架。",
-    nextPrompt: "请初始化项目工程结构，补齐环境配置、构建脚本、测试入口和 CI 基础命令。",
-    skills: ["project-scaffolding", "environment-setup", "build-system", "ci-cd"],
-  },
-  {
-    title: "实现",
-    goal: "按垂直切片交付可验证功能。",
-    nextPrompt: "请按垂直切片实现下一组核心功能，保持小 diff，并补充必要测试。",
-    skills: ["vertical-slice-development", "implement", "test-driven-development"],
-  },
-  {
-    title: "验证",
-    goal: "用自动化测试和浏览器验证确认功能可用。",
-    nextPrompt: "请制定并执行当前功能的 QA 验证，覆盖自动化测试、浏览器交互、错误状态和回归风险。",
-    skills: ["qa-test-plan", "webapp-testing", "playwright-verification"],
-  },
-  {
-    title: "审查",
-    goal: "审查 diff、PR 风险、安全风险和可维护性。",
-    nextPrompt: "请对当前项目 diff 和任务变更执行代码审查，输出阻塞问题、建议修复和合并风险。",
-    skills: ["diff-analysis", "code-review", "security-review", "pr-review-advanced"],
-  },
-  {
-    title: "交付",
-    goal: "准备发布、部署、运维和交接材料。",
-    nextPrompt: "请准备项目交付材料，包含部署步骤、发布检查、运维 runbook、回滚方案和交接文档。",
-    skills: ["deployment", "release-engineering", "operations-runbook", "handoff-docs"],
-  },
-] as const;
-
 function CodingWorkflowInspector({
   projectRoot,
   threadId,
@@ -1368,56 +1335,81 @@ function CodingWorkflowInspector({
   projectRoot: string;
   threadId: string;
 }) {
-  const { skills, isLoading, isFetching, error, refetch } =
+  const { skills, isLoading: skillsLoading, isFetching: skillsFetching, error: skillsError, refetch: refetchSkills } =
     useCodingSkills(projectRoot);
+  const { stages, isLoading: stagesLoading } = useDeliveryStages();
+  const { stage: stageState, isFetching: stageFetching, refetch: refetchStage } =
+    useProjectStage(projectRoot);
+  const setStage = useSetProjectStage(projectRoot);
+  const acceptSuggestion = useAcceptStageSuggestion(projectRoot);
+  const dismissSuggestion = useDismissStageSuggestion(projectRoot);
   const { session } = useCodingSession(threadId);
   const { review } = useLatestCodingReview(threadId);
-  const { summary: roiSummary } = useCodingRoiSummary(threadId);
+
   const skillsById = useMemo(() => {
     const map = new Map<string, CodingSkill>();
     for (const skill of skills) map.set(skill.id, skill);
     return map;
   }, [skills]);
-  const workflowSignals = useMemo(
+
+  // Side-product signals — kept as advisory hints, NOT stage status.
+  const signals = useMemo(
     () => ({
-      hasSession: Boolean(session),
       hasChanges:
         getNumberValue(session?.change_summary ?? {}, "changed_files") > 0 ||
         getNumberValue(session?.change_summary ?? {}, "additions") > 0 ||
         getNumberValue(session?.change_summary ?? {}, "deletions") > 0,
       hasReview: Boolean(review),
-      hasBlockingReview:
-        (review?.summary.critical ?? 0) > 0 || (review?.summary.major ?? 0) > 0,
-      hasRoi: Boolean(roiSummary && roiSummary.report_count > 0),
     }),
-    [roiSummary, review, session],
+    [review, session],
   );
+
+  const isFetching = skillsFetching || stageFetching;
+  const refetch = () => {
+    void refetchSkills();
+    void refetchStage();
+  };
+  const isLoading = skillsLoading || stagesLoading;
+  const error = skillsError;
 
   return (
     <InspectorSection
       title="Workflow"
       meta="项目交付流程"
       isFetching={isFetching}
-      onRefresh={() => void refetch()}
+      onRefresh={refetch}
     >
       {isLoading ? (
         <InspectorSkeleton rows={5} />
       ) : error ? (
         <InspectorError message={getErrorMessage(error)} />
-      ) : skills.length === 0 ? (
+      ) : stages.length === 0 ? (
         <InspectorEmpty
           title="暂无 Workflow 数据"
-          description="内置项目交付技能加载后会在这里展示阶段流程。"
+          description="阶段定义加载后会在在这里展示。"
         />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-3 p-3">
+            {/* Agent suggestion banner */}
+            {stageState?.pending_suggestion && (
+              <StageSuggestionBanner
+                suggestion={stageState.pending_suggestion}
+                stages={stages}
+                isPending={acceptSuggestion.isPending || dismissSuggestion.isPending}
+                onAccept={() => acceptSuggestion.mutate()}
+                onDismiss={() => dismissSuggestion.mutate()}
+              />
+            )}
+
             <div className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold">项目交付流程</p>
                   <p className="text-muted-foreground mt-0.5 truncate text-[10px]">
-                    从需求到交付的内置技能编排
+                    {stageState?.current_stage
+                      ? `当前阶段: ${currentStageTitle(stages, stageState)}`
+                      : "点击阶段进入该阶段"}
                   </p>
                 </div>
                 {skillsById.get("project-delivery-workflow") && (
@@ -1427,18 +1419,29 @@ function CodingWorkflowInspector({
                 )}
               </div>
               <div className="mt-2 grid gap-1.5">
-                {PROJECT_DELIVERY_STAGES.map((stage, index) => (
-                  <WorkflowStageCard
-                    key={stage.title}
-                    goal={stage.goal}
-                    index={index + 1}
-                    nextPrompt={stage.nextPrompt}
-                    status={getWorkflowStageStatus(stage.title, workflowSignals)}
-                    skills={stage.skills}
-                    skillsById={skillsById}
-                    title={stage.title}
-                  />
-                ))}
+                {stages.map((stage, index) => {
+                  const isCurrent = stageState?.current_stage === stage.id;
+                  const isVisited = stageState?.stage_history.some(
+                    (h) => h.to_stage_id === stage.id,
+                  );
+                  return (
+                    <WorkflowStageCard
+                      key={stage.id}
+                      stage={stage}
+                      index={index + 1}
+                      isCurrent={isCurrent}
+                      isVisited={isVisited}
+                      skillsById={skillsById}
+                      signals={signals}
+                      isPending={
+                        setStage.isPending && setStage.variables?.stage_id === stage.id
+                      }
+                      onEnter={(reason) =>
+                        setStage.mutate({ stage_id: stage.id, reason })
+                      }
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1446,6 +1449,14 @@ function CodingWorkflowInspector({
       )}
     </InspectorSection>
   );
+}
+
+function currentStageTitle(
+  stages: DeliveryStage[],
+  state: ProjectStageState,
+): string {
+  const stage = stages.find((s) => s.id === state.current_stage);
+  return stage?.title ?? state.current_stage ?? "";
 }
 
 function CodingSkillsInspector({ projectRoot }: { projectRoot: string }) {
@@ -1547,51 +1558,75 @@ function CodingSkillsInspector({ projectRoot }: { projectRoot: string }) {
 }
 
 function WorkflowStageCard({
-  goal,
+  stage,
   index,
-  nextPrompt,
-  skills,
+  isCurrent,
+  isVisited,
   skillsById,
-  status,
-  title,
+  signals,
+  isPending,
+  onEnter,
 }: {
-  goal: string;
+  stage: DeliveryStage;
   index: number;
-  nextPrompt: string;
-  skills: readonly string[];
+  isCurrent: boolean;
+  isVisited: boolean | undefined;
   skillsById: Map<string, CodingSkill>;
-  status: "pending" | "active" | "ready" | "blocked";
-  title: string;
+  signals: { hasChanges: boolean; hasReview: boolean };
+  isPending: boolean;
+  onEnter: (reason?: string) => void;
 }) {
-  const available = skills.filter((id) => skillsById.has(id));
+  const [confirming, setConfirming] = useState(false);
+  const stageSkills = stage.recommended_skills;
+  const available = stageSkills.filter((id) => skillsById.has(id));
   const enabled = available.filter((id) => skillsById.get(id)?.enabled).length;
 
+  const statusLabel = isCurrent
+    ? "当前阶段"
+    : isVisited
+      ? "已访问"
+      : "未开始";
+
+  // Advisory side-product signals (do NOT determine stage status).
+  const signalLabel =
+    stage.id === "implementation" && signals.hasChanges
+      ? "检测到文件变更"
+      : stage.id === "review" && signals.hasReview
+        ? "有 review 记录"
+        : null;
+
   return (
-    <div className="bg-muted/30 rounded-md border px-2 py-1.5">
+    <div
+      className={cn(
+        "bg-muted/30 rounded-md border px-2 py-1.5 transition-colors",
+        isCurrent && "border-emerald-500/40 bg-emerald-50/50 dark:bg-emerald-950/20",
+      )}
+    >
       <div className="flex items-center gap-2">
         <span className="bg-background text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded border font-mono text-[10px]">
           {index}
         </span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+          {stage.title}
+        </span>
         <Badge
-          variant={status === "ready" ? "secondary" : "outline"}
+          variant={isCurrent ? "secondary" : "outline"}
           className={cn(
             "rounded px-1.5 text-[10px]",
-            status === "active" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-            status === "blocked" && "border-orange-500/40 text-orange-600 dark:text-orange-400",
+            isCurrent && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
           )}
         >
-          {formatWorkflowStageStatus(status)}
+          {statusLabel}
         </Badge>
         <span className="text-muted-foreground font-mono text-[10px]">
           {enabled}/{available.length}
         </span>
       </div>
       <p className="text-muted-foreground mt-1.5 text-[11px] leading-4">
-        {goal}
+        {stage.goal}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1">
-        {skills.map((id) => {
+        {stageSkills.map((id) => {
           const skill = skillsById.get(id);
           return (
             <Badge
@@ -1607,13 +1642,107 @@ function WorkflowStageCard({
           );
         })}
       </div>
-      <button
-        className="text-muted-foreground hover:bg-muted hover:text-foreground mt-2 h-6 rounded border px-2 text-[10px] transition-colors"
-        type="button"
-        onClick={() => void copyWorkflowPrompt(nextPrompt)}
-      >
-        复制提示词
-      </button>
+      <div className="mt-2 flex items-center gap-2">
+        {confirming ? (
+          <div className="flex items-center gap-1">
+            <button
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-6 rounded px-2 text-[10px] transition-colors"
+              disabled={isPending}
+              type="button"
+              onClick={() => {
+                onEnter();
+                setConfirming(false);
+              }}
+            >
+              {isPending ? "..." : "确认进入"}
+            </button>
+            <button
+              className="text-muted-foreground hover:bg-muted hover:text-foreground h-6 rounded border px-2 text-[10px] transition-colors"
+              type="button"
+              onClick={() => setConfirming(false)}
+            >
+              取消
+            </button>
+          </div>
+        ) : (
+          <button
+            className={cn(
+              "h-6 rounded border px-2 text-[10px] transition-colors",
+              isCurrent
+                ? "text-muted-foreground cursor-default opacity-50"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+            disabled={isCurrent}
+            type="button"
+            onClick={() => setConfirming(true)}
+          >
+            {isCurrent ? "已是当前阶段" : "进入此阶段"}
+          </button>
+        )}
+        <button
+          className="text-muted-foreground hover:bg-muted hover:text-foreground h-6 rounded border px-2 text-[10px] transition-colors"
+          type="button"
+          onClick={() => void copyWorkflowPrompt(stage.suggested_prompt)}
+        >
+          复制提示词
+        </button>
+        {signalLabel && (
+          <span className="text-muted-foreground text-[10px]">
+            · {signalLabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StageSuggestionBanner({
+  suggestion,
+  stages,
+  isPending,
+  onAccept,
+  onDismiss,
+}: {
+  suggestion: StageSuggestion;
+  stages: DeliveryStage[];
+  isPending: boolean;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const stage = stages.find((s) => s.id === suggestion.stage_id);
+  const title = stage?.title ?? suggestion.stage_id;
+
+  return (
+    <div className="bg-primary/5 border-primary/20 rounded-md border p-2">
+      <div className="flex items-start gap-2">
+        <InfoIcon className="text-primary mt-0.5 size-3.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold">
+            Agent 建议进入【{title}】阶段
+          </p>
+          <p className="text-muted-foreground mt-0.5 text-[11px] leading-4">
+            {suggestion.reason}
+          </p>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          className="bg-primary text-primary-foreground hover:bg-primary/90 h-6 rounded px-2 text-[10px] transition-colors"
+          disabled={isPending}
+          type="button"
+          onClick={onAccept}
+        >
+          {isPending ? "..." : "接受并进入"}
+        </button>
+        <button
+          className="text-muted-foreground hover:bg-muted hover:text-foreground h-6 rounded border px-2 text-[10px] transition-colors"
+          disabled={isPending}
+          type="button"
+          onClick={onDismiss}
+        >
+          忽略
+        </button>
+      </div>
     </div>
   );
 }
@@ -1626,45 +1755,7 @@ async function copyWorkflowPrompt(nextPrompt: string): Promise<void> {
   }
 }
 
-function getWorkflowStageStatus(
-  title: string,
-  workflowSignals: {
-    hasSession: boolean;
-    hasChanges: boolean;
-    hasReview: boolean;
-    hasBlockingReview: boolean;
-    hasRoi: boolean;
-  },
-): "pending" | "active" | "ready" | "blocked" {
-  if (title === "需求" || title === "设计" || title === "初始化") {
-    return workflowSignals.hasSession ? "ready" : "pending";
-  }
-  if (title === "实现") {
-    if (workflowSignals.hasChanges) return "ready";
-    return workflowSignals.hasSession ? "active" : "pending";
-  }
-  if (title === "验证") {
-    if (workflowSignals.hasRoi) return "ready";
-    return workflowSignals.hasChanges ? "active" : "pending";
-  }
-  if (title === "审查") {
-    if (workflowSignals.hasBlockingReview) return "blocked";
-    if (workflowSignals.hasReview) return "ready";
-    return workflowSignals.hasChanges ? "active" : "pending";
-  }
-  if (title === "交付") {
-    if (workflowSignals.hasReview && !workflowSignals.hasBlockingReview) return "active";
-    return "pending";
-  }
-  return "pending";
-}
 
-function formatWorkflowStageStatus(status: "pending" | "active" | "ready" | "blocked") {
-  if (status === "ready") return "完成";
-  if (status === "active") return "进行中";
-  if (status === "blocked") return "阻塞";
-  return "待开始";
-}
 
 function SkillCategoryFilter({
   activeCategory,

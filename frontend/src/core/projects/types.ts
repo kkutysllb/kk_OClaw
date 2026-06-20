@@ -311,3 +311,48 @@ export interface CodingReviewApplyFixResult {
   file: string;
   applied: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Delivery stage tracking
+// ---------------------------------------------------------------------------
+
+export interface DeliveryStage {
+  id: string;
+  title: string;
+  goal: string;
+  recommended_skills: string[];
+  suggested_prompt: string;
+  next_stage_id: string | null;
+}
+
+export interface DeliveryStagesResponse {
+  stages: DeliveryStage[];
+}
+
+export interface StageHistoryEntry {
+  from_stage_id: string | null;
+  to_stage_id: string;
+  reason: string;
+  source: "user" | "agent_suggested" | "agent_accepted";
+  timestamp: string;
+}
+
+export interface StageSuggestion {
+  stage_id: string;
+  reason: string;
+  suggested_by_thread_id: string;
+  timestamp: string;
+}
+
+export interface ProjectStageState {
+  project_root: string;
+  current_stage: string | null;
+  stage_history: StageHistoryEntry[];
+  pending_suggestion: StageSuggestion | null;
+  updated_at: string | null;
+}
+
+export interface SetStageRequest {
+  stage_id: string;
+  reason?: string;
+}

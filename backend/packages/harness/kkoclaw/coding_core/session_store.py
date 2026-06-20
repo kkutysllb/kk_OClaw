@@ -20,6 +20,7 @@ from kkoclaw.coding_core.events import build_qiongqi_event_record, normalize_qio
 from kkoclaw.coding_core.paths import coding_home
 from kkoclaw.coding_core.qiongqi import QiongqiRoiReport, QiongqiSession
 from kkoclaw.coding_core.skills import ActiveCodingSkill, CodingSkill
+from kkoclaw.coding_core.stage_state import ProjectStageStore, StageSuggestion
 
 _SAFE_THREAD_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
@@ -178,6 +179,29 @@ class QiongqiSessionStore:
         payload.setdefault("roi", {})
         payload.setdefault("change_summary", {})
         payload.setdefault("updated_at", None)
+
+        # Inject project-level delivery stage state so the frontend's existing
+        # useCodingSession(threadId) hook automatically carries the current
+        # stage and any pending agent suggestion — no extra query needed.
+        project_root = payload.get("project_root")
+        if isinstance(project_root, str) and project_root:
+            try:
+                stage_state = ProjectStageStore.from_home().get_state(project_root)
+                payload["delivery_stage"] = stage_state.current_stage
+                payload["delivery_stage_suggestion"] = _suggestion_payload(
+                    stage_state.pending_suggestion
+                )
+                payload["delivery_stage_history"] = [
+                    _history_payload(entry) for entry in stage_state.stage_history
+                ]
+            except Exception:  # noqa: BLE001 — never break session reads
+                payload.setdefault("delivery_stage", None)
+                payload.setdefault("delivery_stage_suggestion", None)
+                payload.setdefault("delivery_stage_history", [])
+        else:
+            payload.setdefault("delivery_stage", None)
+            payload.setdefault("delivery_stage_suggestion", None)
+            payload.setdefault("delivery_stage_history", [])
         return payload
 
     def session_dir(self, thread_id: str | None) -> Path:
@@ -253,3 +277,24 @@ def _read_session_payload(path: Path, thread_id: str | None) -> dict[str, Any]:
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _suggestion_payload(suggestion: StageSuggestion | None) -> dict[str, Any] | None:
+    if suggestion is None:
+        return None
+    return {
+        "stage_id": suggestion.stage_id,
+        "reason": suggestion.reason,
+        "suggested_by_thread_id": suggestion.suggested_by_thread_id,
+        "timestamp": suggestion.timestamp,
+    }
+
+
+def _history_payload(entry: Any) -> dict[str, Any]:
+    return {
+        "from_stage_id": entry.from_stage_id,
+        "to_stage_id": entry.to_stage_id,
+        "reason": entry.reason,
+        "source": entry.source,
+        "timestamp": entry.timestamp,
+    }

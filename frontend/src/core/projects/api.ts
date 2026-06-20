@@ -13,12 +13,14 @@ import type {
   CodingSkillWriteRequest,
   CodingSkillDetail,
   CodingSkill,
+  DeliveryStagesResponse,
   DiscardProjectFileChangeRequest,
   DiscardProjectFileChangeResult,
   FileContent,
   FileEntry,
   Project,
   ProjectDiff,
+  ProjectStageState,
   QiongqiChangesList,
   QiongqiEventsList,
   QiongqiSession,
@@ -26,6 +28,7 @@ import type {
   QiongqiRoiSummary,
   RemoveWorktreeRequest,
   SetCodingSkillEnabledRequest,
+  SetStageRequest,
   WorktreeCreateResult,
   WorktreeInfo,
   WorktreeRemoveResult,
@@ -431,4 +434,89 @@ export async function setCodingSkillEnabled(
     );
   }
   return res.json() as Promise<CodingSkillDetail>;
+}
+
+// ---------------------------------------------------------------------------
+// Delivery stage tracking
+// ---------------------------------------------------------------------------
+
+export async function getDeliveryStages(): Promise<DeliveryStagesResponse> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/coding/delivery-stages`,
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to load delivery stages: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<DeliveryStagesResponse>;
+}
+
+export async function getProjectStage(
+  projectRoot: string,
+): Promise<ProjectStageState> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/coding/stage?project_root=${encodeURIComponent(projectRoot)}`,
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to load project stage: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<ProjectStageState>;
+}
+
+export async function setProjectStage(
+  projectRoot: string,
+  request: SetStageRequest,
+): Promise<ProjectStageState> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/coding/stage?project_root=${encodeURIComponent(projectRoot)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to set project stage: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<ProjectStageState>;
+}
+
+export async function acceptStageSuggestion(
+  projectRoot: string,
+): Promise<ProjectStageState> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/coding/stage/suggestion/accept?project_root=${encodeURIComponent(projectRoot)}`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to accept stage suggestion: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<ProjectStageState>;
+}
+
+export async function dismissStageSuggestion(
+  projectRoot: string,
+): Promise<ProjectStageState> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/coding/stage/suggestion/dismiss?project_root=${encodeURIComponent(projectRoot)}`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to dismiss stage suggestion: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<ProjectStageState>;
 }

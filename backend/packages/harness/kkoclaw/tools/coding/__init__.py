@@ -33,6 +33,9 @@ from kkoclaw.tools.coding.pr_tools import (
     create_pr_tool,
     review_code_tool,
 )
+from kkoclaw.tools.coding.stage_tools import (
+    suggest_delivery_stage_tool,
+)
 from kkoclaw.tools.coding.test_tools import (
     run_linter_tool,
     run_tests_tool,
@@ -79,6 +82,8 @@ def get_coding_tools() -> list:
         # PR & Code Review
         create_pr_tool,
         review_code_tool,
+        # Delivery stage tracking
+        suggest_delivery_stage_tool,
     ]
 
 

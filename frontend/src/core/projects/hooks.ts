@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  acceptStageSuggestion,
   applyCodingReviewFix,
   createCodingSkill,
   createProject,
@@ -8,12 +9,14 @@ import {
   deleteProject,
   deleteCodingSkill,
   discardProjectFileChange,
+  getDeliveryStages,
   getLatestCodingReview,
   getCodingSession,
   getCodingRoiSummary,
   getCodingSkill,
   getProjectDiff,
   getProject,
+  getProjectStage,
   listCodingRoiReports,
   listCodingSessionChanges,
   listCodingSessionEvents,
@@ -25,6 +28,8 @@ import {
   removeWorktree,
   runCodingReview,
   setCodingSkillEnabled,
+  setProjectStage,
+  dismissStageSuggestion,
   updateCodingSkill,
 } from "./api";
 import type {
@@ -36,6 +41,7 @@ import type {
   DiscardProjectFileChangeRequest,
   RemoveWorktreeRequest,
   SetCodingSkillEnabledRequest,
+  SetStageRequest,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -407,6 +413,86 @@ export function useDeleteCodingSkill(projectRoot: string | null | undefined) {
       });
       void queryClient.removeQueries({
         queryKey: ["coding", "skills", projectRoot, result.skill_id],
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Delivery stage tracking
+// ---------------------------------------------------------------------------
+
+export function useDeliveryStages() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["coding", "delivery-stages"],
+    queryFn: () => getDeliveryStages(),
+  });
+  return {
+    stages: data?.stages ?? [],
+    isLoading,
+    error,
+  };
+}
+
+export function useProjectStage(projectRoot: string | null | undefined) {
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ["coding", "projects", projectRoot, "stage"],
+    queryFn: () => getProjectStage(projectRoot!),
+    enabled: !!projectRoot,
+  });
+  return {
+    stage: data ?? null,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  };
+}
+
+export function useSetProjectStage(projectRoot: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: SetStageRequest) =>
+      setProjectStage(projectRoot!, request),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "projects", projectRoot, "stage"],
+      });
+      // Also invalidate all coding sessions for this project to refresh
+      // the delivery_stage field embedded in session snapshots.
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "sessions"],
+      });
+    },
+  });
+}
+
+export function useAcceptStageSuggestion(
+  projectRoot: string | null | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => acceptStageSuggestion(projectRoot!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "projects", projectRoot, "stage"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "sessions"],
+      });
+    },
+  });
+}
+
+export function useDismissStageSuggestion(
+  projectRoot: string | null | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => dismissStageSuggestion(projectRoot!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["coding", "projects", projectRoot, "stage"],
       });
     },
   });

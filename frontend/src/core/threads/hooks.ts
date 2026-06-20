@@ -340,6 +340,22 @@ export function useThreadStream({
     onFinish(state) {
       listeners.current.onFinish?.(state.values);
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+      // Refresh Coding delivery-stage state. The Coding Agent may have
+      // invoked `suggest_delivery_stage` during this turn, which writes a
+      // pending_suggestion the Workflow panel must surface to the user.
+      // Use a predicate match so this is a no-op outside coding sessions
+      // (where these queries are disabled anyway).
+      void queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          if (!Array.isArray(key) || key[0] !== "coding") return false;
+          // ["coding", "projects", <root>, "stage"]
+          if (key[1] === "projects" && key[3] === "stage") return true;
+          // ["coding", "sessions", <threadId>, "session"]
+          if (key[1] === "sessions" && key[3] === "session") return true;
+          return false;
+        },
+      });
     },
   });
 

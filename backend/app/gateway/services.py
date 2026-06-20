@@ -219,7 +219,15 @@ def build_run_config(
     the LangGraph Platform-compatible HTTP API and the IM channel path behave
     identically.
     """
-    config: dict[str, Any] = {"recursion_limit": 100}
+    # Read the top-level recursion_limit from config.yaml. The default
+    # (500) replaces the old hard-coded 100 so long multi-step tasks can
+    # keep running instead of hitting GraphRecursionError halfway through.
+    # Caller-provided request_config can still override this per-request.
+    try:
+        recursion_limit = get_app_config().agent_recursion_limit
+    except Exception:  # noqa: BLE001 — never block run creation on config read
+        recursion_limit = 500
+    config: dict[str, Any] = {"recursion_limit": recursion_limit}
     if request_config:
         # LangGraph >= 0.6.0 introduced ``context`` as the preferred way to
         # pass thread-level data and rejects requests that include both

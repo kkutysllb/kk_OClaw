@@ -637,6 +637,20 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **新增 Coding 项目阶段端到端跟踪（交付工作流）+ Agent 主动建议阶段推进（2026-06-20，v0.1.5）**
+  - **新增 7 阶段交付工作流**：`requirements → design → initialization → implementation → verification → review → delivery`，每个阶段有明确的目标、推荐技能、建议 prompt 和 **完成信号清单**（`completion_signals`），Agent 据此判断"本阶段是否真的完成了"。
+  - **新增 `suggest_delivery_stage` 工具**：Agent 在产出关键交付物（如需求文档、设计文档）或用户确认关键决策后，**主动调用**该工具建议推进到下一阶段；用户通过前端 banner 点击"接受/拒绝"，Agent 只能建议、不能擅自推进。
+  - **重写 Coding Agent prompt 与工具描述**：将原本抑制性的"Do not call it speculatively"措辞改为鼓励性"When in doubt, call it"，并在动态上下文注入当前阶段的 goal + completion_signals，根治 Agent 从不主动建议阶段推进的问题。
+  - **前端集成**：新增 Workflow 面板（展示当前阶段、阶段历史、进度条）、阶段推进 banner（接受/拒绝按钮）、`useProjectStage` / `useAcceptStageSuggestion` / `useDismissStageSuggestion` 三个 React Query hooks。
+  - **SSE 流集成闭环**：修复 Agent 调用 `suggest_delivery_stage` 后 banner 不自动出现的问题——在 `useThreadStream` 的 `onFinish` 回调中用 predicate 模式 invalidate coding stage / sessions 查询，任务结束后 banner 自动刷新。
+  - **新增后端 API**：`GET /api/coding/projects/{id}/stage`、`POST /api/coding/projects/{id}/stage/advance`、`POST /api/coding/projects/{id}/stage/suggestion/accept`、`POST /api/coding/projects/{id}/stage/suggestion/dismiss`。
+- **核心机制改造：Agent 运行时长上限可配置化（2026-06-20，v0.1.5）**
+  - **问题**：LangGraph `recursion_limit` 硬编码为 100（约 50 个交互轮），复杂多步骤任务会中途触发 `GraphRecursionError` 强制停止；TodoMiddleware 的完成提醒上限硬编码为 2，Agent 想早退但 todos 未完成时只拦 2 次就放走。
+  - **改造**：`recursion_limit` 默认值 100 → **500**（约 250 个交互轮）；TodoMiddleware 完成提醒 2 → **10** 次。两个参数均通过 `AppConfig` 暴露为 `config.yaml` 可配置字段（`agent_recursion_limit` / `todo_max_completion_reminders`），operator 可热重载调节，无需改代码发版。仍保留有限默认值作为防失控总硬底。
+  - **覆盖 4 个入口**：gateway `build_run_config`、channels `DEFAULT_RUN_CONFIG`、cron_scheduler、todo_middleware 全部从 `get_app_config()` 动态读取。
+- **修复删除项目确认对话框标题竖排错乱（2026-06-20，v0.1.5）**
+  - **根因**："删除项目"四个字被错误地放入 `h-8 w-8`（32×32px）的 icon 容器 `<span>` 内，容器宽度被锁死，文字挤不下只能竖排。
+  - **修复**：将文字移出 span 与 icon 平级，并给 icon 容器加 `shrink-0` 防止 flex 压缩。
 - **全面修复桌面端自动更新机制（2026-06-20）**
   - **问题现象**：已安装版本无法自动或手动检测到刚发布的新版本，手动「检查更新」误报「已是最新版本」，实际上 updater 根本没运行。
   - **根因 1（可观测性缺失）**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。

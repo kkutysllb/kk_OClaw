@@ -109,6 +109,28 @@ class AppConfig(BaseModel):
     tool_output: ToolOutputConfig = Field(default_factory=ToolOutputConfig, description="Tool output budget enforcement configuration")
     token_economy: TokenEconomyConfig = Field(default_factory=TokenEconomyConfig, description="Token Economy system configuration (concise responses, history compression, storm breaker)")
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig, description="LLM circuit breaker configuration")
+    agent_recursion_limit: int = Field(
+        default=500,
+        ge=10,
+        description=(
+            "LangGraph recursion_limit for top-level agent runs "
+            "(lead_agent / coding_agent / cron / channels). "
+            "Each agent turn consumes ~2 graph steps, so 500 ≈ 250 turns. "
+            "Raise this if long multi-step tasks stop prematurely; "
+            "lower it if you want a tighter safety net against runaway loops."
+        ),
+    )
+    todo_max_completion_reminders: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Maximum number of completion reminders TodoMiddleware injects "
+            "before allowing the agent to exit with incomplete todo items. "
+            "Each reminder forces the agent back to the model node to keep "
+            "working. Raise this to let agents grind through long task lists; "
+            "set to 0 to disable the safety net entirely (not recommended)."
+        ),
+    )
     model_config = ConfigDict(extra="allow")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Unified database backend configuration")
     run_events: RunEventsConfig = Field(default_factory=RunEventsConfig, description="Run event storage configuration")

@@ -86,7 +86,10 @@ def test_build_run_config_basic():
 
     config = build_run_config("thread-1", None, None)
     assert config["configurable"]["thread_id"] == "thread-1"
-    assert config["recursion_limit"] == 100
+    # Default recursion_limit comes from AppConfig.agent_recursion_limit
+    # (500 by default) instead of the legacy hard-coded 100. Long
+    # multi-step tasks should keep running instead of stopping at step 100.
+    assert config["recursion_limit"] == 500
 
 
 def test_build_run_config_with_overrides():
@@ -365,7 +368,22 @@ def test_build_run_config_with_context():
     assert "context" in config
     assert config["context"]["user_id"] == "u-42"
     assert "configurable" not in config
-    assert config["recursion_limit"] == 100
+    assert config["recursion_limit"] == 500
+
+
+def test_build_run_config_recursion_limit_reads_app_config(monkeypatch):
+    """build_run_config should honour AppConfig.agent_recursion_limit when set."""
+    from app.gateway import services
+    from kkoclaw.config.app_config import AppConfig
+
+    fake = AppConfig.model_validate({
+        "sandbox": {"use": "kkoclaw.sandbox.local:LocalSandboxProvider"},
+        "agent_recursion_limit": 1234,
+    })
+    monkeypatch.setattr(services, "get_app_config", lambda: fake)
+
+    config = services.build_run_config("thread-1", None, None)
+    assert config["recursion_limit"] == 1234
 
 
 def test_build_run_config_null_context_becomes_empty_context():
