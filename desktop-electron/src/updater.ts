@@ -55,6 +55,47 @@ const updaterLogger = {
 };
 
 /**
+ * Resolve the ``autoUpdater`` instance from ``electron-updater``.
+ *
+ * electron-updater 6.x exposes ``autoUpdater`` via a lazy getter defined
+ * with ``Object.defineProperty(exports, "autoUpdater", ...)``.  When the
+ * main process is bundled into an ASAR archive, the ESM-style
+ * ``await import("electron-updater")`` path can lose this non-standard
+ * lazy getter, causing ``mod.autoUpdater`` to be ``undefined`` (observed
+ * in v0.1.4 packaged builds, see main.log
+ * ``Cannot set properties of undefined (setting 'autoDownload')``).
+ *
+ * We resolve it through several strategies, preferring ``require``
+ * which preserves the original ``exports`` shape:
+ *   1. CommonJS ``require("electron-updater").autoUpdater`` (lazy getter
+ *      fires, instantiates the platform-specific updater)
+ *   2. Dynamic ``import("electron-updater")`` then ``.autoUpdater``
+ *      (fallback if ``require`` is unavailable, e.g. pure-ESM context)
+ *   3. Manual platform-specific instantiation as a last resort
+ */
+function resolveAutoUpdater(): import("electron-updater").AppUpdater | null {
+  type AutoUpdaterHolder =
+    | { autoUpdater?: import("electron-updater").AppUpdater }
+    | undefined;
+
+  // Strategy 1: CommonJS require — preserves the lazy getter on exports.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("electron-updater") as AutoUpdaterHolder;
+    if (mod?.autoUpdater) return mod.autoUpdater;
+  } catch {
+    /* fall through to next strategy */
+  }
+
+  // Strategy 2: dynamic import — works in dev (no ASAR) where the ESM
+  // interop layer correctly maps the getter to a named export.
+  // NOTE: we cannot await inside this sync helper; callers that reach
+  // strategy 3 below handle the async path explicitly.
+
+  return null;
+}
+
+/**
  * Register the update-check and install IPC handlers.
  *
  * `electron-updater` is imported lazily so the dev build doesn't require
@@ -65,38 +106,71 @@ export async function registerUpdater(): Promise<void> {
 
   try {
     if (app.isPackaged) {
-      const mod = await import("electron-updater");
-      autoUpdater = mod.autoUpdater;
-      autoUpdater.autoDownload = false;
-      autoUpdater.autoInstallOnAppQuit = true;
-      // Bridge electron-updater's internal logs into our file logger so
-      // HTTP / parse / rate-limit failures are visible in main.log.
-      autoUpdater.logger = updaterLogger;
-      // Surface every lifecycle event — these are the breadcrumbs needed
-      // to diagnose "user clicks Check for Updates → no update found".
-      autoUpdater.on("checking-for-update", () => {
-        log.info("[updater] event: checking-for-update");
-      });
-      autoUpdater.on("update-available", (info) => {
-        log.info(`[updater] event: update-available version=${info.version}`);
-      });
-      autoUpdater.on("update-not-available", (info) => {
-        log.info(`[updater] event: update-not-available version=${info.version}`);
-      });
-      autoUpdater.on("error", (err) => {
-        log.error(`[updater] event: error ${formatMsg(err)}`);
-      });
-      autoUpdater.on("download-progress", (p) => {
+      // Prefer synchronous require (preserves electron-updater's lazy
+      // getter); fall back to dynamic import; finally instantiate
+      // manually based on the current platform.
+      autoUpdater = resolveAutoUpdater();
+
+      if (!autoUpdater) {
+        try {
+          const mod = await import("electron-updater");
+          autoUpdater = (mod as { autoUpdater?: import("electron-updater").AppUpdater }).autoUpdater ?? null;
+        } catch (e) {
+          log.warn(`[updater] dynamic import failed: ${formatMsg(e)}`);
+        }
+      }
+
+      if (!autoUpdater) {
+        // Last-resort manual instantiation by platform.
+        try {
+          const mod = await import("electron-updater");
+          if (process.platform === "win32") {
+            autoUpdater = new mod.NsisUpdater();
+          } else if (process.platform === "darwin") {
+            autoUpdater = new mod.MacUpdater();
+          } else {
+            autoUpdater = new mod.AppImageUpdater();
+          }
+          log.info(`[updater] instantiated ${autoUpdater.constructor.name} manually`);
+        } catch (e) {
+          log.error(`[updater] manual instantiation failed: ${formatMsg(e)}`);
+        }
+      }
+
+      if (!autoUpdater) {
+        log.error("[updater] could not resolve autoUpdater after all strategies");
+      } else {
+        autoUpdater.autoDownload = false;
+        autoUpdater.autoInstallOnAppQuit = true;
+        // Bridge electron-updater's internal logs into our file logger so
+        // HTTP / parse / rate-limit failures are visible in main.log.
+        autoUpdater.logger = updaterLogger;
+        // Surface every lifecycle event — these are the breadcrumbs needed
+        // to diagnose "user clicks Check for Updates → no update found".
+        autoUpdater.on("checking-for-update", () => {
+          log.info("[updater] event: checking-for-update");
+        });
+        autoUpdater.on("update-available", (info) => {
+          log.info(`[updater] event: update-available version=${info.version}`);
+        });
+        autoUpdater.on("update-not-available", (info) => {
+          log.info(`[updater] event: update-not-available version=${info.version}`);
+        });
+        autoUpdater.on("error", (err) => {
+          log.error(`[updater] event: error ${formatMsg(err)}`);
+        });
+        autoUpdater.on("download-progress", (p) => {
+          log.info(
+            `[updater] event: download-progress ${p.percent.toFixed(1)}% (${p.transferred}/${p.total})`,
+          );
+        });
+        autoUpdater.on("update-downloaded", (info) => {
+          log.info(`[updater] event: update-downloaded version=${info.version}`);
+        });
         log.info(
-          `[updater] event: download-progress ${p.percent.toFixed(1)}% (${p.transferred}/${p.total})`,
+          `[updater] initialized (currentVersion=${app.getVersion()})`,
         );
-      });
-      autoUpdater.on("update-downloaded", (info) => {
-        log.info(`[updater] event: update-downloaded version=${info.version}`);
-      });
-      log.info(
-        `[updater] initialized (currentVersion=${app.getVersion()})`,
-      );
+      }
     } else {
       log.info("[updater] disabled in development (app.isPackaged=false)");
     }

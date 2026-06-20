@@ -637,8 +637,17 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
-- **修复桌面端更新检查静默失败 + updater 全链路可观测性（2026-06-20）**
-  - **问题**：本地已安装的 v0.1.2 无法自动或手动检测到刚发布的 v0.1.3，手动「检查更新」误报「已是最新版本」。
+- **全面修复桌面端自动更新机制（2026-06-20）**
+  - **问题现象**：已安装版本无法自动或手动检测到刚发布的新版本，手动「检查更新」误报「已是最新版本」，实际上 updater 根本没运行。
+  - **根因 1（可观测性缺失）**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。
+  - **根因 2（ASAR 打包下 autoUpdater 为 undefined）**：electron-updater 6.x 的 `autoUpdater` 通过 `Object.defineProperty(exports, "autoUpdater", { get })` 定义为惰性 getter。在 Electron 33 + esbuild 打包后的 ASAR 环境下，`await import("electron-updater")` 返回的模块对象丢失了这个非标准 lazy getter，导致 `mod.autoUpdater` 为 `undefined`，访问 `.autoDownload` 属性时抛出 `Cannot set properties of undefined (setting 'autoDownload')` TypeError，整个 updater 初始化崩溃。
+  - **修复**：
+    1. **可观测性**：为 `electron-updater` 注入 `updaterLogger` 适配器（info/warn/error/debug），将其内部日志桥接到 `main.log`；注册 6 个生命周期事件监听器（`checking-for-update` / `update-available` / `update-not-available` / `error` / `download-progress` / `update-downloaded`）；在 IPC handler 记录每次 check 的完整结果 `latest=X current=Y available=Z`。
+    2. **ASAR 兼容**：新增 `resolveAutoUpdater()` 函数采用三级降级策略获取 autoUpdater 实例：
+       - **CommonJS `require`**（首选）— 直接读取 `module.exports`，完整保留 lazy getter 语义
+       - **Dynamic `import()`**（次选）— 适用于开发环境无 ASAR 场景
+       - **手动实例化**（最后降级）— 根据当前平台 `new NsisUpdater()` / `new MacUpdater()` / `new AppImageUpdater()`
+    3. 所有策略都失败时记录 `could not resolve autoUpdater after all strategies` 错误日志，不再静默崩溃。
   - **根因**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。
   - **修复**：
     1. 为 `electron-updater` 注入 `updaterLogger` 适配器（实现 info/warn/error/debug），将其内部日志桥接到 `main.log`。

@@ -637,8 +637,17 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
-- **Fixed silent desktop update-check failure + full updater observability (2026-06-20)**
-  - **Issue**: locally installed v0.1.2 could not auto- or manually detect the freshly published v0.1.3; manual "Check for Updates" falsely reported "Up to date".
+- **Comprehensive fix for desktop auto-update mechanism (2026-06-20)**
+  - **Symptom**: installed versions could not auto- or manually detect freshly-published new versions; manual "Check for Updates" falsely reported "Up to date" — the updater was not running at all.
+  - **Root cause 1 (missing observability)**: `updater.ts` IPC handlers only `console.warn`-ed exceptions **without writing to the file log**, and `electron-updater` was never given a logger, so all its internal HTTP / rate-limit / parse errors were silently swallowed. The "Up to date" message was actually the default `{ available: false }` returned after a hidden failure.
+  - **Root cause 2 (autoUpdater is undefined under ASAR)**: electron-updater 6.x defines `autoUpdater` via `Object.defineProperty(exports, "autoUpdater", { get })` as a lazy getter. Under Electron 33 + esbuild ASAR packaging, the module object returned by `await import("electron-updater")` loses this non-standard lazy getter, so `mod.autoUpdater` is `undefined`, and accessing `.autoDownload` throws `Cannot set properties of undefined (setting 'autoDownload')` TypeError, crashing the entire updater initialization.
+  - **Fix**:
+    1. **Observability**: inject an `updaterLogger` adapter (info/warn/error/debug) into `electron-updater` to bridge its internal logs into `main.log`; register 6 lifecycle event listeners (`checking-for-update` / `update-available` / `update-not-available` / `error` / `download-progress` / `update-downloaded`); record the full result of every check `latest=X current=Y available=Z` in the IPC handler.
+    2. **ASAR compatibility**: add a `resolveAutoUpdater()` helper using a three-level fallback strategy to obtain the autoUpdater instance:
+       - **CommonJS `require`** (preferred) — reads `module.exports` directly and fully preserves the lazy getter semantics
+       - **Dynamic `import()`** (fallback) — works in dev where there is no ASAR
+       - **Manual instantiation** (last resort) — instantiates `new NsisUpdater()` / `new MacUpdater()` / `new AppImageUpdater()` based on the current platform
+    3. When all strategies fail, an `could not resolve autoUpdater after all strategies` error is logged instead of silently crashing.
   - **Root cause**: `updater.ts` IPC handlers only `console.warn`-ed exceptions **without writing to the file log**, and `electron-updater` was never given a logger, so all its internal HTTP / rate-limit / parse errors were silently swallowed. The "Up to date" message was actually the default `{ available: false }` returned after a hidden failure.
   - **Fix**:
     1. Inject an `updaterLogger` adapter (info/warn/error/debug) into `electron-updater` to bridge its internal logs into `main.log`.
