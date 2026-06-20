@@ -99,6 +99,123 @@ KKOCLAW is an open-source **super agent harness**. It organizes **sub-agents**, 
    OPENAI_API_KEY=your-openai-api-key
    ```
 
+#### Model Provider Configuration
+
+KKOCLAW declares available models through the `models` array in `config.yaml`. Each model is instantiated by a LangChain `BaseChatModel` subclass (the `use` field points to the class path). The table below lists the common adaptation strategies.
+
+##### 1. Generic adaptation (standard OpenAI-compatible)
+
+Works for any provider that exposes an OpenAI-compatible `/v1/chat/completions` endpoint (proxy gateways, self-hosted vLLM, Kimi, OpenRouter, etc.). Use `langchain_openai:ChatOpenAI` directly:
+
+```yaml
+models:
+  - name: kimi-k2.5
+    display_name: Kimi K2.5
+    use: langchain_openai:ChatOpenAI
+    model: kimi-k2-0905-preview
+    api_key: $KIMI_API_KEY
+    base_url: https://api.moonshot.cn/v1
+    max_tokens: 8192
+    temperature: 0.7
+```
+
+| Field | Description |
+    |------|-------------|
+    | `use` | LangChain class path; for generic cases always `langchain_openai:ChatOpenAI` |
+    | `model` | Model identifier from the provider's docs (case-sensitive) |
+    | `api_key` | Prefer `$ENV_VAR` placeholder read from `.env` or process env to avoid hard-coding |
+    | `base_url` | Root URL of the OpenAI-compatible endpoint, must end with `/v1` (or as specified by provider) |
+    | `max_tokens` | Max tokens per response; affects cost |
+    | `temperature` | 0–1, higher = more divergent |
+    | `supports_thinking` | Whether reasoning mode is supported (controls visibility of the reasoning-depth switcher in the UI) |
+    | `supports_vision` | Whether image input is supported (controls availability of the `view_image` tool) |
+    | `supports_reasoning_effort` | Whether the `reasoning_effort` parameter is supported. Set to `false` if not (e.g. GLM-5) |
+    | `when_thinking_enabled` / `when_thinking_disabled` | Additional parameters merged into the request when reasoning mode is toggled; typically `extra_body.thinking.type` |
+
+##### 2. Dedicated adapters for Chinese providers (patched classes required)
+
+Major Chinese model providers claim OpenAI compatibility but diverge from LangChain's default serialization in several ways. KKOCLAW ships dedicated patch classes for these providers — **you MUST point the `use` field at the patch class path**, otherwise you will hit various HTTP 400 errors, lost `reasoning_content`, multiple-`system`-message rejections, and so on.
+
+| Provider | Patch class | Problems solved |
+    |----------|-------------|-----------------|
+    | **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | Missing `reasoning_content` in multi-turn conversations under thinking mode → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.` Also handles model-name aliases (`deepseek_v4` → `deepseek-v4-flash`), strips unsupported `image_url`, and remaps `base_url` → `api_base` |
+    | **Zhipu GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | The `stream_options` parameter injected by LangChain by default is rejected by GLM → error code 1210 `API 调用参数有误`. Also strips non-`text` content blocks (GLM only accepts `messages.content.type = 'text'`) |
+    | **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. `reasoning_content` is lost in multi-turn conversations → `extra_body.reasoning_split=true` is required to return it; 2. MiniMax accepts only one `role: system` message, but skill loading injects several → error code 2013 `invalid chat setting`; 3. Inconsistent `name` across same-role messages is rejected — the patch cleans synthetic message `name` fields automatically |
+    | **Gemini (via OpenAI gateway)** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | When calling Gemini thinking models via an OpenAI-compatible gateway, `thought_signature` is dropped by the default serializer → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`. The patch restores it from `additional_kwargs.tool_calls` |
+
+**Typical configuration examples**:
+
+```yaml
+models:
+  # DeepSeek (patch required for thinking mode, otherwise multi-turn errors)
+  - name: deepseek-v3
+    display_name: DeepSeek V3 (Thinking)
+    use: kkoclaw.models.patched_deepseek:PatchedChatDeepSeek
+    model: deepseek-reasoner
+    api_key: $DEEPSEEK_API_KEY
+    timeout: 600.0
+    max_tokens: 8192
+    supports_thinking: true
+    supports_vision: false
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
+  # Zhipu GLM-5 (coding endpoint, patch required)
+  - name: glm-5-turbo
+    display_name: GLM-5-Turbo
+    use: kkoclaw.models.patched_zhipu:PatchedChatZhipu
+    model: GLM-5-Turbo
+    api_key: $ZHIPU_API_KEY
+    base_url: https://open.bigmodel.cn/api/coding/paas/v4   # Coding endpoint
+    # base_url: https://open.bigmodel.cn/api/paas/v4       # Generic endpoint
+    max_tokens: 65536
+    supports_thinking: true
+    supports_reasoning_effort: false    # GLM-5 does not support reasoning_effort
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
+  # MiniMax (international, patch required under thinking mode)
+  - name: minimax-m2.5
+    display_name: MiniMax M2.5
+    use: kkoclaw.models.patched_minimax:PatchedChatMiniMax
+    model: MiniMax-M2.5
+    api_key: $MINIMAX_API_KEY
+    base_url: https://api.minimax.io/v1
+    max_tokens: 4096
+    supports_thinking: true
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled          # or "adaptive" (latest MiniMax API format)
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+```
+
+##### 3. When to use a patch vs. the generic class?
+
+| Scenario | Recommendation |
+    |----------|----------------|
+    | Onboarding a new provider / OpenAI-compatible gateway | Start with `langchain_openai:ChatOpenAI`; only consider a patch once you hit a concrete error |
+    | You see `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` errors | Pick the corresponding provider-specific patch |
+    | The provider also offers a native SDK (e.g. Claude, Gemini native) | Prefer the native SDK class (`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`) |
+    | Self-hosted (vLLM / Ollama) | vLLM uses `kkoclaw.models.vllm_provider:VllmChatModel` (preserves the `reasoning` field); Ollama uses `langchain_ollama:ChatOllama` |
+
+> See the comments in [`config.example.yaml`](config.example.yaml) for more examples and field semantics.
+
 ### Running the App
 
 All deployment modes are managed uniformly through `start.sh`, supporting three run modes:
@@ -367,6 +484,60 @@ git push origin main --tags
 ```
 
 Users will automatically receive the update notification.
+
+### Desktop Uninstall & Data Cleanup
+
+#### macOS
+
+1. Quit the running OClaw (click the tray icon → Quit)
+2. Remove the application bundle:
+   ```bash
+   rm -rf "/Applications/OClaw.app"
+   ```
+   Or drag OClaw from «Finder → Applications» to the Trash
+3. (Optional) Clean up user data and caches. OClaw does **not** rely on macOS's standard `~/Library/Application Support`; all runtime data is concentrated in two hidden directories for easy backup and cleanup:
+   ```bash
+   # Main data dir (config.yaml, skills, agents, data, logs, granted_paths.json, etc.)
+   rm -rf ~/.kkoclaw-desktop
+   # Coding Agent session data (desktop mirror of the ~/.oclaw-coding/{thread_id} layout)
+   rm -rf ~/.oclaw-coding-desktop
+   ```
+4. (Optional) Clear Electron's own session caches (cookies, localStorage, network state):
+   ```bash
+   rm -rf ~/Library/Application\ Support/kkoclaw-desktop
+   ```
+
+#### Windows
+
+1. Quit OClaw from the Start Menu (tray icon → Quit)
+2. Open «Settings → Apps → Installed apps», find OClaw → Uninstall; or run `Uninstall OClaw.exe` in the install directory
+3. (Optional) Clean up residual data:
+   ```powershell
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.kkoclaw-desktop"
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.oclaw-coding-desktop"
+   Remove-Item -Recurse -Force "$env:APPDATA\kkoclaw-desktop"
+   Remove-Item -Recurse -Force "$env:LOCALAPPDATA\kkoclaw-desktop-updater"
+   ```
+
+#### Linux
+
+1. Quit the running OClaw (tray → Quit)
+2. Uninstall according to the package type:
+   ```bash
+   # deb package
+   sudo dpkg -r kkoclaw-desktop
+   # rpm package
+   sudo rpm -e kkoclaw-desktop
+   ```
+3. (Optional) Clean up user data:
+   ```bash
+   rm -rf ~/.kkoclaw-desktop
+   rm -rf ~/.oclaw-coding-desktop
+   rm -rf ~/.config/kkoclaw-desktop
+   rm -rf ~/.cache/kkoclaw-desktop-updater
+   ```
+
+> **Tip**: Uninstalling only the application bundle does **not** delete your `~/.kkoclaw-desktop`; custom skills, agents, and memory data are preserved. To remove everything, clean the corresponding hidden directories using the commands above.
 
 ## Core Features
 

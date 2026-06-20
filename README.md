@@ -99,6 +99,123 @@ KKOCLAW 是一个开源的 **super agent harness**。它把 **sub-agents**、**m
    OPENAI_API_KEY=your-openai-api-key
    ```
 
+#### 模型供应商配置详解
+
+KKOCLAW 通过 `config.yaml` 中的 `models` 数组声明可用模型，每个模型由一个 LangChain `BaseChatModel` 子类实例化（`use` 字段指向类路径）。下表列出了常见的供应商适配方式。
+
+##### 一、通用适配（标准 OpenAI 兼容）
+
+适用于任何提供了 OpenAI 兼容 /v1/chat/completions 接口的供应商（中转网关、自部署 vLLM、Kimi、OpenRouter 等）。直接使用 `langchain_openai:ChatOpenAI`：
+
+```yaml
+models:
+  - name: kimi-k2.5
+    display_name: Kimi K2.5
+    use: langchain_openai:ChatOpenAI
+    model: kimi-k2-0905-preview
+    api_key: $KIMI_API_KEY
+    base_url: https://api.moonshot.cn/v1
+    max_tokens: 8192
+    temperature: 0.7
+```
+
+| 字段 | 说明 |
+    |------|------|
+    | `use` | LangChain 类路径，通用场景一律使用 `langchain_openai:ChatOpenAI` |
+    | `model` | 供应商文档中给出的模型标识（大小写敏感） |
+    | `api_key` | 推荐 `$ENV_VAR` 占位符，从 `.env` 或进程环境读取，避免硬编码 |
+    | `base_url` | OpenAI 兼容接口的根路径，结尾必须为 `/v1`（或供应商指定） |
+    | `max_tokens` | 单次响应上限，影响成本 |
+    | `temperature` | 0~1，越高越发散 |
+    | `supports_thinking` | 是否支持推理模式（决定是否在 UI 上显示推理深度切换器） |
+    | `supports_vision` | 是否支持图像输入（决定 `view_image` 工具是否可用） |
+    | `supports_reasoning_effort` | 是否支持 `reasoning_effort` 参数。不支持时设为 `false`（如 GLM-5） |
+    | `when_thinking_enabled` / `when_thinking_disabled` | 推理模式开关时合并进请求的附加参数，通常用 `extra_body.thinking.type` 控制 |
+
+##### 二、国内模型专用适配（必须使用补丁类）
+
+国内主流模型 API 虽然声明 OpenAI 兼容，但与 LangChain 默认序列化逻辑存在若干不一致。KKOCLAW 为这些供应商提供了专用补丁类，**使用时必须将 `use` 字段指向补丁类路径**，否则会遇到各种 400 错误、reasoning_content 丢失、多 system 消息报错等问题。
+
+| 供应商 | 补丁类 | 解决的问题 |
+    |--------|--------|------------|
+    | **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | thinking mode 下多轮对话 `reasoning_content` 缺失 → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.`；同时处理模型名别名（`deepseek_v4` → `deepseek-v4-flash`）、剥离不支持的 `image_url`、重映射 `base_url` → `api_base` |
+    | **智谱 GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | LangChain 默认注入的 `stream_options` 参数被 GLM 拒绝 → 错误码 1210 `API 调用参数有误`；同时剥离非 `text` 类型的 content block（GLM 只接受 `messages.content.type = 'text'`） |
+    | **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. 多轮对话中 `reasoning_content` 丢失 → 需 `extra_body.reasoning_split=true` 才能返回；2. MiniMax 只接受单条 `role: system` 消息，但技能加载会注入多条 system → 错误码 2013 `invalid chat setting`；3. 同角色消息 `name` 不一致被拒绝，补丁自动清理合成消息的 `name` 字段 |
+    | **Gemini（OpenAI 网关）** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | 通过 OpenAI 兼容网关调用 Gemini thinking 模型时，`thought_signature` 被默认序列化逻辑丢弃 → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`。补丁从 `additional_kwargs.tool_calls` 还原 |
+
+**典型配置示例**：
+
+```yaml
+models:
+  # DeepSeek（thinking mode 必须用补丁，否则多轮对话报错）
+  - name: deepseek-v3
+    display_name: DeepSeek V3 (Thinking)
+    use: kkoclaw.models.patched_deepseek:PatchedChatDeepSeek
+    model: deepseek-reasoner
+    api_key: $DEEPSEEK_API_KEY
+    timeout: 600.0
+    max_tokens: 8192
+    supports_thinking: true
+    supports_vision: false
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
+  # 智谱 GLM-5（编码端点，必须用补丁）
+  - name: glm-5-turbo
+    display_name: GLM-5-Turbo
+    use: kkoclaw.models.patched_zhipu:PatchedChatZhipu
+    model: GLM-5-Turbo
+    api_key: $ZHIPU_API_KEY
+    base_url: https://open.bigmodel.cn/api/coding/paas/v4   # Coding 端点
+    # base_url: https://open.bigmodel.cn/api/paas/v4       # 通用端点
+    max_tokens: 65536
+    supports_thinking: true
+    supports_reasoning_effort: false    # GLM-5 不支持 reasoning_effort
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+
+  # MiniMax（国际版，thinking 模式下必须用补丁）
+  - name: minimax-m2.5
+    display_name: MiniMax M2.5
+    use: kkoclaw.models.patched_minimax:PatchedChatMiniMax
+    model: MiniMax-M2.5
+    api_key: $MINIMAX_API_KEY
+    base_url: https://api.minimax.io/v1
+    max_tokens: 4096
+    supports_thinking: true
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled          # 也可用 adaptive（MiniMax 最新 API 格式）
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
+```
+
+##### 三、何时该用补丁、何时用通用类？
+
+| 场景 | 推荐做法 |
+    |------|----------|
+    | 接入全新供应商 / OpenAI 兼容中转 | 先用 `langchain_openai:ChatOpenAI`，遇到具体错误后再考虑补丁 |
+    | 出现 `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` 错误 | 选择对应供应商的专用补丁 |
+    | 供应商同时提供原生 SDK（如 Claude、Gemini 原生） | 优先用原生 SDK 类（`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`） |
+    | 本地部署（vLLM / Ollama） | vLLM 使用 `kkoclaw.models.vllm_provider:VllmChatModel`（保留 `reasoning` 字段）；Ollama 使用 `langchain_ollama:ChatOllama` |
+
+> 更多示例与字段含义见 [`config.example.yaml`](config.example.yaml) 中的注释。
+
 ### 运行应用
 
 所有部署模式统一通过 `start.sh` 管理，支持三种运行模式：
@@ -367,6 +484,60 @@ git push origin main --tags
 ```
 
 用户端会自动收到更新推送。
+
+### 桌面端卸载与数据清理
+
+#### macOS
+
+1. 退出正在运行的 OClaw（点击托盘图标 → 退出）
+2. 删除应用程序包：
+   ```bash
+   rm -rf "/Applications/OClaw.app"
+   ```
+   或直接将「访达 → 应用程序」中的 OClaw 拖到废纸篓
+3. （可选）清理用户数据与缓存。OClaw 不依赖 macOS 标准的 `~/Library/Application Support` 目录，所有运行时数据都集中在两个隐藏目录，便于备份与清理：
+   ```bash
+   # 主数据目录（config.yaml、skills、agents、data、logs、granted_paths.json 等）
+   rm -rf ~/.kkoclaw-desktop
+   # Coding Agent 会话数据（~/.oclaw-coding/{thread_id} 结构的桌面端镜像）
+   rm -rf ~/.oclaw-coding-desktop
+   ```
+4. （可选）清理 Electron 本身的会话缓存（cookies、localStorage、网络状态）：
+   ```bash
+   rm -rf ~/Library/Application\ Support/kkoclaw-desktop
+   ```
+
+#### Windows
+
+1. 从「开始菜单」退出 OClaw（托盘图标 → 退出）
+2. 「设置 → 应用 → 已安装的应用」中找到 OClaw → 卸载；或运行安装目录下的 `Uninstall OClaw.exe`
+3. （可选）清理残留数据：
+   ```powershell
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.kkoclaw-desktop"
+   Remove-Item -Recurse -Force "$env:USERPROFILE\.oclaw-coding-desktop"
+   Remove-Item -Recurse -Force "$env:APPDATA\kkoclaw-desktop"
+   Remove-Item -Recurse -Force "$env:LOCALAPPDATA\kkoclaw-desktop-updater"
+   ```
+
+#### Linux
+
+1. 退出运行中的 OClaw（托盘 → Quit）
+2. 根据安装包类型卸载：
+   ```bash
+   # deb 包
+   sudo dpkg -r kkoclaw-desktop
+   # rpm 包
+   sudo rpm -e kkoclaw-desktop
+   ```
+3. （可选）清理用户数据：
+   ```bash
+   rm -rf ~/.kkoclaw-desktop
+   rm -rf ~/.oclaw-coding-desktop
+   rm -rf ~/.config/kkoclaw-desktop
+   rm -rf ~/.cache/kkoclaw-desktop-updater
+   ```
+
+> **提示**：仅卸载应用程序包不会删除你的 `~/.kkoclaw-desktop`，其中的自定义技能、Agent、记忆数据会保留。如需完全移除，请按上面的命令清理对应隐藏目录。
 
 ## 核心特性
 
