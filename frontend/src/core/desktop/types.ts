@@ -234,6 +234,24 @@ export interface DesktopBridge {
    * when the handler fires and surface the result to the user.
    */
   onCheckUpdateRequest(handler: () => void): () => void;
+  /**
+   * Push event: a new version was found and the background download has
+   * started. The renderer should NOT block the user here — the real
+   * prompt comes via ``onUpdateReady`` once the download finishes.
+   * Optional UI: show a non-blocking toast.
+   */
+  onUpdateDownloading(
+    handler: (info: { version: string; releaseDate?: string }) => void,
+  ): () => void;
+  /**
+   * Push event: the update has been downloaded and staged. This is the
+   * user-facing notification point — the renderer should show the
+   * "restart now to install" prompt. If dismissed, the update will
+   * auto-install on next app quit (``autoInstallOnAppQuit=true``).
+   */
+  onUpdateReady(
+    handler: (info: { version: string; releaseDate?: string }) => void,
+  ): () => void;
 
   // ── Skill model credentials ────────────────────────────────────────
   /** Read the redacted skill-model `.env` snapshot. */

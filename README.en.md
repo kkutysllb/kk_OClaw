@@ -657,6 +657,13 @@ This section records recently completed work and near-term pending items. See `d
   - **Precise interception**: only `https://github.com/*/*/releases/download/*` URLs are rewritten; `api.github.com` (small update-metadata queries) and all other traffic are left untouched.
   - **Configurable**: default mirror is `https://gh-proxy.com`; override with the `OCLAW_GH_MIRROR=https://your-mirror.example.com` env var, or set `OCLAW_GH_MIRROR=` (empty) to disable mirroring and fall back to direct.
   - **Safe degradation**: if the mirror setup throws for any reason, it logs a warning and falls back to direct downloads — the updater itself is never broken.
+- **Desktop auto-update UX: silent background download + ready prompt (2026-06-20, v0.1.5)**
+  - **Problem**: `autoDownload=false` forced users to manually click "Update Now" to start downloading; and the app only checked once on startup — dismissing the dialog meant no further prompts. The effective experience was "only works after quitting and reinstalling".
+  - **Fix**: set `autoDownload=true`, splitting into a two-phase UX:
+    1. **Silent check + background download**: auto-checks for a new version 5s after launch, and on finding one **immediately downloads in the background** (mirror-accelerated ~10 MB/s) with no popup or interruption.
+    2. **Download-complete prompt**: the main process pushes `notifyAllWindows("updater:ready")` via IPC to all renderer windows, showing an "Update ready — restart to install" dialog; the user can choose "Restart now" or "Install on next quit".
+  - **IPC pipeline**: added `updater:downloading` / `updater:ready` push channels; preload exposes `onUpdateDownloading` / `onUpdateReady` listeners; the renderer shows the final prompt dialog via the `onUpdateReady` callback.
+  - **Idempotent install**: the `updater:install` handler calls `downloadUpdate()` (resolves immediately if already downloaded) then `quitAndInstall()`, handling the "user clicked too early" race.
 - **Comprehensive fix for desktop auto-update mechanism (2026-06-20)**
   - **Symptom**: installed versions could not auto- or manually detect freshly-published new versions; manual "Check for Updates" falsely reported "Up to date" — the updater was not running at all.
   - **Root cause 1 (missing observability)**: `updater.ts` IPC handlers only `console.warn`-ed exceptions **without writing to the file log**, and `electron-updater` was never given a logger, so all its internal HTTP / rate-limit / parse errors were silently swallowed. The "Up to date" message was actually the default `{ available: false }` returned after a hidden failure.

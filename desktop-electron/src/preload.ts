@@ -163,6 +163,37 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
       ipcRenderer.removeListener("menu:check-update", listener);
     };
   },
+  // Push events from main → renderer for the autoDownload lifecycle.
+  // With autoDownload=true, the renderer is NOT in charge of triggering
+  // the download — it only reacts to progress notifications from main.
+  //   onUpdateDownloading: a new version was found, background download
+  //     started (silent; UI may show a non-blocking toast).
+  //   onUpdateReady: download completed, installer staged — show the
+  //     "restart now to install" prompt.
+  onUpdateDownloading: (
+    callback: (info: { version: string; releaseDate?: string }) => void,
+  ): (() => void) => {
+    const listener = (
+      _evt: IpcRendererEvent,
+      info: { version: string; releaseDate?: string },
+    ): void => callback(info);
+    ipcRenderer.on("updater:downloading", listener);
+    return () => {
+      ipcRenderer.removeListener("updater:downloading", listener);
+    };
+  },
+  onUpdateReady: (
+    callback: (info: { version: string; releaseDate?: string }) => void,
+  ): (() => void) => {
+    const listener = (
+      _evt: IpcRendererEvent,
+      info: { version: string; releaseDate?: string },
+    ): void => callback(info);
+    ipcRenderer.on("updater:ready", listener);
+    return () => {
+      ipcRenderer.removeListener("updater:ready", listener);
+    };
+  },
 
   // ── Skill model credentials ────────────────────────────────────────
   getSkillModels: (): Promise<SkillModelsConfig> =>

@@ -657,6 +657,13 @@ token_usage:
   - **精准拦截**：仅匹配 `https://github.com/*/*/releases/download/*` 模式，不影响 `api.github.com`（更新元数据查询，小请求不受限）也不影响其他任何网络请求。
   - **可配置**：默认镜像 `https://gh-proxy.com`，可通过环境变量 `OCLAW_GH_MIRROR=https://your-mirror.example.com` 覆盖；设为空字符串 `OCLAW_GH_MIRROR=` 可禁用镜像、回到直连。
   - **降级安全**：若镜像设置过程出现异常，会 log warn 后退回直连，不阻断更新机制本身。
+- **桌面端自动更新体验优化：静默后台下载 + 就绪提示（2026-06-20，v0.1.5）**
+  - **问题**：`autoDownload=false` 导致用户必须手动点「立即更新」才开始下载；且应用长时间运行只检查一次，用户 dismiss 对话框后就不会再次提示。实际体验是「只有退出后重装才生效」。
+  - **修复**：将 `autoDownload` 改为 `true`，分拆为两阶段 UX：
+    1. **静默检查 + 后台下载**：启动 5s 后自动检查新版本，发现后**立即后台下载**（镜像加速 ~10 MB/s），全程不弹窗、不打断用户工作。
+    2. **下载完成弹窗提示**：通过主进程 `notifyAllWindows("updater:ready")` 向所有渲染窗口推送 IPC，弹出「更新已就绪，立即重启安装」对话框；用户可选「立即重启」或「下次退出时安装」。
+  - **IPC 链路**：新增 `updater:downloading` / `updater:ready` 两个 push channel，preload 暴露 `onUpdateDownloading` / `onUpdateReady` 监听器，renderer 通过 `onUpdateReady` 回调弹出最终提示对话框。
+  - **幂等安装**：`updater:install` handler 调用 `downloadUpdate()`（已下载则立即 resolve）后 `quitAndInstall()`，处理「用户点得太早」竞态。
 - **全面修复桌面端自动更新机制（2026-06-20）**
   - **问题现象**：已安装版本无法自动或手动检测到刚发布的新版本，手动「检查更新」误报「已是最新版本」，实际上 updater 根本没运行。
   - **根因 1（可观测性缺失）**：`updater.ts` 的 IPC handler 所有异常只 `console.warn`，**不写文件日志**；且未给 `electron-updater` 注入 logger，导致其内部的 HTTP 请求 / 限流 / 解析错误全部静默。用户看到的「已是最新」实际是 `{ available: false }` 被错误吞掉后的默认返回。

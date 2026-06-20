@@ -23,6 +23,8 @@ function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
       checkForUpdates: vi.fn(),
       installUpdate: vi.fn(),
       onCheckUpdateRequest: vi.fn(() => () => {}),
+      onUpdateDownloading: vi.fn(() => () => {}),
+      onUpdateReady: vi.fn(() => () => {}),
       getStartupInfo: vi.fn(),
       getSkillModels: vi.fn(),
       setSkillModels: vi.fn(),

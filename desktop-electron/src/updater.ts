@@ -14,7 +14,7 @@
  * "Already up-to-date" with no clue why.
  */
 
-import { app, ipcMain, session } from "electron";
+import { app, ipcMain, session, BrowserWindow } from "electron";
 
 import { log } from "./logger.js";
 
@@ -95,6 +95,23 @@ function setupGitHubReleaseMirror(): void {
     // Never let the mirror setup break the updater entirely — fall back
     // to direct GitHub downloads if the session hook fails for any reason.
     log.warn(`[updater] mirror setup failed, falling back to direct: ${formatMsg(e)}`);
+  }
+}
+
+/**
+ * Broadcast an IPC event to every renderer window.
+ *
+ * Used to push updater lifecycle events (``updater:downloading`` /
+ * ``updater:ready``) to the frontend without requiring the renderer to
+ * poll. Multi-window safe: iterates all open ``BrowserWindow`` instances
+ * so the prompt surfaces in whichever window the user is currently
+ * focused on.
+ */
+function notifyAllWindows(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, payload);
+    }
   }
 }
 
@@ -218,7 +235,17 @@ export async function registerUpdater(): Promise<void> {
       if (!autoUpdater) {
         log.error("[updater] could not resolve autoUpdater after all strategies");
       } else {
-        autoUpdater.autoDownload = false;
+        // autoDownload=true: when checkForUpdates() finds a newer version,
+        // electron-updater immediately starts downloading in the background.
+        // The renderer is NOT involved in the download decision — the user
+        // only sees a prompt AFTER the download finishes (see the
+        // ``update-downloaded`` event below). This gives the best UX for
+        // always-on desktop apps:
+        //   1. Silent background check 5s after mount
+        //   2. Silent background download (no user action required)
+        //   3. "Update ready, restart now?" prompt once download completes
+        //   4. If dismissed, auto-installs on next app quit
+        autoUpdater.autoDownload = true;
         autoUpdater.autoInstallOnAppQuit = true;
         // Bridge electron-updater's internal logs into our file logger so
         // HTTP / parse / rate-limit failures are visible in main.log.
@@ -230,6 +257,14 @@ export async function registerUpdater(): Promise<void> {
         });
         autoUpdater.on("update-available", (info) => {
           log.info(`[updater] event: update-available version=${info.version}`);
+          // Notify renderer that a new version was found and download is
+          // starting in the background. The UI can optionally show a
+          // non-blocking toast, but MUST NOT block — the user will be
+          // prompted again after the download completes.
+          notifyAllWindows("updater:downloading", {
+            version: info.version,
+            releaseDate: info.releaseDate,
+          });
         });
         autoUpdater.on("update-not-available", (info) => {
           log.info(`[updater] event: update-not-available version=${info.version}`);
@@ -244,6 +279,14 @@ export async function registerUpdater(): Promise<void> {
         });
         autoUpdater.on("update-downloaded", (info) => {
           log.info(`[updater] event: update-downloaded version=${info.version}`);
+          // Download complete → push to ALL renderer windows so the UI can
+          // show the "update ready, restart now?" prompt. This is the
+          // user-facing notification point; before this moment everything
+          // is silent.
+          notifyAllWindows("updater:ready", {
+            version: info.version,
+            releaseDate: info.releaseDate,
+          });
         });
         log.info(
           `[updater] initialized (currentVersion=${app.getVersion()})`,
@@ -298,10 +341,18 @@ export async function registerUpdater(): Promise<void> {
       return false;
     }
     try {
-      log.info("[updater] install requested — starting download");
+      // With autoDownload=true, by the time the user clicks "restart now",
+      // the download has ALREADY completed (that's why the prompt appeared).
+      // downloadUpdate() is idempotent: if the update is already downloaded,
+      // it resolves immediately. So calling it here is a safe no-op that
+      // also handles the rare race where the user clicked before the
+      // background download finished.
       await autoUpdater.downloadUpdate();
-      log.info("[updater] download complete, quitting and installing");
-      await autoUpdater.quitAndInstall();
+      log.info("[updater] install requested — quitting and installing");
+      // quitAndInstall() restarts the app and installs the update. On macOS
+      // it's a synchronous relaunch; on Windows/Linux the app quits and
+      // the installer runs on next launch.
+      autoUpdater.quitAndInstall();
       return true;
     } catch (e) {
       log.error(`[updater] install failed: ${formatMsg(e)}`);
