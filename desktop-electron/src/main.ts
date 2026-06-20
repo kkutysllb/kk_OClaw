@@ -442,6 +442,16 @@ function buildAppMenu(): Menu {
       label: "帮助",
       submenu: [
         item({
+          label: "检查更新…",
+          click: () => {
+            const win = BrowserWindow.getFocusedWindow() ?? lastActiveWindow;
+            if (win && !win.isDestroyed()) {
+              win.webContents.send("menu:check-update");
+            }
+          },
+        }),
+        item({ type: "separator" }),
+        item({
           label: "OClaw 文档",
           click: () => void shell.openExternal("https://github.com/kkutysllb/kk_OClaw"),
         }),

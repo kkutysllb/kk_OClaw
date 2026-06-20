@@ -224,8 +224,16 @@ export interface DesktopBridge {
   ): () => void;
 
   // ── Auto-update ───────────────────────────────────────────────────
+  /** Check if an application update is available on GitHub Releases. */
   checkForUpdates(): Promise<UpdateInfo>;
+  /** Download and install the available update, then restart. */
   installUpdate(): Promise<boolean>;
+  /**
+   * Subscribe to the "Check for Updates" menu-item click. Returns an
+   * unsubscribe function. The renderer should call `checkForUpdates()`
+   * when the handler fires and surface the result to the user.
+   */
+  onCheckUpdateRequest(handler: () => void): () => void;
 
   // ── Skill model credentials ────────────────────────────────────────
   /** Read the redacted skill-model `.env` snapshot. */

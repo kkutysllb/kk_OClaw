@@ -156,6 +156,13 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
     ipcRenderer.invoke("updater:check"),
   installUpdate: (): Promise<boolean> =>
     ipcRenderer.invoke("updater:install"),
+  onCheckUpdateRequest: (callback: () => void): (() => void) => {
+    const listener = (): void => callback();
+    ipcRenderer.on("menu:check-update", listener);
+    return () => {
+      ipcRenderer.removeListener("menu:check-update", listener);
+    };
+  },
 
   // ── Skill model credentials ────────────────────────────────────────
   getSkillModels: (): Promise<SkillModelsConfig> =>

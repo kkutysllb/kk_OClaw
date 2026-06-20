@@ -29,6 +29,7 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
     onFileDrop: vi.fn(() => () => {}),
     checkForUpdates: vi.fn(async () => ({ available: false })),
     installUpdate: vi.fn(async () => true),
+    onCheckUpdateRequest: vi.fn(() => () => {}),
     getStartupInfo: vi.fn(async () => ({
       services: [],
       env_check: {

@@ -466,6 +466,11 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
+- **Fixed desktop auto-update + added manual check-for-updates menu (2026-06-20)**
+  - **Fixed root cause of auto-update never working**: the `UpdateChecker` component was fully defined but never rendered by any layout, so the 5-second post-launch check never ran. Mounted `<UpdateChecker />` in the global `DesktopProviders`; the component guards with `isDesktop()` so it is a no-op on web.
+  - **Added "Help → Check for Updates…" menu item**: triggers a manual check via the main→preload→renderer IPC chain (`menu:check-update` event). Unlike the silent startup check, the manual check shows the full feedback flow: "Checking…" → "Update available" / "Up to date".
+  - The menu item sends the IPC event to the focused window (or the most recent active window); `onCheckUpdateRequest` returns an unsubscribe function for safe multi-window handling.
+  - **Note**: locally installed v0.1.0 / v0.1.1 cannot auto-update (both lack the UpdateChecker mount). A one-time manual install of the v0.1.2 dmg is required; after that, auto-update will work correctly.
 - **Removed tool-loop detection mechanism + dead code cleanup (2026-06-20)**
   - **Fully removed `LoopDetectionMiddleware`** from all 3 injection points (factory.py, lead_agent/agent.py, subagents/executor.py) and cleaned up all related dead code: deleted `loop_detection_middleware.py`, `loop_detection_config.py`, `test_loop_detection_middleware.py` (including desktop packaged mirrors).
   - Reason: the 4-layer loop detection mechanism (hash detection / frequency detection / error convergence / Storm Breaker) had thresholds that conflicted with real long-running workflows, causing tasks to be automatically interrupted mid-execution and hurting the customer experience. After removal, Storm Breaker (same-turn repeated-call suppression) still protects via `TokenEconomyMiddleware`.

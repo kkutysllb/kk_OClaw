@@ -466,6 +466,11 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **修复桌面端自动更新 + 新增手动检查更新菜单（2026-06-20）**
+  - **修复自动更新从未生效的根因**：`UpdateChecker` 组件定义完整但从未被任何 layout 渲染，导致启动后 5 秒的自动检查从未执行。在全局 `DesktopProviders` 中挂载 `<UpdateChecker />`，组件内部有 `isDesktop()` 守卫，Web 端不执行。
+  - **新增「帮助 → 检查更新…」菜单项**：通过 main→preload→renderer IPC 链路（`menu:check-update` 事件）触发手动检查，区别于启动后的静默检查，手动检查会显示「正在检查…」→「发现新版本」/「已是最新版本」的完整反馈流程。
+  - 菜单项向当前聚焦窗口（或最近活跃窗口）发送 IPC 事件，`onCheckUpdateRequest` 返回取消订阅函数确保多窗口场景安全。
+  - **注意**：本机已安装的 v0.1.0 / v0.1.1 均无法自动更新（同样缺 UpdateChecker 挂载），需手动下载 v0.1.2 dmg 安装一次，之后自动更新将正常工作。
 - **移除工具循环检测机制 + 死代码清理（2026-06-20）**
   - **完全移除 `LoopDetectionMiddleware`** 的 3 处注入点（factory.py、lead_agent/agent.py、subagents/executor.py），并彻底清理相关死代码：删除 `loop_detection_middleware.py`、`loop_detection_config.py`、`test_loop_detection_middleware.py`（含桌面端打包镜像文件）。
   - 原因：4 层循环检测机制（哈希检测 / 频率检测 / 错误收敛 / Storm Breaker）阈值与实际长流程任务冲突，导致任务执行半途中被自动中断，客户体验不佳。移除后，Storm Breaker（同回合重复调用抑制）仍由 `TokenEconomyMiddleware` 提供保护。
