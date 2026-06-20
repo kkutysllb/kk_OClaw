@@ -170,7 +170,7 @@ def test_task_tool_threads_runtime_app_config_to_subagent_dependencies(monkeypat
         tool_call_id="tc-explicit-config",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     assert captured["names_app_config"] is app_config
     assert captured["config_lookup"] == ("bash", app_config)
     assert captured["bash_gate_app_config"] is app_config
@@ -222,7 +222,7 @@ def test_task_tool_passes_subagent_type_to_model_resolution(monkeypatch):
         tool_call_id="tc-routing",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     assert captured["resolve_call"]["subagent_type"] == "general-purpose"
     assert captured["executor_kwargs"]["parent_model"] == "ark-model"
     assert captured["prompt"] == "collect diagnostics"
@@ -275,7 +275,7 @@ def test_task_tool_emits_running_and_completed_events(monkeypatch):
         max_turns=7,
     )
 
-    assert output == "Task Succeeded. Result: all done"
+    assert output == "子任务执行成功。结果：all done"
     assert captured["prompt"] == "collect diagnostics"
     assert captured["task_id"] == "tc-123"
     assert captured["executor_kwargs"]["thread_id"] == "thread-1"
@@ -334,7 +334,7 @@ def test_task_tool_propagates_tool_groups_to_subagent(monkeypatch):
         tool_call_id="tc-groups",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     # The key assertion: groups should be propagated from parent metadata
     get_available_tools.assert_called_once_with(model_name="ark-model", groups=parent_tool_groups, subagent_enabled=False)
 
@@ -381,7 +381,7 @@ def test_task_tool_uses_subagent_model_override_for_tool_loading(monkeypatch):
         tool_call_id="tc-issue-2543",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     get_available_tools.assert_called_once_with(
         model_name="vision-subagent-model",
         groups=None,
@@ -423,7 +423,7 @@ def test_task_tool_inherits_parent_skill_allowlist_for_default_subagent(monkeypa
         tool_call_id="tc-skills",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     assert captured["config"].skills == ["safe-skill"]
 
 
@@ -469,7 +469,7 @@ def test_task_tool_intersects_parent_and_subagent_skill_allowlists(monkeypatch):
         tool_call_id="tc-skills-intersection",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     assert captured["config"].skills == ["safe-skill"]
 
 
@@ -508,7 +508,7 @@ def test_task_tool_no_tool_groups_passes_none(monkeypatch):
         tool_call_id="tc-no-groups",
     )
 
-    assert output == "Task Succeeded. Result: ok"
+    assert output == "子任务执行成功。结果：ok"
     # No tool_groups in metadata → groups=None (default behavior preserved)
     get_available_tools.assert_called_once_with(model_name="ark-model", groups=None, subagent_enabled=False)
 
@@ -548,7 +548,7 @@ def test_task_tool_runtime_none_passes_groups_none(monkeypatch):
         tool_call_id="tc-no-runtime",
     )
 
-    assert output == "Task Succeeded. Result: ok"
+    assert output == "子任务执行成功。结果：ok"
     # runtime is None -> metadata is empty dict -> groups=None, model falls back to app default.
     get_available_tools.assert_called_once_with(
         model_name="default-model",
@@ -585,7 +585,7 @@ def test_task_tool_runtime_none_passes_groups_none(monkeypatch):
         tool_call_id="tc-fail",
     )
 
-    assert output == "Task failed. Error: subagent crashed"
+    assert output == "子任务执行失败。错误信息：subagent crashed"
     assert events[-1]["type"] == "task_failed"
     assert events[-1]["error"] == "subagent crashed"
 
@@ -619,7 +619,7 @@ def test_task_tool_returns_timed_out_message(monkeypatch):
         tool_call_id="tc-timeout",
     )
 
-    assert output == "Task timed out. Error: timeout"
+    assert output == "子任务执行超时。错误信息：timeout"
     assert events[-1]["type"] == "task_timed_out"
     assert events[-1]["error"] == "timeout"
 
@@ -655,7 +655,7 @@ def test_task_tool_polling_safety_timeout(monkeypatch):
         tool_call_id="tc-safety-timeout",
     )
 
-    assert output.startswith("Task polling timed out after 0 minutes")
+    assert output.startswith("子任务轮询在 0 分钟后超时")
     assert events[0]["type"] == "task_started"
     assert events[-1]["type"] == "task_timed_out"
 
@@ -696,7 +696,7 @@ def test_cleanup_called_on_completed(monkeypatch):
         tool_call_id="tc-cleanup-completed",
     )
 
-    assert output == "Task Succeeded. Result: done"
+    assert output == "子任务执行成功。结果：done"
     assert cleanup_calls == ["tc-cleanup-completed"]
 
 
@@ -736,7 +736,7 @@ def test_cleanup_called_on_failed(monkeypatch):
         tool_call_id="tc-cleanup-failed",
     )
 
-    assert output == "Task failed. Error: error"
+    assert output == "子任务执行失败。错误信息：error"
     assert cleanup_calls == ["tc-cleanup-failed"]
 
 
@@ -776,7 +776,7 @@ def test_cleanup_called_on_timed_out(monkeypatch):
         tool_call_id="tc-cleanup-timedout",
     )
 
-    assert output == "Task timed out. Error: timeout"
+    assert output == "子任务执行超时。错误信息：timeout"
     assert cleanup_calls == ["tc-cleanup-timedout"]
 
 
@@ -823,7 +823,7 @@ def test_cleanup_not_called_on_polling_safety_timeout(monkeypatch):
         tool_call_id="tc-no-cleanup-safety-timeout",
     )
 
-    assert output.startswith("Task polling timed out after 0 minutes")
+    assert output.startswith("子任务轮询在 0 分钟后超时")
     # cleanup should NOT be called because the task is still RUNNING
     assert cleanup_calls == []
 
@@ -1036,6 +1036,6 @@ def test_task_tool_returns_cancelled_message(monkeypatch):
         tool_call_id="tc-poll-cancelled",
     )
 
-    assert output == "Task cancelled by user."
+    assert output == "子任务已被用户取消。"
     assert any(e.get("type") == "task_cancelled" for e in events)
     assert cleanup_calls == ["tc-poll-cancelled"]

@@ -62,6 +62,19 @@ class SubagentLimitMiddleware(AgentMiddleware[AgentState]):
         dropped_count = len(indices_to_drop)
         logger.warning(f"Truncated {dropped_count} excess task tool call(s) from model response (limit: {self.max_concurrent})")
 
+        # Notify the frontend so the user knows work was skipped.
+        # Without this the truncation is completely invisible to the user.
+        try:
+            from langgraph.config import get_stream_writer
+
+            get_stream_writer()({
+                "type": "subagent_limit_truncated",
+                "dropped_count": dropped_count,
+                "max_concurrent": self.max_concurrent,
+            })
+        except Exception:
+            logger.debug("No stream writer available — cannot emit subagent_limit_truncated event")
+
         # Replace the AIMessage with truncated tool_calls (same id triggers replacement)
         updated_msg = last_msg.model_copy(update={"tool_calls": truncated_tool_calls})
         return {"messages": [updated_msg]}

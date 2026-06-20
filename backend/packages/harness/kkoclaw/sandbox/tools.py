@@ -87,6 +87,7 @@ def _request_path_authorization(path: str, agent_type: str, read_only: bool) -> 
             "path": path,
             "agent_type": agent_type,
             "read_only": read_only,
+            "timeout_seconds": _AUTHORIZATION_TIMEOUT_SECONDS,
         })
     except Exception:
         logger.debug("No stream writer available — cannot emit authorization event")

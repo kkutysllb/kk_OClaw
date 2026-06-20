@@ -466,6 +466,13 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **核心机制体验优化 + DeepSeek thinking mode 修复（2026-06-20）**
+  - **任务调度**：`SubagentLimitMiddleware` 超出并发上限的 task 调用不再静默丢弃，新增 `subagent_limit_truncated` SSE 事件通知前端显示 toast 警告，用户可明确感知被跳过的任务。
+  - **子任务结果中文化**：`task_tool` 返回给 LLM 和前端的所有状态消息（成功/失败/超时/取消/轮询超时）全部中文化；新增 `task_failed`/`task_timed_out`/`task_cancelled` 事件的前端处理，显示对应 toast 错误提示。
+  - **工具错误中文化**：`ToolErrorHandlingMiddleware` 不可恢复错误和可恢复错误的 ToolMessage content 全部中文化，统一整个工具链路的中文体验。
+  - **路径授权体验优化**：`path_authorization_required` SSE 事件增加 `timeout_seconds` 字段，前端 toast 显示「请在 N 分钟内完成操作，超时将自动拒绝」，用户清楚知道等待边界。
+  - **前端工程化**：将 `onCustomEvent` 中的事件分发逻辑提取为纯函数模块 `stream-event-handler.ts`，依赖注入可测试；新增 21 个单元测试覆盖全部事件类型。
+  - **修复 DeepSeek thinking mode 400 错误**：DeepSeek API 在 thinking mode 启用时要求每条 assistant 消息都必须携带 `reasoning_content` 字段。新增 `ensure_reasoning_content` 函数，在 `_get_request_payload` 末尾为缺失该字段的 assistant 消息补充空字符串默认值，根除 pro 模式下多轮对话报错 `The reasoning_content in the thinking mode must be passed back to the API.` 的问题。
 - **修复桌面端自动更新 + 新增手动检查更新菜单（2026-06-20）**
   - **修复自动更新从未生效的根因**：`UpdateChecker` 组件定义完整但从未被任何 layout 渲染，导致启动后 5 秒的自动检查从未执行。在全局 `DesktopProviders` 中挂载 `<UpdateChecker />`，组件内部有 `isDesktop()` 守卫，Web 端不执行。
   - **新增「帮助 → 检查更新…」菜单项**：通过 main→preload→renderer IPC 链路（`menu:check-update` 事件）触发手动检查，区别于启动后的静默检查，手动检查会显示「正在检查…」→「发现新版本」/「已是最新版本」的完整反馈流程。

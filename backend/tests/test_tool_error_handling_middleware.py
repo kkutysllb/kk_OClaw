@@ -161,7 +161,7 @@ def test_wrap_tool_call_returns_error_tool_message_on_exception():
     assert result.tool_call_id == "tc-42"
     assert result.name == "web_search"
     assert result.status == "error"
-    assert "Tool 'web_search' failed" in result.text
+    assert "工具「web_search」执行失败" in result.text
     assert "network down" in result.text
 
 
@@ -265,8 +265,8 @@ class TestUnrecoverableErrorMessages:
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" in result.text
-        assert "Do NOT call this tool again" in result.text
+        assert "不可恢复的错误" in result.text
+        assert "请勿再次以相似参数调用此工具" in result.text
 
     def test_unrecoverable_frontmatter_keys(self):
         """Frontmatter validation errors should produce UNRECOVERABLE message."""
@@ -280,7 +280,7 @@ class TestUnrecoverableErrorMessages:
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" in result.text
+        assert "不可恢复的错误" in result.text
 
     def test_unrecoverable_security_scan_blocked(self):
         """Security scan block should produce UNRECOVERABLE message."""
@@ -292,7 +292,7 @@ class TestUnrecoverableErrorMessages:
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" in result.text
+        assert "不可恢复的错误" in result.text
 
     def test_unrecoverable_support_path(self):
         """Support path errors should produce UNRECOVERABLE message."""
@@ -306,7 +306,7 @@ class TestUnrecoverableErrorMessages:
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" in result.text
+        assert "不可恢复的错误" in result.text
 
     def test_normal_error_standard_message(self):
         """Normal (recoverable) errors should use the standard message."""
@@ -318,8 +318,8 @@ class TestUnrecoverableErrorMessages:
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" not in result.text
-        assert "Continue with available context" in result.text
+        assert "不可恢复的错误" not in result.text
+        assert "请基于已有上下文继续" in result.text
 
     def test_normal_error_not_misclassified(self):
         """Generic errors should NOT be flagged as unrecoverable."""
@@ -330,7 +330,7 @@ class TestUnrecoverableErrorMessages:
 
         result = self.middleware.wrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
-        assert "UNRECOVERABLE ERROR" not in result.text
+        assert "不可恢复的错误" not in result.text
 
     @pytest.mark.anyio
     async def test_async_unrecoverable_error(self):
@@ -345,4 +345,4 @@ class TestUnrecoverableErrorMessages:
         result = await self.middleware.awrap_tool_call(req, _boom)
         assert isinstance(result, ToolMessage)
         assert result.status == "error"
-        assert "UNRECOVERABLE ERROR" in result.text
+        assert "不可恢复的错误" in result.text

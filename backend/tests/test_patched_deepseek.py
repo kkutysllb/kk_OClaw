@@ -184,3 +184,168 @@ def test_positional_fallback_when_count_differs():
 
     assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
     assert assistant_msg["reasoning_content"] == "My reasoning"
+
+
+# ---------------------------------------------------------------------------
+# Thinking mode: ensure reasoning_content on ALL assistant messages
+# ---------------------------------------------------------------------------
+# Regression for: "The reasoning_content in the thinking mode must be passed
+# back to the API."  When thinking mode is enabled, the DeepSeek API requires
+# every assistant message to carry reasoning_content — even turns where the
+# original API response omitted it (pure tool-call turns, post-summarisation,
+# checkpoint replay, etc.).
+
+
+def test_thinking_mode_fills_missing_reasoning_content():
+    """When thinking is enabled, assistant messages without reasoning_content
+    must get an empty-string default so the API accepts the request."""
+    model = _make_model()
+
+    human = HumanMessage(content="do task")
+    # AI message WITHOUT reasoning_content — simulates a tool-call turn or
+    # a message restored from checkpoint that lost additional_kwargs.
+    ai_no_reasoning = AIMessage(content="", additional_kwargs={})
+
+    base_payload = {
+        "messages": [
+            _make_payload_message("user", "do task"),
+            _make_payload_message("assistant", ""),
+        ],
+        "extra_body": {"thinking": {"type": "enabled"}},
+    }
+
+    with patch.object(type(model).__bases__[0], "_get_request_payload", return_value=base_payload):
+        with patch.object(model, "_convert_input") as mock_convert:
+            mock_convert.return_value = MagicMock(to_messages=lambda: [human, ai_no_reasoning])
+            payload = model._get_request_payload([human, ai_no_reasoning])
+
+    assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
+    assert "reasoning_content" in assistant_msg
+    assert assistant_msg["reasoning_content"] == ""
+
+
+def test_thinking_mode_preserves_existing_reasoning_content():
+    """When thinking is enabled and reasoning_content already exists, the
+    original value must be preserved (not overwritten with empty string)."""
+    model = _make_model()
+
+    human = HumanMessage(content="hello")
+    ai = AIMessage(content="hi", additional_kwargs={"reasoning_content": "real reasoning"})
+
+    base_payload = {
+        "messages": [
+            _make_payload_message("user", "hello"),
+            _make_payload_message("assistant", "hi"),
+        ],
+        "extra_body": {"thinking": {"type": "enabled"}},
+    }
+
+    with patch.object(type(model).__bases__[0], "_get_request_payload", return_value=base_payload):
+        with patch.object(model, "_convert_input") as mock_convert:
+            mock_convert.return_value = MagicMock(to_messages=lambda: [human, ai])
+            payload = model._get_request_payload([human, ai])
+
+    assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
+    assert assistant_msg["reasoning_content"] == "real reasoning"
+
+
+def test_thinking_mode_fills_some_missing_in_multi_turn():
+    """Multi-turn conversation where some AI turns have reasoning_content and
+    others don't — all must end up with the field present."""
+    model = _make_model()
+
+    human1 = HumanMessage(content="step 1")
+    ai1_with = AIMessage(content="ok", additional_kwargs={"reasoning_content": "thought 1"})
+    human2 = HumanMessage(content="step 2")
+    ai2_without = AIMessage(content="done", additional_kwargs={})  # no reasoning
+
+    base_payload = {
+        "messages": [
+            _make_payload_message("user", "step 1"),
+            _make_payload_message("assistant", "ok"),
+            _make_payload_message("user", "step 2"),
+            _make_payload_message("assistant", "done"),
+        ],
+        "extra_body": {"thinking": {"type": "enabled"}},
+    }
+
+    with patch.object(type(model).__bases__[0], "_get_request_payload", return_value=base_payload):
+        with patch.object(model, "_convert_input") as mock_convert:
+            mock_convert.return_value = MagicMock(
+                to_messages=lambda: [human1, ai1_with, human2, ai2_without]
+            )
+            payload = model._get_request_payload([human1, ai1_with, human2, ai2_without])
+
+    assistant_msgs = [m for m in payload["messages"] if m["role"] == "assistant"]
+    assert assistant_msgs[0]["reasoning_content"] == "thought 1"
+    assert assistant_msgs[1]["reasoning_content"] == ""  # filled by ensure_reasoning_content
+
+
+def test_no_thinking_mode_does_not_fill_reasoning_content():
+    """When thinking is disabled, missing reasoning_content must NOT be filled
+    — non-thinking requests should remain untouched."""
+    model = _make_model()
+
+    human = HumanMessage(content="hi")
+    ai = AIMessage(content="hello", additional_kwargs={})
+
+    base_payload = {
+        "messages": [
+            _make_payload_message("user", "hi"),
+            _make_payload_message("assistant", "hello"),
+        ],
+        "extra_body": {"thinking": {"type": "disabled"}},
+    }
+
+    with patch.object(type(model).__bases__[0], "_get_request_payload", return_value=base_payload):
+        with patch.object(model, "_convert_input") as mock_convert:
+            mock_convert.return_value = MagicMock(to_messages=lambda: [human, ai])
+            payload = model._get_request_payload([human, ai])
+
+    assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
+    assert "reasoning_content" not in assistant_msg
+
+
+def test_thinking_mode_via_kwargs_extra_body():
+    """Thinking mode can also be signalled via kwargs.extra_body (runtime path)."""
+    model = _make_model()
+
+    human = HumanMessage(content="hi")
+    ai = AIMessage(content="hello", additional_kwargs={})
+
+    base_payload = {
+        "messages": [
+            _make_payload_message("user", "hi"),
+            _make_payload_message("assistant", "hello"),
+        ],
+        # No extra_body in payload — thinking is in kwargs instead
+    }
+
+    with patch.object(type(model).__bases__[0], "_get_request_payload", return_value=base_payload):
+        with patch.object(model, "_convert_input") as mock_convert:
+            mock_convert.return_value = MagicMock(to_messages=lambda: [human, ai])
+            payload = model._get_request_payload(
+                [human, ai],
+                extra_body={"thinking": {"type": "enabled"}},
+            )
+
+    assistant_msg = next(m for m in payload["messages"] if m["role"] == "assistant")
+    assert "reasoning_content" in assistant_msg
+
+
+def test_is_thinking_enabled_detection():
+    """Unit test for the _is_thinking_enabled helper."""
+    from kkoclaw.models.patched_deepseek import _is_thinking_enabled
+
+    # Enabled in kwargs
+    assert _is_thinking_enabled({}, {"extra_body": {"thinking": {"type": "enabled"}}}) is True
+    # Adaptive (MiniMax-style) also counts
+    assert _is_thinking_enabled({}, {"extra_body": {"thinking": {"type": "adaptive"}}}) is True
+    # Enabled in payload
+    assert _is_thinking_enabled({"extra_body": {"thinking": {"type": "enabled"}}}, {}) is True
+    # Disabled
+    assert _is_thinking_enabled({}, {"extra_body": {"thinking": {"type": "disabled"}}}) is False
+    # No extra_body at all
+    assert _is_thinking_enabled({}, {}) is False
+    # Non-dict extra_body
+    assert _is_thinking_enabled({}, {"extra_body": "not-a-dict"}) is False

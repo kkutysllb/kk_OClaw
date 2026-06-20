@@ -466,6 +466,13 @@ Statistics are isolated per logged-in user — each user can only see their own 
 This section records recently completed work and near-term pending items. See `docs/TODO.md` for the full list.
 
 ### Completed Today
+- **Core mechanism UX improvements + DeepSeek thinking mode fix (2026-06-20)**
+  - **Task scheduling**: `SubagentLimitMiddleware` no longer silently drops excess task calls beyond the concurrency limit. A new `subagent_limit_truncated` SSE event notifies the frontend to show a toast warning so users can clearly see which tasks were skipped.
+  - **Subagent result localization**: All status messages returned to the LLM and frontend by `task_tool` (success / failure / timeout / cancellation / polling timeout) are now in Chinese. Added frontend handling for `task_failed` / `task_timed_out` / `task_cancelled` events with corresponding error toasts.
+  - **Tool error localization**: `ToolErrorHandlingMiddleware` ToolMessage content for both unrecoverable and recoverable errors is now fully in Chinese, unifying the Chinese experience across the entire tool chain.
+  - **Path authorization UX**: The `path_authorization_required` SSE event now includes a `timeout_seconds` field. The frontend toast displays "Please complete the action within N minutes; it will be automatically rejected on timeout" so users clearly understand the waiting boundary.
+  - **Frontend engineering**: Extracted the event-dispatch logic from `onCustomEvent` into a pure-function module `stream-event-handler.ts` with dependency injection for testability. Added 21 unit tests covering all event types.
+  - **Fixed DeepSeek thinking mode 400 error**: The DeepSeek API requires every assistant message to carry a `reasoning_content` field when thinking mode is enabled. Added the `ensure_reasoning_content` function to fill in an empty-string default for assistant messages missing this field at the end of `_get_request_payload`, eliminating the pro-mode multi-turn error `The reasoning_content in the thinking mode must be passed back to the API.`
 - **Fixed desktop auto-update + added manual check-for-updates menu (2026-06-20)**
   - **Fixed root cause of auto-update never working**: the `UpdateChecker` component was fully defined but never rendered by any layout, so the 5-second post-launch check never ran. Mounted `<UpdateChecker />` in the global `DesktopProviders`; the component guards with `isDesktop()` so it is a no-op on web.
   - **Added "Help → Check for Updates…" menu item**: triggers a manual check via the main→preload→renderer IPC chain (`menu:check-update` event). Unlike the silent startup check, the manual check shows the full feedback flow: "Checking…" → "Update available" / "Up to date".

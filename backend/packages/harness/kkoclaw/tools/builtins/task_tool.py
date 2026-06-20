@@ -318,7 +318,7 @@ async def task_tool(
                 logger.error(f"[trace={trace_id}] Task {task_id} not found in background tasks")
                 writer({"type": "task_failed", "task_id": task_id, "error": "Task disappeared from background tasks"})
                 cleanup_background_task(task_id)
-                return f"Error: Task {task_id} disappeared from background tasks"
+                return f"错误：子任务 {task_id} 已从后台任务中消失"
 
             # Log status changes for debugging
             if result.status != last_status:
@@ -353,22 +353,22 @@ async def task_tool(
                 if result.total_tokens > 0:
                     _report_subagent_tokens(runtime, subagent_type, result)
                 cleanup_background_task(task_id)
-                return f"Task Succeeded. Result: {result.result}"
+                return f"子任务执行成功。结果：{result.result}"
             elif result.status == SubagentStatus.FAILED:
                 writer({"type": "task_failed", "task_id": task_id, "error": result.error})
                 logger.error(f"[trace={trace_id}] Task {task_id} failed: {result.error}")
                 cleanup_background_task(task_id)
-                return f"Task failed. Error: {result.error}"
+                return f"子任务执行失败。错误信息：{result.error}"
             elif result.status == SubagentStatus.CANCELLED:
                 writer({"type": "task_cancelled", "task_id": task_id, "error": result.error})
                 logger.info(f"[trace={trace_id}] Task {task_id} cancelled: {result.error}")
                 cleanup_background_task(task_id)
-                return "Task cancelled by user."
+                return "子任务已被用户取消。"
             elif result.status == SubagentStatus.TIMED_OUT:
                 writer({"type": "task_timed_out", "task_id": task_id, "error": result.error})
                 logger.warning(f"[trace={trace_id}] Task {task_id} timed out: {result.error}")
                 cleanup_background_task(task_id)
-                return f"Task timed out. Error: {result.error}"
+                return f"子任务执行超时。错误信息：{result.error}"
 
             # Still running, wait before next poll
             await asyncio.sleep(5)
@@ -384,7 +384,7 @@ async def task_tool(
                 timeout_minutes = config.timeout_seconds // 60
                 logger.error(f"[trace={trace_id}] Task {task_id} polling timed out after {poll_count} polls (should have been caught by thread pool timeout)")
                 writer({"type": "task_timed_out", "task_id": task_id})
-                return f"Task polling timed out after {timeout_minutes} minutes. This may indicate the background task is stuck. Status: {result.status.value}"
+                return f"子任务轮询在 {timeout_minutes} 分钟后超时。这可能意味着后台任务已卡住。当前状态：{result.status.value}"
     except asyncio.CancelledError:
         # Signal the background subagent thread to stop cooperatively.
         # Without this, the thread (running in ThreadPoolExecutor with its

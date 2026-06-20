@@ -1,4 +1,4 @@
-import type { AIMessage, Message, Run } from "@langchain/langgraph-sdk";
+import type { Message, Run } from "@langchain/langgraph-sdk";
 import type { ThreadsClient } from "@langchain/langgraph-sdk/client";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import type { UploadedFileInfo } from "../uploads";
 import { promptInputFilePartToFile, uploadFiles } from "../uploads";
 
 import type { AgentThread, AgentThreadState, RunMessage } from "./types";
+import { handleStreamEvent } from "./stream-event-handler";
 import {
   getCachedThreadState,
   setCachedThreadState,
@@ -311,71 +312,14 @@ export function useThreadStream({
       }
     },
     onCustomEvent(event: unknown) {
-      const type = (event as Record<string,unknown>)?.["type"];
-      if (
-        typeof event === "object" &&
-        event !== null &&
-        "type" in event &&
-        event.type === "task_running"
-      ) {
-        const e = event as {
-          type: "task_running";
-          task_id: string;
-          message: AIMessage;
-        };
-        updateSubtask({ id: e.task_id, latestMessage: e.message });
-        return;
-      }
-
-      if (
-        typeof event === "object" &&
-        event !== null &&
-        "type" in event &&
-        event.type === "path_authorization_required"
-      ) {
-        const e = event as {
-          type: "path_authorization_required";
-          path: string;
-          agent_type: string;
-          read_only?: boolean;
-        };
-        // Only the desktop shell has the authorizePath IPC bridge.
-        if (typeof window !== "undefined" && window.oclawDesktop?.authorizePath) {
-          toast.info(
-            `Agent 请求访问路径：\n${e.path}\n请在弹出的对话框中选择是否授权。`,
-          );
-          void window.oclawDesktop
-            .authorizePath({
-              path: e.path,
-              agentType: e.agent_type,
-              threadId: threadIdRef.current ?? undefined,
-            })
-            .then((result) => {
-              if (!result.authorized) {
-                toast.warning(`已拒绝路径访问：${e.path}`);
-              }
-            })
-            .catch(() => {
-              toast.error("路径授权对话框无法显示");
-            });
-        }
-        return;
-      }
-
-      if (
-        typeof event === "object" &&
-        event !== null &&
-        "type" in event &&
-        event.type === "llm_retry" &&
-        "message" in event &&
-        typeof event.message === "string" &&
-        event.message.trim()
-      ) {
-        const e = event as { type: "llm_retry"; message: string };
-        toast(e.message);
-      }
-
-      // task_interrupted toast disabled per user request
+      handleStreamEvent(event, {
+        updateSubtask,
+        authorizePath:
+          typeof window !== "undefined"
+            ? window.oclawDesktop?.authorizePath
+            : undefined,
+        threadId: threadIdRef.current ?? undefined,
+      });
     },
     onError(error) {
       const errMsg = error instanceof Error ? error.message : String(error);

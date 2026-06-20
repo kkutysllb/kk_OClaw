@@ -48,18 +48,18 @@ class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
 
         if is_unrecoverable:
             content = (
-                f"UNRECOVERABLE ERROR: Tool '{tool_name}' failed with "
-                f"{exc.__class__.__name__}: {detail}. "
-                f"This error cannot be fixed by retrying the same approach. "
-                f"Do NOT call this tool again with similar parameters. "
-                f"Explain the issue to the user or summarize what was accomplished, "
-                f"then produce your final answer WITHOUT further tool calls."
+                f"不可恢复的错误：工具「{tool_name}」执行失败，"
+                f"异常类型 {exc.__class__.__name__}：{detail}。"
+                f"此错误无法通过重试相同方式修复，"
+                f"请勿再次以相似参数调用此工具。"
+                f"请向用户说明问题或总结已完成的工作，"
+                f"然后直接给出最终答复，不再进行工具调用。"
             )
         else:
             content = (
-                f"Error: Tool '{tool_name}' failed with "
-                f"{exc.__class__.__name__}: {detail}. "
-                f"Continue with available context, or choose an alternative tool."
+                f"错误：工具「{tool_name}」执行失败，"
+                f"异常类型 {exc.__class__.__name__}：{detail}。"
+                f"请基于已有上下文继续，或选择其他替代工具。"
             )
 
         return ToolMessage(

@@ -12,12 +12,36 @@ from typing import Any
 from langchain_core.language_models import LanguageModelInput
 from langchain_deepseek import ChatDeepSeek
 from pydantic import model_validator
-from typing_extensions import Self
 
 from kkoclaw.models.assistant_payload_replay import (
+    ensure_reasoning_content,
     restore_assistant_payloads,
     restore_reasoning_content,
 )
+
+
+def _is_thinking_enabled(payload: dict[str, Any], kwargs: dict[str, Any]) -> bool:
+    """Detect whether thinking mode is active for this request.
+
+    Thinking mode is configured via ``extra_body.thinking.type`` in the
+    model settings.  The value can appear either in the top-level payload
+    (non-streaming path) or in the kwargs passed to ``_get_request_payload``.
+    """
+    # Check kwargs first (runtime override path)
+    extra_body = kwargs.get("extra_body")
+    if isinstance(extra_body, dict):
+        thinking = extra_body.get("thinking")
+        if isinstance(thinking, dict) and thinking.get("type") in ("enabled", "adaptive"):
+            return True
+
+    # Fall back to the payload itself
+    payload_extra_body = payload.get("extra_body")
+    if isinstance(payload_extra_body, dict):
+        thinking = payload_extra_body.get("thinking")
+        if isinstance(thinking, dict) and thinking.get("type") in ("enabled", "adaptive"):
+            return True
+
+    return False
 
 
 class PatchedChatDeepSeek(ChatDeepSeek):
@@ -111,5 +135,15 @@ class PatchedChatDeepSeek(ChatDeepSeek):
             original_messages,
             restore_reasoning_content,
         )
+
+        # When thinking mode is enabled, the DeepSeek API requires EVERY
+        # assistant message to carry a ``reasoning_content`` field — even if
+        # the original response for that turn did not include one (e.g. pure
+        # tool-call turns, post-summarisation turns, or checkpoint replay).
+        # Without this guard the API returns HTTP 400:
+        #   "The reasoning_content in the thinking mode must be passed back
+        #    to the API."
+        if _is_thinking_enabled(payload, kwargs):
+            ensure_reasoning_content(payload.get("messages", []))
 
         return payload

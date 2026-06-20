@@ -51,6 +51,31 @@ def restore_reasoning_content(payload_msg: dict[str, Any], orig_msg: AIMessage) 
     restore_additional_kwargs_field(payload_msg, orig_msg, "reasoning_content")
 
 
+def ensure_reasoning_content(
+    payload_messages: Sequence[dict[str, Any]],
+    *,
+    default: str = "",
+) -> None:
+    """Ensure every assistant payload carries a ``reasoning_content`` field.
+
+    Several DeepSeek-compatible APIs reject multi-turn requests in thinking
+    mode when any assistant message omits ``reasoning_content`` — even if the
+    original API response for that turn did not include it (e.g. pure
+    tool-call turns, post-summarisation turns).  This helper fills in a
+    safe default so the request is always accepted.
+
+    Args:
+        payload_messages: Already-serialized message dicts that will be sent
+            to the API.  Modified in place.
+        default: Value to use when ``reasoning_content`` is absent.  An empty
+            string is accepted by all known DeepSeek-compatible endpoints.
+    """
+    for msg in payload_messages:
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            if "reasoning_content" not in msg:
+                msg["reasoning_content"] = default
+
+
 def _match_ai_message(
     payload_msg: dict[str, Any],
     ai_messages: Sequence[AIMessage],
