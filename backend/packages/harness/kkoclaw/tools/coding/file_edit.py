@@ -11,6 +11,7 @@ import re
 from langchain.tools import tool
 
 from kkoclaw.coding_core.change_tracking import record_runtime_file_change
+from kkoclaw.coding_core.edit_snapshots import record_edit_snapshot
 from kkoclaw.sandbox.exceptions import SandboxError
 from kkoclaw.sandbox.file_operation_lock import get_file_operation_lock
 from kkoclaw.sandbox.tools import (
@@ -150,6 +151,13 @@ def apply_diff_tool(
             if content and content.endswith("\n"):
                 new_content += "\n"
             sandbox.write_file(file_path, new_content)
+            # Record snapshot BEFORE change-tracking so undo can restore
+            record_edit_snapshot(
+                runtime,
+                file_path=file_path,
+                before=content,
+                tool="apply_diff",
+            )
             record_runtime_file_change(
                 runtime,
                 file_path=file_path,
@@ -307,6 +315,12 @@ def multi_edit_tool(
                     results.append(f"  OK: edit #{applied} applied to {requested_path}")
 
                 sandbox.write_file(resolved_path, content)
+                record_edit_snapshot(
+                    runtime,
+                    file_path=resolved_path,
+                    before=original,
+                    tool="multi_edit",
+                )
                 record_runtime_file_change(
                     runtime,
                     file_path=resolved_path,

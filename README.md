@@ -637,6 +637,19 @@ token_usage:
 此处记录最近完成的工作和近期待办，详细清单见 `docs/TODO.md`。
 
 ### 今日已完成
+- **穷奇（Qiongqi）引擎全面增强：核心功能、自动化能力、提示词体系十项联动升级（2026-06-20）**
+  - **背景**：Qiongqi 作为 Coding Agent 的核心运行边界，原 stable prompt 缺失核心操作准则、缺少改→验证闭环、测试结果只有文本回退、技能匹配仅靠精确关键词、阶段推进信号不可探针、大文件语义导航弱、编辑无事务回滚。本轮针对性落地 10 项增强。
+  - **P0-1 恢复核心操作准则到 stable prompt**：在 `_STABLE_QIONGQI_PROMPT` 中补入 6 条核心准则（先理解再动手 / 最小精确变更 / 改→验证强制闭环 / Git 卫生 / 安全权限 / 失败恢复纪律）+ 4 种工作流模式（Feature 实现 / Bug 修复 / 重构 / Code Review）+ 上下文感知要求。根治 Agent 跳过验证直接报告完成的问题。
+  - **P0-2 PostEditVerifyMiddleware（改→验证闭环）**：新增 `post_edit_verify_middleware.py`。检测 mutation 工具（apply_diff/multi_edit/str_replace/write_file/insert_at_line）成功调用后，反向扫描 message 历史，若无 verification 工具（run_tests/run_linter/bash）调用，在下一轮 model call 前注入提醒。幂等设计避免重复提醒循环。可通过 `coding_config.post_edit_verify_enabled/mode` 配置开关。
+  - **P1-1 测试结果结构化解析**：重写 `test_tools.py`。优先使用 `pytest --json-report --json-report-file=` 生成结构化报告，解析出每个失败测试的 `nodeid/file/line/message/longrepr`；pytest 不可用时回退到文本解析；jest 同样支持结构化解析。
+  - **P1-2 语义化技能激活**：在 `skills.py` 新增 17 组双语同义词映射（review/重构、test/单元测试、security/安全、refactor/重构、database/sql 等）+ 4 层匹配策略（always_activate → 精确 keyword → 同义词扩展 → 描述 token 重叠 ≥2）。零 embedding 依赖，支持中文任务描述激活英文关键词技能。
+  - **P1-3 阶段完成信号自动探针**：重构 `qiongqi.py` 的 `build_dynamic_context`，新增 `_probe_stage_completion` 按 7 阶段执行客观检查（requirements.md 是否存在、测试文件是否存在、git status 变更数、CI 配置、部署文档等），输出真实进度信号注入 dynamic context，根治 Agent 仅凭文本判断阶段是否完成的偏差。
+  - **P2-1 符号级语义导航（tree-sitter 增强）**：新增 `_symbol_parser.py` 统一解析后端（tree-sitter AST 优先，lazy import + 增强正则回退）+ `symbol_tools.py`（find_symbols / read_symbol）。tree-sitter 后端提供精确的嵌套作用域边界（如 Python 嵌套函数、Go `type_declaration` 包装节点、JS/TS arrow function 和 interface/type alias）；regex 回退通过 brace counting / Python 缩进跟踪也能计算符号体边界。支持 Python/JS/TS/Go/Rust 函数/class/interface/struct/trait/enum/const 定义。
+  - **P2-2 结构化重构工具（多语言 + 参数自动推断）**：新增 `refactor_tools.py`（rename_symbol / extract_function）。rename_symbol 采用负向 lookaround 保证 token 边界（renaming `foo` 不会误伤 `foobar` 或 `budget`），默认跳过 `#` / `//` 全行注释；超过 500 次匹配时拒绝执行防误伤。extract_function 支持 Python/JS-TS/Go/Rust 四种语言的原生函数语法（`def` / `function` / `func` / `fn`），**参数和返回值自动推断**：Python 用 `ast` 模块精确分析 Load/Store 上下文推断自由变量和返回值；JS-TS/Go/Rust 用启发式正则分析（排除属性访问和函数调用目标）；推断出的返回值自动生成 `return` 语句，调用点自动生成赋值/解构。两个工具均记录 snapshot 供 undo。
+  - **P2-3 编辑事务回滚（交易级 undo）**：新增 `edit_snapshots.py`（`EditSnapshotStore`，基于 `~/.oclaw-coding/{thread_id}/edit-snapshots.jsonl` append-only 存储）+ `undo_tools.py`（undo_last_edit / list_edit_snapshots）。apply_diff / multi_edit / rename_symbol / extract_function 在写入前自动 push before 快照；undo 时 pop + restore 原内容。上限 100 条防无限增长。
+  - **P3-1 多语言 linter 检测**：扩展 `_detect_linter` 从 pytest-only 升级为按项目类型自动检测：Python（ruff > flake8 > pylint > mypy）→ Node（eslint > tsc）→ Go（go vet）→ Rust（cargo clippy）。通用 `file:line:col: message` 格式解析。
+  - **P3-2 动态上下文增强（技术栈指纹 + git 状态）**：新增 `_build_project_telemetry_section`。`_detect_tech_stack` 从 pyproject.toml / package.json / go.mod / Cargo.toml 推断语言/框架/测试工具/linter；`_detect_git_status` 通过 subprocess 调 git 获取 branch / dirty file count / ahead-behind，注入 dynamic context 让 Agent 自感知环境。
+  - **验证结果**：11 个文件 ast.parse 全通过；29 个工具完整注册；78 个现有测试（skills/agent_isolation/coding_review/skills_router）全部通过零回归；ruff 6 项问题已自动修复。
 - **新增 Coding 项目阶段端到端跟踪（交付工作流）+ Agent 主动建议阶段推进（2026-06-20，v0.1.5）**
   - **新增 7 阶段交付工作流**：`requirements → design → initialization → implementation → verification → review → delivery`，每个阶段有明确的目标、推荐技能、建议 prompt 和 **完成信号清单**（`completion_signals`），Agent 据此判断"本阶段是否真的完成了"。
   - **新增 `suggest_delivery_stage` 工具**：Agent 在产出关键交付物（如需求文档、设计文档）或用户确认关键决策后，**主动调用**该工具建议推进到下一阶段；用户通过前端 banner 点击"接受/拒绝"，Agent 只能建议、不能擅自推进。

@@ -5,16 +5,17 @@ import logging
 from langchain.agents import create_agent
 from langchain_core.runnables import RunnableConfig
 
+from kkoclaw.agents.coding_agent.roi_middleware import QiongqiRoiTelemetryMiddleware
 from kkoclaw.agents.lead_agent.agent import (
     _build_middlewares,
     _get_runtime_config,
     _resolve_model_name,
 )
+from kkoclaw.agents.middlewares.post_edit_verify_middleware import PostEditVerifyMiddleware
 from kkoclaw.agents.thread_state import CodingThreadState, RuntimeContext
-from kkoclaw.config.app_config import AppConfig, get_app_config
 from kkoclaw.coding_core.qiongqi import QiongqiEngine
+from kkoclaw.config.app_config import AppConfig, get_app_config
 from kkoclaw.models import create_chat_model
-from kkoclaw.agents.coding_agent.roi_middleware import QiongqiRoiTelemetryMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -171,17 +172,31 @@ def _make_coding_agent(config: RunnableConfig, *, app_config: AppConfig):
     config["metadata"]["qiongqi_roi"] = qiongqi_engine.roi_metadata(roi_report)
 
     # Build the middleware chain — reuse lead_agent's proven middleware stack
+    # plus Coding-specific middlewares:
+    #   - Coding skills injection + tool policy
+    #   - Post-edit verify reminder (edit→lint→test loop)
+    #   - Qiongqi ROI telemetry
+    coding_config = getattr(resolved_app_config, "coding_agent", None)
+    post_edit_verify_enabled = getattr(coding_config, "post_edit_verify_enabled", True) if coding_config else True
+    post_edit_verify_mode = getattr(coding_config, "post_edit_verify_mode", "soft") if coding_config else "soft"
+
+    coding_middlewares = [
+        *qiongqi_engine.build_agent_middlewares(),
+    ]
+    if post_edit_verify_enabled:
+        coding_middlewares.append(PostEditVerifyMiddleware(mode=post_edit_verify_mode))
+    coding_middlewares.append(
+        QiongqiRoiTelemetryMiddleware(
+            qiongqi_engine,
+            report=qiongqi_engine.roi_metadata(roi_report),
+        )
+    )
+
     middlewares = _build_middlewares(
         config,
         model_name=model_name,
         agent_name="coding_agent",
-        custom_middlewares=[
-            *qiongqi_engine.build_agent_middlewares(),
-            QiongqiRoiTelemetryMiddleware(
-                qiongqi_engine,
-                report=qiongqi_engine.roi_metadata(roi_report),
-            ),
-        ],
+        custom_middlewares=coding_middlewares,
         app_config=resolved_app_config,
     )
 

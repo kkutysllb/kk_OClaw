@@ -104,6 +104,21 @@ COLLECT_ALL_PACKAGES = [
     # Web content extraction
     "lxml",
     "PIL",
+    # ── tree-sitter grammars for symbol-level code navigation ──
+    # _symbol_parser.py imports these LAZILY inside functions and via
+    # __import__() with runtime-resolved module names (see
+    # _GRAMMAR_MODULES mapping). PyInstaller's static ModuleGraph cannot
+    # follow these dynamic imports, so without collect_all() the .so
+    # binaries and the queries/ data dir (used by importlib.resources in
+    # tree_sitter_typescript) are silently dropped — at runtime the import
+    # fails inside a try/except and find_symbols/read_symbol silently
+    # degrade to the regex fallback, losing AST-accurate navigation.
+    "tree_sitter",
+    "tree_sitter_python",
+    "tree_sitter_javascript",
+    "tree_sitter_typescript",
+    "tree_sitter_go",
+    "tree_sitter_rust",
 ]
 
 datas = []

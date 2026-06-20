@@ -26,6 +26,30 @@ CODING_SKILLS_DIR = ".oclaw-coding/skills"
 SKILL_MD_FILE = "SKILL.md"
 SKILL_JSON_FILE = "skill.json"
 
+# Bilingual synonym map for semantic skill activation. When a task text
+# contains any value, the corresponding canonical keyword is treated as
+# matched. This lets a single ``activation_keywords: ["review"]`` skill
+# fire on tasks written as "审查"/"review"/"代码评审"/"code review".
+_SKILL_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "review": ("review", "审查", "评审", "code review", "pr review", "diff review", "代码审查", "代码评审", "review diff", "review code"),
+    "refactor": ("refactor", "重构", "restructure", "cleanup code", "代码重构", "重构代码"),
+    "test": ("test", "测试", "unit test", "pytest", "jest", "vitest", "add test", "write test", "单元测试", "写测试", "补充测试"),
+    "security": ("security", "安全", "vulnerability", "cve", "owasp", "漏洞", "安全审查", "安全扫描"),
+    "performance": ("performance", "性能", "optimize", "benchmark", "profiling", "优化", "性能优化", "性能测试"),
+    "deploy": ("deploy", "部署", "发布", "release", "publish", "cd", "ci/cd", "发布上线", "上线"),
+    "database": ("database", "数据库", "sql", "migration", "schema", "db"),
+    "api": ("api", "接口", "rest", "graphql", "endpoint", "openapi", "接口设计", "api设计"),
+    "frontend": ("frontend", "前端", "ui", "react", "vue", "nextjs", "组件", "页面"),
+    "backend": ("backend", "后端", "server", "service", "服务端", "服务"),
+    "debug": ("debug", "调试", "bug", "fix", "修复", "排错", "问题定位", "bug修复", "修 bug"),
+    "docs": ("docs", "文档", "documentation", "readme", "写文档", "文档化"),
+    "requirements": ("requirements", "需求", "requirement", "prd", "用户故事", "需求分析", "需求文档"),
+    "design": ("design", "设计", "architecture", "架构", "技术方案", "系统设计", "架构设计"),
+    "scaffold": ("scaffold", "脚手架", "初始化", "init", "bootstrap", "项目初始化", "工程初始化"),
+    "implement": ("implement", "实现", "feature", "功能", "开发", "develop", "coding", "编码", "写代码"),
+    "verify": ("verify", "验证", "qa", "e2e", "playwright", "验证测试", "端到端", "回归"),
+}
+
 
 @dataclass(frozen=True)
 class CodingSkill:
@@ -455,3 +479,85 @@ def _read_state_file(path: Path) -> dict:
 
 def _is_safe_id(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value))
+
+
+# ----------------------------------------------------------------------
+# Semantic skill matching
+# ----------------------------------------------------------------------
+
+
+def matches_skill_semantic(skill: CodingSkill, task_text: str) -> bool:
+    """Match a skill against task text using keywords + bilingual synonyms + description tokens.
+
+    Matching layers (any hit wins):
+      1. ``always_activate`` flag on the skill.
+      2. Exact substring match of any ``activation_keywords``.
+      3. Synonym expansion: each keyword is expanded via ``_SKILL_SYNONYMS``;
+         if any synonym (case-insensitive) appears in the task, it matches.
+      4. Description token overlap: if >=2 distinctive tokens from the skill
+         description appear in the task, it matches. This catches tasks like
+         "add unit tests for the payment module" even when no keyword is
+         declared.
+
+    Returns True if the skill should be activated for this task.
+    """
+    if skill.always_activate:
+        return True
+
+    task = (task_text or "").lower()
+    if not task:
+        return False
+
+    # Layer 2: exact keyword substring
+    keywords = skill.activation_keywords or ()
+    if any(kw.lower() in task for kw in keywords):
+        return True
+
+    # Layer 3: synonym expansion
+    for kw in keywords:
+        kw_lower = kw.lower()
+        synonyms = _SKILL_SYNONYMS.get(kw_lower)
+        if synonyms and any(syn.lower() in task for syn in synonyms):
+            return True
+
+    # Layer 4: description token overlap (>=2 distinctive tokens)
+    desc_tokens = _tokenize_for_match(skill.description)
+    if desc_tokens:
+        hits = sum(1 for tok in desc_tokens if tok in task)
+        if hits >= 2:
+            return True
+
+    return False
+
+
+_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "for", "to", "of", "in", "on", "with",
+    "this", "that", "is", "are", "be", "will", "can", "do", "does",
+    "you", "your", "i", "we", "they", "it",
+    "code", "file", "project", "task", "please", "help", "me", "my",
+    "的", "了", "在", "是", "和", "与", "或", "请", "帮", "我", "把", "这个",
+    "那个", "一下", "里面", "中", "上", "下",
+})
+
+
+def _tokenize_for_match(text: str | None) -> list[str]:
+    """Split text into lowercase tokens, dropping stopwords and short tokens.
+
+    For CJK text without spaces, each character becomes a token (stopwords
+    filtered). This is a coarse heuristic but works well enough for the
+    description-overlap layer; the synonym map handles the precise cases.
+    """
+    if not text:
+        return []
+    tokens: list[str] = []
+    # ASCII words
+    for word in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text):
+        low = word.lower()
+        if low not in _STOPWORDS:
+            tokens.append(low)
+    # CJK characters (each char is a token)
+    for ch in text:
+        if "\u4e00" <= ch <= "\u9fff":
+            if ch not in ("的", "了", "在", "是", "和"):
+                tokens.append(ch)
+    return tokens

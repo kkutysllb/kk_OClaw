@@ -33,12 +33,24 @@ from kkoclaw.tools.coding.pr_tools import (
     create_pr_tool,
     review_code_tool,
 )
+from kkoclaw.tools.coding.refactor_tools import (
+    extract_function_tool,
+    rename_symbol_tool,
+)
 from kkoclaw.tools.coding.stage_tools import (
     suggest_delivery_stage_tool,
+)
+from kkoclaw.tools.coding.symbol_tools import (
+    find_symbols_tool,
+    read_symbol_tool,
 )
 from kkoclaw.tools.coding.test_tools import (
     run_linter_tool,
     run_tests_tool,
+)
+from kkoclaw.tools.coding.undo_tools import (
+    list_edit_snapshots_tool,
+    undo_last_edit_tool,
 )
 from kkoclaw.tools.coding.worktree import (
     create_worktree_tool,
@@ -58,10 +70,19 @@ def get_coding_tools() -> list:
         read_file_lines_tool,
         search_code_tool,
         find_files_tool,
+        # Symbol-aware navigation
+        find_symbols_tool,
+        read_symbol_tool,
         # File editing
         apply_diff_tool,
         insert_at_line_tool,
         multi_edit_tool,
+        # Semantic refactoring
+        rename_symbol_tool,
+        extract_function_tool,
+        # Edit rollback (transactional undo)
+        undo_last_edit_tool,
+        list_edit_snapshots_tool,
         # Git
         git_status_tool,
         git_diff_tool,

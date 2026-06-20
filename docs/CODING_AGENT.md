@@ -51,22 +51,29 @@ backend/packages/harness/kkoclaw/coding_core
 主要实现文件：
 
 - `backend/packages/harness/kkoclaw/coding_core/`
-  - `qiongqi.py`：QiongqiEngine 核心运行边界。
+  - `qiongqi.py`：QiongqiEngine 核心运行边界（stable prompt + dynamic context + 阶段完成探针 + 项目遥测）。
   - `context.py`：CodingRuntimeContext 和 scratch workspace 解析。
   - `session_store.py`：独立 session、events、ROI、change summary 持久化。
-  - `skills.py`：Coding-only skill registry 和启用状态。
+  - `skills.py`：Coding-only skill registry 和启用状态（含语义激活：同义词映射 + 描述 token 重叠）。
   - `change_tracking.py`：按 thread/task 汇总文件变更。
+  - `edit_snapshots.py`：编辑事务快照存储（append-only jsonl，支持 undo）。
+  - `delivery_stages.py`：7 阶段交付工作流定义和 completion_signals。
   - `events.py`：Qiongqi 事件记录格式。
   - `roi_telemetry.py`：ROI 报告记录和汇总。
 - `backend/packages/harness/kkoclaw/agents/coding_agent/`
-  - `agent.py`：Coding Agent 图适配。
+  - `agent.py`：Coding Agent 图适配（中间件链注册 PostEditVerifyMiddleware 等）。
   - `runtime.py`：运行时上下文装配。
   - `skills_middleware.py`：Coding skills 注入。
   - `tool_policy_middleware.py`：工具策略注入。
   - `roi_middleware.py`：ROI telemetry 采集。
   - `prompt.py`：Coding prompt 装配。
+- `backend/packages/harness/kkoclaw/agents/middlewares/`
+  - `post_edit_verify_middleware.py`：改→验证闭环中间件，检测 mutation 后无 verification 则注入提醒。
 - `backend/packages/harness/kkoclaw/tools/coding/`
-  - `file_read.py`、`file_edit.py`、`git_tools.py`、`pr_tools.py`、`test_tools.py`、`worktree.py`。
+  - `file_read.py`、`file_edit.py`、`git_tools.py`、`pr_tools.py`、`test_tools.py`（结构化解析 + 多语言 linter）、`worktree.py`。
+  - `symbol_tools.py`：符号级导航（find_symbols / read_symbol，支持 Python/JS-TS/Go/Rust）。
+  - `refactor_tools.py`：结构化重构（rename_symbol / extract_function）。
+  - `undo_tools.py`：编辑事务回滚（undo_last_edit / list_edit_snapshots）。
 
 Gateway 服务：
 
@@ -101,12 +108,32 @@ Gateway 服务：
 - 生成 `stable_prompt_fingerprint`、`tool_catalog_fingerprint`、`immutable_prefix_fingerprint`。
 - 输出 Qiongqi ROI metadata，包括 full/visible/hidden tool count。
 
-Qiongqi 的稳定提示词强调：
+Qiongqi 的稳定提示词（`_STABLE_QIONGQI_PROMPT`）强调：
+
+**Runtime Contract（运行时边界）**：
 
 - 项目路径、active skills、任务细节、工具结果属于动态上下文。
 - 临时分析文件应写入 scratch workspace。
 - 只有明确需要修改用户项目时，才写入项目根目录。
 - 对代码、路径、命令、错误信息保持精确。
+
+**Core Operating Principles（核心操作准则）**：
+
+- 先理解再动手：修改前必先读文件、看上下文、看测试。
+- 最小精确变更：一处变更只做一件事，避免连带重写。
+- **改→验证强制闭环**：任何代码变更后，必须调用 run_tests/run_linter/bash 验证后才能报告完成。
+- Git 卫生：频繁小提交；变更前 pull；冲突优先手工解决。
+- 安全与权限：遵守 tool policy；不跳过 sandbox；路径校验。
+- 失败恢复纪律：同一方式连续失败 3 次时停止重试，向用户求助。
+
+**Workflow Patterns（工作流模式）**：Feature 实现 / Bug 修复 / 重构 / Code Review 四种模式。
+
+**PostEditVerifyMiddleware** 在运行时强制执行「改→验证闭环」：检测 mutation 工具成功调用后若无 verification 工具调用，在下一轮自动注入提醒，幂等设计避免循环。
+
+**Dynamic Context（动态上下文）** 除项目路径/技能/任务细节外，现在还自动注入：
+
+- **阶段完成探针**：按 7 阶段客观检查（requirements.md 是否存在、测试文件、git 变更数、CI 配置、部署文档）。
+- **项目遥测**：技术栈指纹（pyproject/package.json/go.mod/Cargo.toml 推断语言/框架/测试/linter）+ git 状态（branch/dirty count/ahead-behind）。
 
 ## Session、Memory 与 Scratch 隔离
 
@@ -348,11 +375,16 @@ pnpm --dir frontend run typecheck
 
 当前已经完成的核心能力：
 
-- 独立 QiongqiEngine。
+- 独立 QiongqiEngine（含 stable prompt 核心操作准则 + dynamic context 阶段探针 + 项目遥测）。
 - Coding session/memory/scratch 隔离。
-- Coding-only skills registry。
+- Coding-only skills registry（含语义激活：同义词映射 + 描述 token 重叠）。
 - 59 个内置 Coding skills。
 - 项目文件浏览、代码查看、项目 diff。
+- **符号级语义导航**（find_symbols / read_symbol，tree-sitter AST 后端 + 增强正则回退，支持 Python/JS-TS/Go/Rust）。
+- **结构化重构工具**（rename_symbol token-boundary / extract_function，多语言函数语法：Python `def` / JS-TS `function` / Go `func` / Rust `fn`，**参数与返回值自动推断**：Python 用 `ast` 模块精确分析 Load/Store，JS-TS/Go/Rust 用启发式正则）。
+- **编辑事务回滚**（EditSnapshotStore + undo_last_edit / list_edit_snapshots）。
+- **PostEditVerifyMiddleware**（改→验证闭环）。
+- **测试结果结构化解析**（pytest --json-report 优先 + jest + 多语言 linter 检测）。
 - Qiongqi events、task changes、ROI。
 - 基于 diff/task/events/PR context 的 Code Review。
 - Python secret 场景的一键安全修复。
@@ -365,3 +397,4 @@ pnpm --dir frontend run typecheck
 - Review finding 的精确行号映射和更细粒度 evidence。
 - 将 workflow stage 与实际 agent run/task 状态进一步绑定。
 - 项目私有 skills 的治理策略和导入/导出能力。
+- rename_symbol 扩展为跨文件跨项目重命名（当前仅单文件）。
