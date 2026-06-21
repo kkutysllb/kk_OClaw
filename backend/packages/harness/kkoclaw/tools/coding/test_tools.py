@@ -26,7 +26,6 @@ from kkoclaw.sandbox.tools import (
 )
 from kkoclaw.tools.types import Runtime
 
-
 # Max characters of raw output stored in the ``test_results`` state entry.
 # The full JSON is still returned to the model via ToolMessage; this truncation
 # only applies to the state field consumed by ``_summarize_run_outcome``.
@@ -60,13 +59,16 @@ def _build_test_result_command(
             "summary": result.get("summary") if isinstance(result.get("summary"), dict) else None,
         }
     result_json = json.dumps(result, indent=2, ensure_ascii=False)
+    tool_call_id = getattr(runtime, "tool_call_id", None)
+    if not tool_call_id:
+        return result_json
     return Command(
         update={
             "test_results": [entry],
             "messages": [
                 ToolMessage(
                     content=result_json,
-                    tool_call_id=runtime.tool_call_id,
+                    tool_call_id=tool_call_id,
                 ),
             ],
         },

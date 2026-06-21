@@ -7,8 +7,8 @@ root.
 
 from __future__ import annotations
 
-import json
 import difflib
+import json
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -306,6 +306,10 @@ def commit_edit_to_state(
     if diff_entry is None:
         return result_message
 
+    tool_call_id = getattr(runtime, "tool_call_id", None)
+    if not tool_call_id:
+        return result_message
+
     from langchain_core.messages import ToolMessage
     from langgraph.types import Command
 
@@ -315,7 +319,7 @@ def commit_edit_to_state(
             "messages": [
                 ToolMessage(
                     content=result_message,
-                    tool_call_id=runtime.tool_call_id,
+                    tool_call_id=tool_call_id,
                 ),
             ],
         },

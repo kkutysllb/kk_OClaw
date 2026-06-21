@@ -106,7 +106,7 @@ class TestResult(TypedDict):
     command: str
     passed: bool
     output: str
-    summary: NotRequired[str]
+    summary: NotRequired[dict[str, Any] | None]
     duration_ms: NotRequired[int]
 
 

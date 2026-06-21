@@ -10,20 +10,16 @@ Covers:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
-
-import pytest
 
 from kkoclaw.agents.middlewares.post_edit_verify_middleware import (
-    PostEditVerifyMiddleware,
     _MUTATING_TOOL_NAMES,
+    PostEditVerifyMiddleware,
 )
 from kkoclaw.agents.thread_state import merge_test_results
 from kkoclaw.coding_core.change_tracking import (
     build_file_diff_entry,
     commit_edit_to_state,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake runtime helpers
@@ -156,6 +152,22 @@ class TestCommitEditToState:
         assert isinstance(result, str)
         assert result == "OK: nothing changed"
 
+    def test_returns_str_when_no_tool_call_id(self):
+        """Without tool_call_id (e.g. direct function call in tests),
+        falls back to plain str instead of crashing with AttributeError."""
+        runtime = _make_runtime(tool_call_id=None)
+        # Simulate a runtime without tool_call_id attribute at all
+        delattr(runtime, "tool_call_id")
+        result = commit_edit_to_state(
+            runtime,
+            result_message="OK: Applied",
+            file_path="/fake/project/src/main.py",
+            before="old\n",
+            after="new\n",
+        )
+        assert isinstance(result, str)
+        assert result == "OK: Applied"
+
 
 # ---------------------------------------------------------------------------
 # merge_test_results
@@ -237,6 +249,24 @@ class TestBuildTestResultCommand:
         assert entry["command"] == "ruff check --output-format=concise ."
         assert entry["passed"] is True  # clean → passed
         assert "summary" not in entry or entry.get("summary") is None
+
+    def test_returns_json_str_when_no_tool_call_id(self):
+        """Without tool_call_id, falls back to JSON string instead of crashing."""
+        from kkoclaw.tools.coding.test_tools import _build_test_result_command
+
+        runtime = _make_runtime(tool_call_id=None)
+        delattr(runtime, "tool_call_id")
+        result = {
+            "framework": "pytest",
+            "command": "pytest",
+            "passed": True,
+            "raw_output": "ok",
+        }
+        ret = _build_test_result_command(runtime, result)
+        assert isinstance(ret, str)
+        import json as _json
+        parsed = _json.loads(ret)
+        assert parsed["passed"] is True
 
 
 # ---------------------------------------------------------------------------

@@ -370,13 +370,17 @@ def multi_edit_tool(
             from langchain_core.messages import ToolMessage
             from langgraph.types import Command
 
+            tool_call_id = getattr(runtime, "tool_call_id", None)
+            if not tool_call_id:
+                return result_msg
+
             return Command(
                 update={
                     "diff": diff_entries,
                     "messages": [
                         ToolMessage(
                             content=result_msg,
-                            tool_call_id=runtime.tool_call_id,
+                            tool_call_id=tool_call_id,
                         ),
                     ],
                 },
