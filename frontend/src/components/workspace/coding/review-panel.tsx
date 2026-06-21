@@ -115,7 +115,6 @@ export function ReviewPanel({
     });
   };
 
-  const summary = currentReview?.summary;
   const reviewSummary = currentReview?.summary ?? null;
   const hasBlockingIssue =
     (reviewSummary?.critical ?? 0) > 0 || (reviewSummary?.major ?? 0) > 0;
@@ -303,16 +302,6 @@ export function ReviewPanel({
                   </div>
                 )}
 
-                <div className="rounded-md border p-2">
-                  <p className="text-xs font-medium">后续计划</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {currentReview.next_plan.map((item) => (
-                      <Badge key={item} variant="outline" className="rounded px-1.5 text-[10px]">
-                        {item}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
               </>
             )}
           </div>
@@ -646,21 +635,27 @@ function getReviewPrContext(
         .map((item) =>
           item && typeof item === "object" && !Array.isArray(item)
             ? {
-                sha: String((item as Record<string, unknown>).sha ?? ""),
-                subject: String((item as Record<string, unknown>).subject ?? ""),
+                sha: stringValue((item as Record<string, unknown>).sha),
+                subject: stringValue((item as Record<string, unknown>).subject),
               }
             : null,
         )
         .filter((item): item is { sha: string; subject: string } => Boolean(item?.sha))
     : [];
   return {
-    base_ref: String(context.base_ref ?? ""),
+    base_ref: stringValue(context.base_ref),
     requested_base_ref:
       typeof context.requested_base_ref === "string"
         ? context.requested_base_ref
         : null,
-    merge_base: String(context.merge_base ?? ""),
-    head: String(context.head ?? ""),
+    merge_base: stringValue(context.merge_base),
+    head: stringValue(context.head),
     commits,
   };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : "";
 }

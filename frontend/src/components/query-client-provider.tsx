@@ -35,6 +35,13 @@ function isHttpClientError(error: unknown): boolean {
   return false;
 }
 
+// Top-level workspace task tabs are route changes, so their pages unmount and
+// remount during ordinary task switching. Keep recently fetched task data fresh
+// for a short window so switching between active tasks feels instant instead of
+// fanning out backend reads on every click.
+const TASK_SWITCH_STALE_TIME_MS = 30 * 1000;
+const TASK_SWITCH_GC_TIME_MS = 30 * 60 * 1000;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -43,6 +50,8 @@ const queryClient = new QueryClient({
       // a single alt-tab would otherwise fan out a burst of requests that, if
       // any returned 4xx, cascaded into retry storms.
       refetchOnWindowFocus: false,
+      staleTime: TASK_SWITCH_STALE_TIME_MS,
+      gcTime: TASK_SWITCH_GC_TIME_MS,
       retry: (failureCount, error) => {
         // 4xx means the request itself is invalid for the current state
         // (deleted resource, bad id, ...). Retrying is pointless and, with

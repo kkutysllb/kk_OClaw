@@ -1,11 +1,17 @@
 "use client";
 
+import { BotIcon, Code2Icon, MessageSquareIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BotIcon, Code2Icon, MessageSquareIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { fetchThreadTitle } from "@/core/threads/api";
+import { useThreads } from "@/core/threads/hooks";
+import {
+  clearThreadRuntimeSnapshot,
+  getRuntimeTargetForWorkspaceTask,
+} from "@/core/workspace-runtime";
 import {
   closeWorkspaceTaskTab,
   createWorkspaceTaskTabFromPath,
@@ -20,8 +26,6 @@ import {
   fetchWorkspaceTaskTabs,
   saveWorkspaceTaskTabs,
 } from "@/core/workspace-task-tabs-api";
-import { fetchThreadTitle } from "@/core/threads/api";
-import { useThreads } from "@/core/threads/hooks";
 import { cn } from "@/lib/utils";
 
 const WORKSPACE_TASK_ROUTE_EVENT = "oclaw:workspace-task-route";
@@ -55,7 +59,17 @@ export function WorkspaceTaskTabs() {
   }, []);
 
   const syncPath = useCallback((nextPathname: string | null | undefined) => {
-    const tab = createWorkspaceTaskTabFromPath(nextPathname);
+    const parsedTab = createWorkspaceTaskTabFromPath(nextPathname);
+    const tab =
+      parsedTab?.kind === "coding" && parsedTab.projectId
+        ? {
+            ...parsedTab,
+            threadId:
+              parsedTab.threadId ??
+              window.localStorage.getItem(`coding:thread:${parsedTab.projectId}`) ??
+              undefined,
+          }
+        : parsedTab;
     if (!tab) return;
     setTabs((current) => {
       const next = upsertWorkspaceTaskTab(current, tab);
@@ -120,7 +134,7 @@ export function WorkspaceTaskTabs() {
     const titleFromList = threads?.find(
       (thread) => thread.thread_id === activeThreadId,
     )?.values?.title?.trim();
-    if (titleFromList || !currentTab || currentTab.title !== activePlaceholderTitle) {
+    if (titleFromList || currentTab?.title !== activePlaceholderTitle) {
       return;
     }
 
@@ -142,6 +156,13 @@ export function WorkspaceTaskTabs() {
 
   const handleClose = useCallback(
     (tabId: string) => {
+      const closingTab = tabs.find((tab) => tab.id === tabId);
+      const target = closingTab
+        ? getRuntimeTargetForWorkspaceTask(closingTab)
+        : null;
+      if (target) {
+        clearThreadRuntimeSnapshot(target.threadId);
+      }
       const result = closeWorkspaceTaskTab(tabs, tabId, activeTabId);
       persistTabs(result.tabs);
       setTabs(result.tabs);

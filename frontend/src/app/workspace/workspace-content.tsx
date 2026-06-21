@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceTaskTabs } from "@/components/workspace/workspace-task-tabs";
+import { WorkspaceRuntimeProvider } from "@/core/workspace-runtime";
 
 // Desktop static export: no cookies() access
 export function WorkspaceContent({
@@ -12,13 +13,15 @@ export function WorkspaceContent({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <QueryClientProvider>
-      <SidebarProvider className="h-screen" defaultOpen={false}>
-        <WorkspaceSidebar />
-        <SidebarInset className="min-w-0">
-          <WorkspaceTaskTabs />
-          {children}
-        </SidebarInset>
-      </SidebarProvider>
+      <WorkspaceRuntimeProvider>
+        <SidebarProvider className="h-screen" defaultOpen={false}>
+          <WorkspaceSidebar />
+          <SidebarInset className="min-w-0">
+            <WorkspaceTaskTabs />
+            {children}
+          </SidebarInset>
+        </SidebarProvider>
+      </WorkspaceRuntimeProvider>
       <CommandPalette />
       <Toaster position="top-center" />
     </QueryClientProvider>

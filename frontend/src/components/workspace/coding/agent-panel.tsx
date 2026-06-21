@@ -23,6 +23,7 @@ import {
   MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { notifyWorkspaceTaskRouteChanged } from "@/components/workspace/workspace-task-tabs";
 import { useProject } from "@/core/projects";
 import { useThreadSettings } from "@/core/settings";
 import { SubtasksProvider } from "@/core/tasks/context";
@@ -76,15 +77,16 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
   const threadIdStorageKey = `coding:thread:${projectId}`;
   const [threadId, setThreadId] = useState<string | undefined>(() => {
     if (typeof window === "undefined") return undefined;
-    return window.localStorage.getItem(threadIdStorageKey) || undefined;
+    return window.localStorage.getItem(threadIdStorageKey) ?? undefined;
   });
   useEffect(() => {
     if (threadId) {
       window.localStorage.setItem(threadIdStorageKey, threadId);
+      notifyWorkspaceTaskRouteChanged(`/workspace/coding/${projectId}`);
     } else {
       window.localStorage.removeItem(threadIdStorageKey);
     }
-  }, [threadId, threadIdStorageKey]);
+  }, [projectId, threadId, threadIdStorageKey]);
   const uiThreadId = threadId ?? projectId;
   const [settings, setSettings] = useThreadSettings(`coding:${projectId}`);
   const [showFollowups, setShowFollowups] = useState(false);

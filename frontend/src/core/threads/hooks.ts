@@ -16,14 +16,18 @@ import type { LocalSettings } from "../settings";
 import { useUpdateSubtask } from "../tasks/context";
 import type { UploadedFileInfo } from "../uploads";
 import { promptInputFilePartToFile, uploadFiles } from "../uploads";
+import {
+  getThreadRuntimeSnapshot,
+  publishThreadRuntimeSnapshot,
+  useThreadRuntimeSnapshot,
+} from "../workspace-runtime";
 
-import type { AgentThread, AgentThreadState, RunMessage } from "./types";
 import { handleStreamEvent } from "./stream-event-handler";
 import {
   getCachedThreadState,
   setCachedThreadState,
-  type CachedThreadState,
 } from "./thread-state-store";
+import type { AgentThread, AgentThreadState, RunMessage } from "./types";
 
 export type ToolEndEvent = {
   name: string;
@@ -50,6 +54,13 @@ export type ThreadStreamOptions = {
 
 type SendMessageOptions = {
   additionalKwargs?: Record<string, unknown>;
+};
+
+type DisplayThreadState = {
+  messages: Message[];
+  values: AgentThreadState;
+  isLoading: boolean;
+  error: unknown;
 };
 
 function mergeMessages(
@@ -101,6 +112,10 @@ function getStreamErrorMessage(error: unknown): string {
     if (typeof message === "string" && message.trim()) {
       return message;
     }
+    const detail = Reflect.get(error, "detail");
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
     const nestedError = Reflect.get(error, "error");
     if (nestedError instanceof Error && nestedError.message.trim()) {
       return nestedError.message;
@@ -144,6 +159,44 @@ function isThreadBusyConflict(error: unknown): boolean {
   return false;
 }
 
+function isStaleStreamJoinError(error: unknown): boolean {
+  if (error == null) {
+    return false;
+  }
+
+  const parts: string[] = [];
+  if (typeof error === "string") {
+    parts.push(error);
+  } else if (error instanceof Error) {
+    parts.push(error.message);
+  } else if (typeof error === "object") {
+    const message = Reflect.get(error, "message");
+    const detail = Reflect.get(error, "detail");
+    const nestedError = Reflect.get(error, "error");
+    if (typeof message === "string") parts.push(message);
+    if (typeof detail === "string") parts.push(detail);
+    if (nestedError instanceof Error) parts.push(nestedError.message);
+    if (typeof nestedError === "string") parts.push(nestedError);
+  }
+
+  const text = parts.join(" ");
+  return (
+    /not active on this worker/i.test(text) &&
+    /cannot be streamed/i.test(text)
+  );
+}
+
+function clearStoredStreamReconnectKey(threadId: string | null | undefined) {
+  if (!threadId || typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(`lg:stream:${threadId}`);
+  } catch {
+    // ignore storage failures
+  }
+}
+
 export function useThreadStream({
   threadId,
   context,
@@ -156,6 +209,7 @@ export function useThreadStream({
   onQiongqiEvent,
 }: ThreadStreamOptions) {
   const { t } = useI18n();
+  const runtimeSnapshot = useThreadRuntimeSnapshot(threadId);
   // ── Cross-mount state restoration ───────────────────────────────
   // On component remount (e.g. desktop workspace-tab switch), `useStream`
   // reinitialises with empty messages and `isLoading=false`. The user would
@@ -163,11 +217,22 @@ export function useThreadStream({
   // stream reconnects. We bridge that gap with a module-level cache of the
   // last displayed state so the remounted component renders the previous
   // messages immediately while the SSE reconnects silently in the background.
-  const restoredStateRef = useRef<CachedThreadState | null | undefined>(
+  const restoredStateRef = useRef<DisplayThreadState | null | undefined>(
     undefined,
   );
-  if (restoredStateRef.current === undefined && threadId) {
-    restoredStateRef.current = getCachedThreadState(threadId) ?? null;
+  const restoredThreadIdRef = useRef<string | null | undefined>(undefined);
+  const normalizedRestoredThreadId = threadId ?? null;
+  if (restoredThreadIdRef.current !== normalizedRestoredThreadId) {
+    restoredThreadIdRef.current = normalizedRestoredThreadId;
+    if (!normalizedRestoredThreadId) {
+      restoredStateRef.current = null;
+    } else {
+      const runtimeState = getThreadRuntimeSnapshot(normalizedRestoredThreadId);
+      restoredStateRef.current =
+        runtimeState ??
+        getCachedThreadState(normalizedRestoredThreadId) ??
+        null;
+    }
   }
   // Track the thread ID that is currently streaming to handle thread changes during streaming
   const [onStreamThreadId, setOnStreamThreadId] = useState(() => threadId);
@@ -189,7 +254,9 @@ export function useThreadStream({
     loadMore: loadMoreHistory,
     loading: isHistoryLoading,
     appendMessages,
-  } = useThreadHistory(onStreamThreadId ?? "");
+  } = useThreadHistory(onStreamThreadId ?? "", {
+    deferInitialLoad: (restoredStateRef.current?.messages.length ?? 0) > 0,
+  });
 
   // Keep listeners ref updated with latest callbacks
   useEffect(() => {
@@ -262,7 +329,6 @@ export function useThreadStream({
       }
     },
     onUpdateEvent(data) {
-      const keys = Object.keys(data || {});
       if (data["SummarizationMiddleware.before_model"]) {
         const _messages = [
           ...(data["SummarizationMiddleware.before_model"].messages ?? []),
@@ -323,8 +389,8 @@ export function useThreadStream({
       handleStreamEvent(event, {
         updateSubtask,
         authorizePath:
-          typeof window !== "undefined"
-            ? window.oclawDesktop?.authorizePath
+          typeof window !== "undefined" && window.oclawDesktop
+            ? (params) => window.oclawDesktop!.authorizePath(params)
             : undefined,
         threadId: threadIdRef.current ?? undefined,
       });
@@ -336,6 +402,16 @@ export function useThreadStream({
     onError(error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       setOptimisticMessages([]);
+      if (isStaleStreamJoinError(error)) {
+        clearStoredStreamReconnectKey(threadIdRef.current ?? onStreamThreadId);
+        void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+        if (threadIdRef.current ?? onStreamThreadId) {
+          void queryClient.invalidateQueries({
+            queryKey: ["thread", threadIdRef.current ?? onStreamThreadId],
+          });
+        }
+        return;
+      }
       // In the desktop packaged build, a "TypeError: network error" on the
       // SSE stream is usually caused by the renderer process being reloaded
       // (e.g. RSC navigation fallback) rather than a real server error.
@@ -387,6 +463,9 @@ export function useThreadStream({
   useEffect(() => {
     startedRef.current = false;
     sendInFlightRef.current = false;
+    messagesRef.current = [];
+    summarizedRef.current = new Set<string>();
+    setOptimisticMessages([]);
   }, [threadId]);
 
   // ── Fallback run reconnection ────────────────────────────────────────────
@@ -432,7 +511,7 @@ export function useThreadStream({
 
       try {
         const apiClient = getAPIClient();
-        const runs = await apiClient.runs.list(threadId!);
+        const runs = await apiClient.runs.list(threadId);
         if (cancelled) return;
 
         // Find the most recent active run (running or pending).
@@ -455,13 +534,14 @@ export function useThreadStream({
           // so it doesn't cause spurious joinStream errors on the next mount.
           // This is especially important now that we use localStorage (which
           // persists across app restarts) instead of sessionStorage.
-          try {
-            window.localStorage.removeItem(`lg:stream:${threadId}`);
-          } catch {
-            // ignore
-          }
+          clearStoredStreamReconnectKey(threadId);
         }
-      } catch {
+      } catch (error) {
+        if (isStaleStreamJoinError(error)) {
+          clearStoredStreamReconnectKey(threadId);
+          void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+          void queryClient.invalidateQueries({ queryKey: ["thread", threadId] });
+        }
         // Best-effort: if the backend is unreachable or the run list fails,
         // silently give up. The user can still send a new message.
       }
@@ -479,7 +559,7 @@ export function useThreadStream({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [threadId, isMock]);
+  }, [threadId, isMock, queryClient]);
 
   // Clear optimistic when server messages arrive (count increases)
   useEffect(() => {
@@ -659,10 +739,11 @@ export function useThreadStream({
               streamMode: ["values", "messages-tuple"],
               streamSubgraphs: true,
               streamResumable: true,
-              // Desktop: keep the task running even if the SSE connection drops
-              // (e.g. macOS App Nap throttling, window switching).  The frontend
-              // will rejoin the stream when it reconnects.
-              onDisconnect: isDesktop() ? "continue" : undefined,
+              // Keep the task running even if the current task page unmounts
+              // and drops its SSE connection. Top-level workspace task-tab
+              // switches are route changes on both web and desktop, so the
+              // frontend must be able to rejoin instead of cancelling work.
+              onDisconnect: "continue",
               multitaskStrategy: strategy,
               config: {
                 recursion_limit: 10000,
@@ -750,15 +831,15 @@ export function useThreadStream({
   // UI stays visually identical across tab switches.  Once the stream has
   // data (or has definitively settled with no messages) the live values take
   // over seamlessly.
-  const restored = restoredStateRef.current;
+  const restored = runtimeSnapshot ?? restoredStateRef.current;
   const streamHasData = filteredThreadMessages.length > 0;
   const inReconnectTransition =
     !!threadId && !streamHasData && !!restored;
   const displayMessages = inReconnectTransition
-    ? (restored!.messages as typeof mergedMessages)
+    ? restored.messages
     : mergedMessages;
   const displayIsLoading = inReconnectTransition
-    ? restored!.isLoading
+    ? restored.isLoading
     : thread.isLoading;
 
   // Persist the current display state so the next mount can restore it.
@@ -768,12 +849,14 @@ export function useThreadStream({
     if (!threadId) return;
     const hasContent = displayMessages.length > 0 || displayIsLoading;
     if (!hasContent) return;
-    setCachedThreadState(threadId, {
-      messages: displayMessages as Message[],
-      values: thread.values as AgentThreadState,
+    const snapshot = {
+      messages: displayMessages,
+      values: thread.values,
       isLoading: displayIsLoading,
       error: thread.error,
-    });
+    };
+    publishThreadRuntimeSnapshot(threadId, snapshot);
+    setCachedThreadState(threadId, snapshot);
   }, [
     threadId,
     displayMessages,
@@ -805,7 +888,11 @@ export function useThreadStream({
   } as const;
 }
 
-export function useThreadHistory(threadId: string) {
+export function useThreadHistory(
+  threadId: string,
+  options: { deferInitialLoad?: boolean } = {},
+) {
+  const { deferInitialLoad = false } = options;
   const runs = useThreadRuns(threadId);
   const threadIdRef = useRef(threadId);
   const runsRef = useRef(runs.data ?? []);
@@ -866,10 +953,13 @@ export function useThreadHistory(threadId: string) {
       runsRef.current = runs.data ?? [];
       indexRef.current = runs.data.length - 1;
     }
+    if (deferInitialLoad) {
+      return;
+    }
     loadMessages().catch(() => {
       toast.error("Failed to load thread history.");
     });
-  }, [threadId, runs.data, loadMessages]);
+  }, [threadId, runs.data, loadMessages, deferInitialLoad]);
 
   const appendMessages = useCallback((_messages: Message[]) => {
     setMessages((prev) => {
