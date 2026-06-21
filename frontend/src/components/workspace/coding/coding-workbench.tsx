@@ -497,7 +497,7 @@ function CollapsedPanelRestore({
     <button
       aria-label={label}
       className={cn(
-        "bg-background text-muted-foreground hover:bg-muted hover:text-foreground absolute top-2 z-20 flex size-8 items-center justify-center rounded-md border shadow-sm transition-colors",
+        "bg-background text-muted-foreground hover:bg-muted hover:text-foreground absolute top-12 z-20 flex size-8 items-center justify-center rounded-md border shadow-sm transition-colors",
         side === "left" ? "left-2" : "right-2",
       )}
       data-testid={id}
