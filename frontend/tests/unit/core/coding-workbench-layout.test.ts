@@ -32,8 +32,10 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("showWorkbenchPane");
     expect(workbench).toContain("openWorkbenchPane");
     expect(workbench).toContain("closeWorkbenchPane");
-    expect(workbench).toContain("const [leftCollapsed, setLeftCollapsed] = useState(true)");
+    expect(workbench).toContain("const [leftCollapsed, setLeftCollapsed] = useState(false)");
     expect(workbench).toContain("const [rightCollapsed, setRightCollapsed] = useState(true)");
+    expect(workbench).toContain("defaultSize=\"20%\"");
+    expect(workbench).toContain('data-testid="coding-workbench-right-panel"');
     expect(workbench).toContain("const [workbenchView, setWorkbenchView]");
     expect(workbench).toContain('TabsTrigger value="agent"');
     expect(workbench).toContain("PersistentInspectorPanel");
@@ -144,6 +146,9 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("visible={!showWorkbenchPane}");
     expect(workbench).toContain("gitBranch");
     expect(workbench).toContain("useProjectEnvironment");
+    expect(workbench).toContain("useCodingSessionChanges");
+    expect(workbench).toContain("const historicalChangeSummary = reviewSummary");
+    expect(workbench).toContain("review?.summary");
     expect(workbench).toContain("useProjectGitCommit");
     expect(workbench).toContain("useProjectGitPush");
     expect(workbench).toContain("githubCli");

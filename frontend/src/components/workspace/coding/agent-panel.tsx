@@ -3,11 +3,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2Icon,
+  FileDiffIcon,
   Loader2Icon,
   TerminalIcon,
   XCircleIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
@@ -24,7 +25,8 @@ import {
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import { notifyWorkspaceTaskRouteChanged } from "@/components/workspace/workspace-task-tabs";
-import { useProject } from "@/core/projects";
+import { useCodingSessionChanges, useProject } from "@/core/projects";
+import type { QiongqiChange } from "@/core/projects";
 import { useThreadSettings } from "@/core/settings";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { useThreadStream } from "@/core/threads/hooks";
@@ -33,6 +35,12 @@ import { cn } from "@/lib/utils";
 interface AgentPanelProps {
   projectId: string;
   onThreadIdChange?: (threadId: string | undefined) => void;
+  onFocusFile?: (
+    filePath: string,
+    target?: "code" | "task-changes" | "diff" | "review",
+    taskId?: string,
+    line?: number | null,
+  ) => void;
 }
 
 type CodingAgentStatus =
@@ -42,6 +50,8 @@ type CodingAgentStatus =
   | "syncing_files"
   | "completed"
   | "error";
+
+const MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM = 150;
 
 /**
  * Right-hand Coding Agent chat panel.
@@ -67,7 +77,7 @@ export function AgentPanel({ projectId, onThreadIdChange }: AgentPanelProps) {
   );
 }
 
-function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
+function AgentPanelInner({ projectId, onThreadIdChange, onFocusFile }: AgentPanelProps) {
   const { project } = useProject(projectId);
   const queryClient = useQueryClient();
   // Persist the coding agent thread ID per-project so switching workspace tabs
@@ -88,6 +98,7 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     }
   }, [projectId, threadId, threadIdStorageKey]);
   const uiThreadId = threadId ?? projectId;
+  const { changes } = useCodingSessionChanges(uiThreadId);
   const [settings, setSettings] = useThreadSettings(`coding:${projectId}`);
   const [showFollowups, setShowFollowups] = useState(false);
   const [agentStatus, setAgentStatus] = useState<CodingAgentStatus>("idle");
@@ -324,10 +335,13 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     [appendCodingPathToInput],
   );
 
+  const hasCodingChanges = changes.length > 0;
   const messageListPaddingBottom = showFollowups
     ? MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
-      MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM
-    : MESSAGE_LIST_DEFAULT_PADDING_BOTTOM;
+      MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM +
+      MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM
+    : MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
+      (hasCodingChanges ? MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM : 0);
 
   const status = thread.error
     ? "error"
@@ -376,6 +390,10 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
               hasMoreHistory={hasMoreHistory}
               loadMoreHistory={loadMoreHistory}
               isHistoryLoading={isHistoryLoading}
+            />
+            <CodingChangeSummaryCard
+              changes={changes}
+              onFocusFile={onFocusFile}
             />
 
             {/* Input */}
@@ -440,6 +458,143 @@ function parseCodingPathDragPayload(raw: string): CodingPathDragPayload | null {
     return null;
   }
   return null;
+}
+
+function CodingChangeSummaryCard({
+  changes,
+  onFocusFile,
+}: {
+  changes: QiongqiChange[];
+  onFocusFile?: (
+    filePath: string,
+    target?: "code" | "task-changes" | "diff" | "review",
+    taskId?: string,
+    line?: number | null,
+  ) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const changedFiles = useMemo(() => {
+    const latestTaskId = changes.reduce<string | null>((latest, change) => {
+      if (!latest) return change.task_id;
+      const latestChange = changes.find((item) => item.task_id === latest);
+      if (!latestChange) return change.task_id;
+      return change.created_at > latestChange.created_at ? change.task_id : latest;
+    }, null);
+    const scopedChanges = latestTaskId
+      ? changes.filter((change) => change.task_id === latestTaskId)
+      : changes;
+    const byPath = new Map<
+      string,
+      {
+        path: string;
+        taskId: string;
+        additions: number;
+        deletions: number;
+        lastChangedAt: string;
+      }
+    >();
+    for (const change of scopedChanges) {
+      const existing = byPath.get(change.path);
+      if (!existing) {
+        byPath.set(change.path, {
+          path: change.path,
+          taskId: change.task_id,
+          additions: change.additions,
+          deletions: change.deletions,
+          lastChangedAt: change.created_at,
+        });
+        continue;
+      }
+      existing.additions += change.additions;
+      existing.deletions += change.deletions;
+      if (change.created_at > existing.lastChangedAt) {
+        existing.lastChangedAt = change.created_at;
+        existing.taskId = change.task_id;
+      }
+    }
+    return Array.from(byPath.values())
+      .sort((a, b) => b.lastChangedAt.localeCompare(a.lastChangedAt))
+      .slice(0, 24);
+  }, [changes]);
+  const latestTaskId = changedFiles[0]?.taskId ?? null;
+  const visibleFiles = expanded ? changedFiles : changedFiles.slice(0, 4);
+
+  const totals = useMemo(
+    () =>
+      changedFiles.reduce(
+        (acc, file) => ({
+          additions: acc.additions + file.additions,
+          deletions: acc.deletions + file.deletions,
+        }),
+        { additions: 0, deletions: 0 },
+      ),
+    [changedFiles],
+  );
+
+  if (changedFiles.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center px-3">
+      <div className="bg-background/95 pointer-events-auto w-full max-w-(--container-width-md) overflow-hidden rounded-lg border shadow-sm backdrop-blur">
+        <div className="flex items-center justify-between gap-3 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-md">
+              <FileDiffIcon className="text-muted-foreground h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                已编辑 {changedFiles.length} 个文件
+              </p>
+              <p className="font-mono text-xs">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{totals.additions}
+                </span>{" "}
+                <span className="text-red-600 dark:text-red-400">
+                  -{totals.deletions}
+                </span>
+              </p>
+            </div>
+          </div>
+          {latestTaskId && (
+            <span className="text-muted-foreground hidden max-w-28 truncate font-mono text-[11px] sm:inline">
+              {latestTaskId}
+            </span>
+          )}
+        </div>
+        <div className="max-h-[172px] divide-y overflow-y-auto border-t">
+          {visibleFiles.map((file) => (
+            <button
+              key={file.path}
+              className="hover:bg-muted/60 flex w-full items-center gap-3 px-3 py-2 text-left transition-colors"
+              type="button"
+              onClick={() => onFocusFile?.(file.path, "task-changes", file.taskId)}
+            >
+              <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                {file.path}
+              </span>
+              <span className="shrink-0 font-mono text-xs">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  +{file.additions}
+                </span>{" "}
+                <span className="text-red-600 dark:text-red-400">
+                  -{file.deletions}
+                </span>
+              </span>
+            </button>
+          ))}
+          {changedFiles.length > 4 && (
+            <button
+              className="text-muted-foreground hover:bg-muted/60 flex w-full items-center justify-center px-3 py-1.5 text-xs transition-colors"
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? "收起" : `更多 ${changedFiles.length - 4} 个文件`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AgentStatusBadge({

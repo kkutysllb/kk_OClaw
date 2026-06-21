@@ -61,6 +61,7 @@ import {
   useCodingRoiReports,
   useCodingRoiSummary,
   useCodingSession,
+  useCodingSessionChanges,
   useCodingSessionEvents,
   useCodingSkills,
   useDeliveryStages,
@@ -150,6 +151,8 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   }, [agentThreadId, threadIdStorageKey]);
   const codingThreadId = agentThreadId ?? projectId;
   const resultsThreadId = codingThreadId;
+  const { changes: historicalChanges } = useCodingSessionChanges(codingThreadId);
+  const { review } = useLatestCodingReview(codingThreadId);
 
   const [activeCodeTab, setActiveCodeTab] = useState<
     "code" | "task-changes" | "diff" | "results" | "review"
@@ -163,8 +166,8 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const [isCommitDialogOpen, setCommitDialogOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
 
-  // Collapse state for the left (File Explorer) and right (Agent) panels.
-  const [leftCollapsed, setLeftCollapsed] = useState(true);
+  // Collapse state for the left file explorer and the right workbench panel.
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(true);
 
   // Refs to the imperative panel handles for collapse/expand control.
@@ -320,14 +323,39 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     environment?.branch ??
     worktrees.find((worktree) => worktree.branch)?.branch ??
     (project.is_git_repo ? "main" : "未连接");
+  const reviewSummary = review?.summary;
+  const historicalChangeSummary = reviewSummary
+    ? {
+        additions: reviewSummary.additions,
+        deletions: reviewSummary.deletions,
+        changedFiles:
+          reviewSummary.project_files > 0
+            ? reviewSummary.project_files
+            : reviewSummary.task_changes,
+      }
+    : {
+        additions: historicalChanges.reduce((sum, change) => sum + change.additions, 0),
+        deletions: historicalChanges.reduce((sum, change) => sum + change.deletions, 0),
+        changedFiles: new Set(historicalChanges.map((change) => change.path)).size,
+      };
+  const diffAdditions = diff?.files.reduce((sum, file) => sum + file.additions, 0) ?? 0;
+  const diffDeletions = diff?.files.reduce((sum, file) => sum + file.deletions, 0) ?? 0;
+  const environmentChangedFiles = environment?.changed_files ?? 0;
+  const diffChangedFiles = diff?.files.length ?? 0;
   const totalAdditions =
-    environment?.additions ??
-    diff?.files.reduce((sum, file) => sum + file.additions, 0) ??
-    0;
+    environment?.additions && environment.additions > 0
+      ? environment.additions
+      : diffAdditions > 0
+        ? diffAdditions
+        : historicalChangeSummary.additions;
   const totalDeletions =
-    environment?.deletions ??
-    diff?.files.reduce((sum, file) => sum + file.deletions, 0) ??
-    0;
+    environment?.deletions && environment.deletions > 0
+      ? environment.deletions
+      : diffDeletions > 0
+        ? diffDeletions
+        : historicalChangeSummary.deletions;
+  const totalChangedFiles =
+    environmentChangedFiles || diffChangedFiles || historicalChangeSummary.changedFiles;
 
   return (
     <ArtifactsProvider>
@@ -464,7 +492,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 head={environment?.head ?? null}
                 ahead={environment?.ahead ?? 0}
                 behind={environment?.behind ?? 0}
-                changedFiles={environment?.changed_files ?? diff?.files.length ?? 0}
+                changedFiles={totalChangedFiles}
                 commitPending={commitMutation.isPending}
                 pushPending={pushMutation.isPending}
                 commitDisabled={!environment?.is_git_repo || (environment?.changed_files ?? 0) === 0}
@@ -497,7 +525,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 }
               />
               {/* Middle: Agent Inspector */}
-              <ResizablePanel defaultSize="55%" minSize="30%">
+              <ResizablePanel defaultSize={80} minSize="30%">
                 <div className="flex h-full min-h-0 flex-col">
                   <AgentInspector
                     onFocusFile={focusWorkbenchFile}
@@ -519,8 +547,9 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
               />
               {/* Right: Code / Diff / Results / Review */}
               <ResizablePanel
+                data-testid="coding-workbench-right-panel"
                 panelRef={rightPanelRef}
-                defaultSize="25%"
+                defaultSize={0}
                 minSize="15%"
                 maxSize="50%"
                 collapsible
@@ -760,6 +789,7 @@ function AgentInspector({
           <PersistentInspectorPanel active={activeTab === "agent"}>
             <AgentPanel
               projectId={projectId}
+              onFocusFile={onFocusFile}
               onThreadIdChange={onThreadIdChange}
             />
           </PersistentInspectorPanel>
