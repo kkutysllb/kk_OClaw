@@ -15,6 +15,8 @@ import re
 import tempfile
 
 from langchain.tools import tool
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
 
 from kkoclaw.sandbox.tools import (
     _sanitize_error,
@@ -23,6 +25,52 @@ from kkoclaw.sandbox.tools import (
     get_thread_data,
 )
 from kkoclaw.tools.types import Runtime
+
+
+# Max characters of raw output stored in the ``test_results`` state entry.
+# The full JSON is still returned to the model via ToolMessage; this truncation
+# only applies to the state field consumed by ``_summarize_run_outcome``.
+_STATE_OUTPUT_CAP = 2000
+
+
+def _build_test_result_command(
+    runtime: Runtime,
+    result: dict,
+    *,
+    is_lint: bool = False,
+) -> Command:
+    """Wrap a test/lint result dict into a ``Command`` that writes
+    ``test_results`` state and returns the full JSON as a ToolMessage.
+
+    The ``merge_test_results`` reducer on ``CodingThreadState`` appends this
+    entry, so consecutive run_tests + run_linter calls don't overwrite each
+    other.
+    """
+    if is_lint:
+        entry: dict = {
+            "command": result.get("command", ""),
+            "passed": bool(result.get("clean", False)),
+            "output": str(result.get("output", ""))[:_STATE_OUTPUT_CAP],
+        }
+    else:
+        entry = {
+            "command": result.get("command", ""),
+            "passed": bool(result.get("passed", False)),
+            "output": str(result.get("raw_output", ""))[:_STATE_OUTPUT_CAP],
+            "summary": result.get("summary") if isinstance(result.get("summary"), dict) else None,
+        }
+    result_json = json.dumps(result, indent=2, ensure_ascii=False)
+    return Command(
+        update={
+            "test_results": [entry],
+            "messages": [
+                ToolMessage(
+                    content=result_json,
+                    tool_call_id=runtime.tool_call_id,
+                ),
+            ],
+        },
+    )
 
 # Framework detection heuristics
 _FRAMEWORK_DETECTORS = [
@@ -373,7 +421,7 @@ def run_tests_tool(
         # pytest — use structured path
         if fw == "pytest":
             result = _run_pytest_structured(runtime, target, extra_args)
-            return json.dumps(result, indent=2, ensure_ascii=False)
+            return _build_test_result_command(runtime, result)
 
         # jest / vitest — try to parse text summary
         if fw in ("jest", "vitest"):
@@ -385,7 +433,7 @@ def run_tests_tool(
             ensure_thread_directories_exist(runtime)
             output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
             result = _parse_jest_text(output, cmd)
-            return json.dumps(result, indent=2, ensure_ascii=False)
+            return _build_test_result_command(runtime, result)
 
         # go test / cargo test / others
         sandbox = ensure_sandbox_initialized(runtime)
@@ -395,7 +443,7 @@ def run_tests_tool(
             cmd += f" {target}"
         output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
         result = _parse_generic_text(output, cmd, fw)
-        return json.dumps(result, indent=2, ensure_ascii=False)
+        return _build_test_result_command(runtime, result)
     except Exception as e:
         return f"Error: Failed to run tests: {_sanitize_error(e, runtime)}"
 
@@ -468,7 +516,7 @@ def run_linter_tool(
             "issues": issues[:100],  # cap to avoid token bloat
             "output": output[:6000] if output.strip() else "(no issues found)",
         }
-        return json.dumps(result, indent=2, ensure_ascii=False)
+        return _build_test_result_command(runtime, result, is_lint=True)
     except Exception as e:
         return f"Error: Failed to run linter: {_sanitize_error(e, runtime)}"
 

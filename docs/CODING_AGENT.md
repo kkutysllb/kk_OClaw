@@ -389,16 +389,17 @@ pnpm --dir frontend run typecheck
 - 项目文件浏览、代码查看、项目 diff。
 - **符号级语义导航**（find_symbols / read_symbol，tree-sitter AST 后端 + 增强正则回退，支持 Python/JS-TS/Go/Rust）。
 - **结构化重构工具**（rename_symbol token-boundary / extract_function，多语言函数语法：Python `def` / JS-TS `function` / Go `func` / Rust `fn`，**参数与返回值自动推断**：Python 用 `ast` 模块精确分析 Load/Store，JS-TS/Go/Rust 用启发式正则）。
-- **编辑事务回滚**（EditSnapshotStore + undo_last_edit / list_edit_snapshots）。
-- **PostEditVerifyMiddleware**（改→验证闭环）。
+- **编辑事务回滚**（EditSnapshotStore + undo_last_edit / list_edit_snapshots；所有编辑工具（含 rename_symbol/extract_function）统一 `record_edit_snapshot → write_file` 顺序，确保快照在文件写入前完成，达到事务级 undo 可靠性）。
+- **PostEditVerifyMiddleware**（改→验证闭环；覆盖 apply_diff / multi_edit / insert_at_line / rename_symbol / extract_function 等所有文件修改工具）。
 - **测试结果结构化解析**（pytest --json-report 优先 + jest + 多语言 linter 检测）。
 - Qiongqi events、task changes、ROI。
 - 基于 diff/task/events/PR context 的 Code Review。
 - Python secret 场景的一键安全修复。
 - 前端三栏 workbench、持久 AgentPanel、Workflow/Skills 分离。
-- **项目交付阶段状态机**（7 阶段 `ProjectStageStore` 持久化 + `completion_signals` 驱动的 `suggest_delivery_stage` 主动提议 + 冷启动自动进入「需求」阶段 + `StageSuggestionBanner` 人工确认 / 可选 `auto_accept_forward_stage` 顺向自动确认 + `StageHistoryEntry` 携带 `thread_id`/`run_outcome` 可追溯 + auto-accept 路径自动从 `test_results` 提取 lint/test outcome 填充 + 前端「阶段流转历史」Timeline 可视化）。
-- **运行时 file_changed custom event**（gateway 不支持 `events` stream mode 导致前端 `on_tool_end` 不触发；改为在 worker stream 循环中检测 `diff` 状态增量变化，主动推送 `file_changed` SSE custom event，前端 `onQiongqiEvent` 接收后实时刷新文件浏览器和阶段面板）。
+- **项目交付阶段状态机**（7 阶段 `ProjectStageStore` 持久化 + `completion_signals` 驱动的 `suggest_delivery_stage` 主动提议 + 冷启动自动进入「需求」阶段 + `StageSuggestionBanner` 人工确认 / 可选 `auto_accept_forward_stage` 顺向自动确认 + `StageHistoryEntry` 携带 `thread_id`/`run_outcome` 可追溯 + auto-accept 路径自动从 `test_results` 提取 lint/test outcome 填充 + 前端「阶段流转历史」Timeline 可视化）。`run_tests` / `run_linter` 通过 `Command(update={"test_results": [...]})` 写回 graph state（`merge_test_results` reducer 追加合并），`_summarize_run_outcome` 端到端可读。
+- **运行时 file_changed custom event**（gateway 不支持 `events` stream mode 导致前端 `on_tool_end` 不触发；编辑工具通过 `commit_edit_to_state()` 返回 `Command(update={"diff": [...]})` 将 `FileDiff` 写回 graph state，worker stream 循环中 `_StateDiffTracker` 检测 `diff` 状态增量变化后主动推送 `file_changed` SSE custom event，前端 `onQiongqiEvent` 接收后实时刷新文件浏览器和阶段面板）。
 - **TodoMiddleware 用户交互门控**（`after_model` 新增用户面向响应放行检查：当 agent 的无 tool call 响应以问号结尾或包含明确提问/确认短语时不强制推进，避免“agent 向用户提问被 todo 强制打断”；新增 `todo_strict_completion` 配置开关可完全禁用强制推进）。
+- **端到端 state 桥接**（工具层→graph state→worker→前端 SSE 全链路连通）：编辑工具返回 `Command(update={"diff": [...]})` 写回 diff state → worker `_StateDiffTracker` 检测增量变化 → 推送 `file_changed` custom event；测试工具返回 `Command(update={"test_results": [...]})` 写回 test_results state → `_summarize_run_outcome` 端到端可读 → 阶段历史 `run_outcome` 自动填充。
 
 后续可继续增强：
 

@@ -10,7 +10,11 @@ import re
 
 from langchain.tools import tool
 
-from kkoclaw.coding_core.change_tracking import record_runtime_file_change
+from kkoclaw.coding_core.change_tracking import (
+    build_file_diff_entry,
+    commit_edit_to_state,
+    record_runtime_file_change,
+)
 from kkoclaw.coding_core.edit_snapshots import record_edit_snapshot
 from kkoclaw.sandbox.exceptions import SandboxError
 from kkoclaw.sandbox.file_operation_lock import get_file_operation_lock
@@ -170,7 +174,13 @@ def apply_diff_tool(
                 after=new_content,
             )
 
-        return f"OK: Applied {len(hunks)} hunk(s) to {requested_path}"
+        return commit_edit_to_state(
+            runtime,
+            result_message=f"OK: Applied {len(hunks)} hunk(s) to {requested_path}",
+            file_path=file_path,
+            before=content,
+            after=new_content,
+        )
     except ValueError as e:
         return f"Error: Patch application failed — {e}"
     except SandboxError as e:
@@ -232,7 +242,13 @@ def insert_at_line_tool(
                 after=new_content,
             )
 
-        return f"OK: Inserted {len(insert_lines)} line(s) at position {line_number} in {requested_path}"
+        return commit_edit_to_state(
+            runtime,
+            result_message=f"OK: Inserted {len(insert_lines)} line(s) at position {line_number} in {requested_path}",
+            file_path=file_path,
+            before=original,
+            after=new_content,
+        )
     except SandboxError as e:
         return f"Error: {e}"
     except FileNotFoundError:
@@ -324,6 +340,7 @@ def multi_edit_tool(
                 if current != original:
                     return f"Error: {requested_path} changed during multi_edit planning — multi_edit aborted."
 
+        diff_entries: list[dict] = []
         for _requested_path, resolved_path, original, content in planned_writes:
             with get_file_operation_lock(sandbox, resolved_path):
                 record_edit_snapshot(
@@ -339,8 +356,32 @@ def multi_edit_tool(
                     before=original,
                     after=content,
                 )
+                entry = build_file_diff_entry(
+                    runtime,
+                    file_path=resolved_path,
+                    before=original,
+                    after=content,
+                )
+                if entry is not None:
+                    diff_entries.append(entry)
 
-        return f"Applied {len(edits)} edit(s) across {len(by_file)} file(s):\n" + "\n".join(results)
+        result_msg = f"Applied {len(edits)} edit(s) across {len(by_file)} file(s):\n" + "\n".join(results)
+        if diff_entries:
+            from langchain_core.messages import ToolMessage
+            from langgraph.types import Command
+
+            return Command(
+                update={
+                    "diff": diff_entries,
+                    "messages": [
+                        ToolMessage(
+                            content=result_msg,
+                            tool_call_id=runtime.tool_call_id,
+                        ),
+                    ],
+                },
+            )
+        return result_msg
     except SandboxError as e:
         return f"Error: {e}"
     except FileNotFoundError as e:

@@ -217,3 +217,106 @@ def record_runtime_file_change(
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Graph-state helpers: build FileDiff entries so edit tools can return
+# ``Command(update={"diff": [...]})`` and the worker's ``_StateDiffTracker``
+# can detect incremental changes and emit ``file_changed`` SSE events.
+# ---------------------------------------------------------------------------
+
+
+def build_file_diff_entry(
+    runtime: Any,
+    *,
+    file_path: str,
+    before: str | None,
+    after: str | None,
+) -> dict[str, Any] | None:
+    """Build a single ``FileDiff`` dict for ``Command(update={"diff": ...})``.
+
+    Returns ``None`` when there is no change (``before == after``) or when
+    the project context is unavailable. In the latter case the caller should
+    fall back to a plain ``str`` return.
+
+    The ``file_path`` in the returned dict is **project-relative** so that
+    the frontend can reconstruct the absolute path from its own
+    ``project_root`` context.
+    """
+    context = getattr(runtime, "context", None) or {}
+    config = getattr(runtime, "config", None) or {}
+    configurable = config.get("configurable", {}) if isinstance(config, dict) else {}
+    if not isinstance(configurable, dict):
+        configurable = {}
+    project_root = context.get("project_root") or configurable.get("project_root")
+
+    before_text = before or ""
+    after_text = after or ""
+    if before_text == after_text:
+        return None
+
+    if before in (None, "") and after_text:
+        status = "added"
+    elif after_text == "":
+        status = "deleted"
+    else:
+        status = "modified"
+
+    rel_path = file_path
+    if project_root:
+        try:
+            rel_path = _project_relative_path(project_root, file_path)
+        except ValueError:
+            rel_path = file_path
+
+    diff_text = _unified_diff(rel_path, before_text, after_text)
+    additions, deletions = _count_diff_changes(diff_text)
+
+    return {
+        "file_path": rel_path,
+        "status": status,
+        "additions": additions,
+        "deletions": deletions,
+    }
+
+
+def commit_edit_to_state(
+    runtime: Any,
+    *,
+    result_message: str,
+    file_path: str,
+    before: str | None,
+    after: str | None,
+) -> Any:
+    """Return a ``Command(update={"diff": [...], "messages": [...]})`` or plain ``str``.
+
+    Designed to be called by edit tools **after** ``write_file`` and
+    ``record_runtime_file_change``.  When a diff entry can be built, the
+    returned ``Command`` writes it to the ``diff`` state field (merged via
+    ``merge_diffs`` reducer) and wraps ``result_message`` as a
+    ``ToolMessage``.  When no diff can be built (no project context), the
+    plain ``str`` is returned so LangGraph wraps it automatically.
+    """
+    diff_entry = build_file_diff_entry(
+        runtime,
+        file_path=file_path,
+        before=before,
+        after=after,
+    )
+    if diff_entry is None:
+        return result_message
+
+    from langchain_core.messages import ToolMessage
+    from langgraph.types import Command
+
+    return Command(
+        update={
+            "diff": [diff_entry],
+            "messages": [
+                ToolMessage(
+                    content=result_message,
+                    tool_call_id=runtime.tool_call_id,
+                ),
+            ],
+        },
+    )

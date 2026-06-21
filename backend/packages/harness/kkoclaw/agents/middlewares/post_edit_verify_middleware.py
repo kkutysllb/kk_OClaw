@@ -39,6 +39,10 @@ _MUTATING_TOOL_NAMES = frozenset({
     "edit_file",
     "edit_diff",
     "apply_patch",
+    # Structured refactor tools — these call sandbox.write_file internally,
+    # so the post-edit verify reminder must cover them too.
+    "rename_symbol",
+    "extract_function",
 })
 
 # Tools that count as "verification". If the model has called any of these

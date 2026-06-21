@@ -148,6 +148,31 @@ def merge_diffs(existing: list[FileDiff] | None, new: list[FileDiff] | None) -> 
     return list(by_path.values())
 
 
+_TEST_RESULTS_CAP = 20
+
+
+def merge_test_results(
+    existing: list[TestResult] | None,
+    new: list[TestResult] | None,
+) -> list[TestResult]:
+    """Reducer for test_results list — appends new results, caps total.
+
+    Without a custom reducer, ``Command(update={"test_results": [...]})``
+    would **overwrite** the entire list, losing prior lint/test outcomes.
+    This reducer appends instead, keeping at most ``_TEST_RESULTS_CAP``
+    most-recent entries so ``_summarize_run_outcome`` always sees the
+    latest lint *and* test results from the current turn.
+    """
+    if existing is None:
+        return new or []
+    if new is None:
+        return existing
+    combined = existing + new
+    if len(combined) > _TEST_RESULTS_CAP:
+        combined = combined[-_TEST_RESULTS_CAP:]
+    return combined
+
+
 class CodingThreadState(ThreadState):
     """Extended state schema for the Coding Agent.
 
@@ -158,7 +183,7 @@ class CodingThreadState(ThreadState):
 
     project: NotRequired[CodingProjectState | None]
     diff: Annotated[list[FileDiff], merge_diffs]
-    test_results: NotRequired[list[TestResult] | None]
+    test_results: Annotated[list[TestResult], merge_test_results]
     permission_decisions: NotRequired[list[PermissionDecision] | None]
     active_coding_skills: NotRequired[list[ActiveCodingSkillState] | None]
     code_session: NotRequired[CodeSessionState | None]

@@ -26,7 +26,10 @@ import textwrap
 
 from langchain.tools import tool
 
-from kkoclaw.coding_core.change_tracking import record_runtime_file_change
+from kkoclaw.coding_core.change_tracking import (
+    commit_edit_to_state,
+    record_runtime_file_change,
+)
 from kkoclaw.coding_core.edit_snapshots import record_edit_snapshot
 from kkoclaw.sandbox.exceptions import SandboxError
 from kkoclaw.sandbox.file_operation_lock import get_file_operation_lock
@@ -670,13 +673,13 @@ def rename_symbol_tool(
                     f"may be too common; use targeted edits instead."
                 )
 
-            sandbox.write_file(file_path, new_content)
             record_edit_snapshot(
                 runtime,
                 file_path=file_path,
                 before=content,
                 tool="rename_symbol",
             )
+            sandbox.write_file(file_path, new_content)
             record_runtime_file_change(
                 runtime,
                 file_path=file_path,
@@ -688,10 +691,16 @@ def rename_symbol_tool(
         if thread_data is not None:
             display_path = mask_local_paths_in_output(requested_path, thread_data)
 
-        return (
-            f"Renamed '{old_name}' -> '{new_name}' in {display_path} "
-            f"({count} occurrence(s) updated). Run tests to verify. "
-            f"Use undo_last_edit to revert if needed."
+        return commit_edit_to_state(
+            runtime,
+            result_message=(
+                f"Renamed '{old_name}' -> '{new_name}' in {display_path} "
+                f"({count} occurrence(s) updated). Run tests to verify. "
+                f"Use undo_last_edit to revert if needed."
+            ),
+            file_path=file_path,
+            before=content,
+            after=new_content,
         )
     except SandboxError as e:
         return f"Error: {e}"
@@ -853,13 +862,13 @@ def extract_function_tool(
             if content.endswith("\n"):
                 new_content += "\n"
 
-            sandbox.write_file(file_path, new_content)
             record_edit_snapshot(
                 runtime,
                 file_path=file_path,
                 before=content,
                 tool="extract_function",
             )
+            sandbox.write_file(file_path, new_content)
             record_runtime_file_change(
                 runtime,
                 file_path=file_path,
@@ -888,7 +897,13 @@ def extract_function_tool(
             " Verify indentation, scoping, and return values. "
             "Use undo_last_edit to revert."
         )
-        return "".join(msg_parts)
+        return commit_edit_to_state(
+            runtime,
+            result_message="".join(msg_parts),
+            file_path=file_path,
+            before=content,
+            after=new_content,
+        )
     except SandboxError as e:
         return f"Error: {e}"
     except FileNotFoundError:
