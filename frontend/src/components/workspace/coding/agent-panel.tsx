@@ -106,6 +106,21 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     });
   }, [projectId, queryClient]);
 
+  // Invalidate the project delivery-stage query so the Workflow panel
+  // picks up auto-accepted transitions and pending suggestions in real
+  // time during the run, not just after remount.
+  //
+  // The stage query key is ["coding", "projects", projectRoot, "stage"].
+  // We invalidate the ["coding", "projects"] prefix (exact:false) to
+  // cover the current project regardless of whether ``project?.path``
+  // is available yet (it may be undefined during initial load).
+  const refreshStageState = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["coding", "projects"],
+      exact: false,
+    });
+  }, [queryClient]);
+
   const {
     thread,
     sendMessage,
@@ -129,6 +144,13 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
       if (isFileMutationTool(event.name)) {
         refreshProjectFiles();
       }
+      // suggest_delivery_stage (and any tool that may indirectly change
+      // the stage, e.g. cold-start bootstrap on first dynamic-context
+      // build) → refresh the stage query so the Workflow panel updates.
+      // We refresh on *every* tool end (not just suggest_delivery_stage)
+      // because the stage can change as a side-effect of other tools and
+      // the cost of an extra invalidate is negligible.
+      refreshStageState();
       // Invalidate coding session/event/roi queries so the results panels
       // pick up data written by the backend during the run.  Without this,
       // the initial fetch (fired at thread-creation time) returns empty and
@@ -140,12 +162,32 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     },
     onFinish: () => {
       refreshProjectFiles();
+      // Belt-and-suspenders: refresh stage state after the run completes
+      // so any transitions that happened during the run are reflected even
+      // if individual onToolEnd events were missed.
+      refreshStageState();
       setAgentStatus("completed");
       // Final refresh of all coding session data after the run completes.
       void queryClient.invalidateQueries({
         queryKey: ["coding", "sessions"],
         exact: false,
       });
+    },
+    // Reliable backup path: Qiongqi custom events are pushed by the
+    // backend via SSE and do not depend on the SDK's on_tool_end LangChain
+    // event dispatch (which can be unreliable in packaged/production builds).
+    // We listen for file_changed events to refresh the file explorer and
+    // always refresh the stage panel as a safety net.
+    onQiongqiEvent: (event) => {
+      if (
+        event &&
+        typeof event === "object" &&
+        "type" in event &&
+        (event as { type: string }).type === "file_changed"
+      ) {
+        refreshProjectFiles();
+        refreshStageState();
+      }
     },
   });
 

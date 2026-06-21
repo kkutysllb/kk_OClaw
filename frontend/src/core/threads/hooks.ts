@@ -40,6 +40,12 @@ export type ThreadStreamOptions = {
   onStart?: (threadId: string, runId: string) => void;
   onFinish?: (state: AgentThreadState) => void;
   onToolEnd?: (event: ToolEndEvent) => void;
+  /** Fired for every Qiongqi custom SSE event (file_changed, task_*, etc.).
+   *  Use this as a reliable backup to ``onToolEnd`` for refreshing UI state
+   *  — custom events are pushed by the backend and do not depend on the
+   *  SDK's LangChain event dispatch, which can be unreliable in packaged
+   *  builds. */
+  onQiongqiEvent?: (event: unknown) => void;
 };
 
 type SendMessageOptions = {
@@ -147,6 +153,7 @@ export function useThreadStream({
   onStart,
   onFinish,
   onToolEnd,
+  onQiongqiEvent,
 }: ThreadStreamOptions) {
   const { t } = useI18n();
   // ── Cross-mount state restoration ───────────────────────────────
@@ -173,6 +180,7 @@ export function useThreadStream({
     onStart,
     onFinish,
     onToolEnd,
+    onQiongqiEvent,
   });
 
   const {
@@ -185,8 +193,8 @@ export function useThreadStream({
 
   // Keep listeners ref updated with latest callbacks
   useEffect(() => {
-    listeners.current = { onSend, onStart, onFinish, onToolEnd };
-  }, [onSend, onStart, onFinish, onToolEnd]);
+    listeners.current = { onSend, onStart, onFinish, onToolEnd, onQiongqiEvent };
+  }, [onSend, onStart, onFinish, onToolEnd, onQiongqiEvent]);
 
   useEffect(() => {
     const normalizedThreadId = threadId ?? null;
@@ -320,6 +328,10 @@ export function useThreadStream({
             : undefined,
         threadId: threadIdRef.current ?? undefined,
       });
+      // Forward the raw event to the consumer so it can refresh UI state
+      // (file explorer, stage panel, etc.) as a reliable backup path that
+      // does not depend on the SDK's on_tool_end LangChain event dispatch.
+      listeners.current.onQiongqiEvent?.(event);
     },
     onError(error) {
       const errMsg = error instanceof Error ? error.message : String(error);
