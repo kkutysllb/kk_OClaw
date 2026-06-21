@@ -774,7 +774,7 @@ function AgentInspector({
       <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold tracking-wide uppercase">
-            QiongQi Engine Agent Inspector
+            QiongQi Engine Agent Inspector（穷奇引擎智能体检查器）
           </p>
         </div>
       </div>
