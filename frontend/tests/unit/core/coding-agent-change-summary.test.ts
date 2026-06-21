@@ -17,8 +17,14 @@ describe("coding agent change summary card", () => {
     );
 
     expect(agentPanel).toContain("useCodingSessionChanges");
+    expect(agentPanel).toContain("useDiscardProjectFileChange");
     expect(agentPanel).toContain("CodingChangeSummaryCard");
     expect(agentPanel).toContain("已编辑");
+    expect(agentPanel).toContain("审查");
+    expect(agentPanel).toContain("撤销");
+    expect(agentPanel).toContain("撤销变更");
+    expect(agentPanel).toContain("全部撤销");
+    expect(agentPanel).toContain("只撤销选中文件");
     expect(agentPanel).toContain("changedFiles");
     expect(agentPanel).toContain("latestTaskId");
     expect(agentPanel).toContain("visibleFiles");
@@ -27,7 +33,10 @@ describe("coding agent change summary card", () => {
     expect(agentPanel).toContain("slice(0, 4)");
     expect(agentPanel).toContain("max-h-[172px]");
     expect(agentPanel).toContain("更多");
-    expect(agentPanel).toContain("max-w-xl");
+    expect(agentPanel).toContain("max-w-3xl");
+    expect(agentPanel).toContain("handleReviewChanges");
+    expect(agentPanel).toContain("handleDiscardChanges");
+    expect(agentPanel).toContain("Promise.all");
     expect(agentPanel).toContain("flex w-full max-w-4xl flex-col");
     expect(agentPanel).toContain('<div className="w-full">');
     expect(agentPanel).toContain("min-h-32 w-full");

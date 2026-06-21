@@ -5,16 +5,35 @@ import {
   CheckCircle2Icon,
   FileDiffIcon,
   Loader2Icon,
+  SearchCodeIcon,
   TerminalIcon,
+  Undo2Icon,
   XCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   PromptInputProvider,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChatBox } from "@/components/workspace/chats";
 import { FollowupsProvider } from "@/components/workspace/followups-context";
 import { InputBox } from "@/components/workspace/input-box";
@@ -25,7 +44,11 @@ import {
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import { notifyWorkspaceTaskRouteChanged } from "@/components/workspace/workspace-task-tabs";
-import { useCodingSessionChanges, useProject } from "@/core/projects";
+import {
+  useCodingSessionChanges,
+  useDiscardProjectFileChange,
+  useProject,
+} from "@/core/projects";
 import type { QiongqiChange } from "@/core/projects";
 import { useThreadSettings } from "@/core/settings";
 import { SubtasksProvider } from "@/core/tasks/context";
@@ -401,6 +424,7 @@ function AgentPanelInner({ projectId, onThreadIdChange, onFocusFile }: AgentPane
               <div className="relative flex w-full max-w-4xl flex-col items-center gap-2">
                 <CodingChangeSummaryCard
                   changes={changes}
+                  projectId={projectId}
                   onFocusFile={onFocusFile}
                 />
                 <div className="w-full">
@@ -471,8 +495,10 @@ function parseCodingPathDragPayload(raw: string): CodingPathDragPayload | null {
 function CodingChangeSummaryCard({
   changes,
   onFocusFile,
+  projectId,
 }: {
   changes: QiongqiChange[];
+  projectId: string;
   onFocusFile?: (
     filePath: string,
     target?: "code" | "task-changes" | "diff" | "review",
@@ -481,6 +507,11 @@ function CodingChangeSummaryCard({
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const [discardMode, setDiscardMode] = useState<"all" | "file">("all");
+  const [discardFilePath, setDiscardFilePath] = useState("");
+  const [discardedPaths, setDiscardedPaths] = useState<Set<string>>(new Set());
+  const discardProjectFileChange = useDiscardProjectFileChange(projectId);
   const changedFiles = useMemo(() => {
     const latestTaskId = changes.reduce<string | null>((latest, change) => {
       if (!latest) return change.task_id;
@@ -521,11 +552,13 @@ function CodingChangeSummaryCard({
       }
     }
     return Array.from(byPath.values())
+      .filter((file) => !discardedPaths.has(file.path))
       .sort((a, b) => b.lastChangedAt.localeCompare(a.lastChangedAt))
       .slice(0, 24);
-  }, [changes]);
+  }, [changes, discardedPaths]);
   const latestTaskId = changedFiles[0]?.taskId ?? null;
   const visibleFiles = expanded ? changedFiles : changedFiles.slice(0, 4);
+  const isDiscarding = discardProjectFileChange.isPending;
 
   const totals = useMemo(
     () =>
@@ -539,40 +572,120 @@ function CodingChangeSummaryCard({
     [changedFiles],
   );
 
+  useEffect(() => {
+    setDiscardFilePath((current) => {
+      if (current && changedFiles.some((file) => file.path === current)) {
+        return current;
+      }
+      return changedFiles[0]?.path ?? "";
+    });
+  }, [changedFiles]);
+
+  const handleReviewChanges = () => {
+    const firstFile = changedFiles[0];
+    if (!firstFile) return;
+    onFocusFile?.(firstFile.path, "task-changes", firstFile.taskId);
+  };
+
+  const handleOpenDiscardDialog = () => {
+    setDiscardMode("all");
+    setDiscardFilePath(changedFiles[0]?.path ?? "");
+    setDiscardDialogOpen(true);
+  };
+
+  const handleDiscardChanges = async () => {
+    const targets =
+      discardMode === "all"
+        ? changedFiles
+        : changedFiles.filter((file) => file.path === discardFilePath);
+    if (targets.length === 0) return;
+    try {
+      await Promise.all(
+        targets.map((file) =>
+          discardProjectFileChange.mutateAsync({ path: file.path }),
+        ),
+      );
+      setDiscardedPaths((prev) => {
+        const next = new Set(prev);
+        for (const file of targets) {
+          next.add(file.path);
+        }
+        return next;
+      });
+      setDiscardDialogOpen(false);
+      toast.success(
+        discardMode === "all" ? "已撤销全部变更" : "已撤销选中文件变更",
+      );
+    } catch (error) {
+      toast.error("撤销变更失败", {
+        description: error instanceof Error ? error.message : "请稍后重试",
+      });
+    }
+  };
+
   if (changedFiles.length === 0) return null;
 
   return (
-    <div className="pointer-events-auto w-full max-w-xl">
+    <div className="pointer-events-auto w-full max-w-3xl">
       <div className="bg-background/95 overflow-hidden rounded-lg border shadow-sm backdrop-blur">
-        <button
-          className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left transition-colors"
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-        >
+        <div className="hover:bg-muted/40 flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left transition-colors">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-md">
-              <FileDiffIcon className="text-muted-foreground h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
-                已编辑 {changedFiles.length} 个文件
-              </p>
-              <p className="font-mono text-xs">
-                <span className="text-emerald-600 dark:text-emerald-400">
-                  +{totals.additions}
-                </span>{" "}
-                <span className="text-red-600 dark:text-red-400">
-                  -{totals.deletions}
-                </span>
-              </p>
-            </div>
+            <button
+              className="flex min-w-0 items-center gap-2 text-left"
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              <div className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-md">
+                <FileDiffIcon className="text-muted-foreground h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">
+                  已编辑 {changedFiles.length} 个文件
+                </p>
+                <p className="font-mono text-xs">
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{totals.additions}
+                  </span>{" "}
+                  <span className="text-red-600 dark:text-red-400">
+                    -{totals.deletions}
+                  </span>
+                </p>
+              </div>
+            </button>
+            <button
+              className="text-muted-foreground hidden max-w-32 shrink-0 truncate text-[11px] sm:inline"
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {!expanded && changedFiles.length > 4
+                ? `更多 ${changedFiles.length - 4} 个文件`
+                : latestTaskId}
+            </button>
           </div>
-          <span className="text-muted-foreground hidden max-w-28 shrink-0 truncate text-[11px] sm:inline">
-            {!expanded && changedFiles.length > 4
-              ? `更多 ${changedFiles.length - 4} 个文件`
-              : latestTaskId}
-          </span>
-        </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              className="h-7 gap-1.5 px-2 text-xs"
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={handleReviewChanges}
+            >
+              <SearchCodeIcon className="h-3.5 w-3.5" />
+              审查
+            </Button>
+            <Button
+              className="h-7 gap-1.5 px-2 text-xs"
+              disabled={isDiscarding}
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={handleOpenDiscardDialog}
+            >
+              <Undo2Icon className="h-3.5 w-3.5" />
+              撤销
+            </Button>
+          </div>
+        </div>
         {expanded && (
           <div className="max-h-[172px] divide-y overflow-y-auto border-t">
             {visibleFiles.map((file) => (
@@ -609,6 +722,84 @@ function CodingChangeSummaryCard({
           </div>
         )}
       </div>
+      <Dialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>撤销变更</DialogTitle>
+            <DialogDescription>
+              选择撤销当前这次变更中的全部文件，或只撤销某一个文件。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                className={cn(
+                  "rounded-md border p-3 text-left transition-colors",
+                  discardMode === "all"
+                    ? "border-emerald-500/60 bg-emerald-500/10"
+                    : "hover:bg-muted/50",
+                )}
+                type="button"
+                onClick={() => setDiscardMode("all")}
+              >
+                <p className="text-sm font-medium">全部撤销</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  撤销 {changedFiles.length} 个文件的未提交变更。
+                </p>
+              </button>
+              <button
+                className={cn(
+                  "rounded-md border p-3 text-left transition-colors",
+                  discardMode === "file"
+                    ? "border-emerald-500/60 bg-emerald-500/10"
+                    : "hover:bg-muted/50",
+                )}
+                type="button"
+                onClick={() => setDiscardMode("file")}
+              >
+                <p className="text-sm font-medium">只撤销选中文件</p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  从本次变更列表中选择一个文件。
+                </p>
+              </button>
+            </div>
+            {discardMode === "file" && (
+              <Select value={discardFilePath} onValueChange={setDiscardFilePath}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择要撤销的文件" />
+                </SelectTrigger>
+                <SelectContent>
+                  {changedFiles.map((file) => (
+                    <SelectItem key={file.path} value={file.path}>
+                      {file.path}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={isDiscarding}
+              type="button"
+              variant="ghost"
+              onClick={() => setDiscardDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              disabled={
+                isDiscarding || (discardMode === "file" && !discardFilePath)
+              }
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDiscardChanges()}
+            >
+              {isDiscarding ? "撤销中" : "确认撤销"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
