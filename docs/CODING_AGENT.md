@@ -397,6 +397,8 @@ pnpm --dir frontend run typecheck
 - Python secret 场景的一键安全修复。
 - 前端三栏 workbench、持久 AgentPanel、Workflow/Skills 分离。
 - **项目交付阶段状态机**（7 阶段 `ProjectStageStore` 持久化 + `completion_signals` 驱动的 `suggest_delivery_stage` 主动提议 + 冷启动自动进入「需求」阶段 + `StageSuggestionBanner` 人工确认 / 可选 `auto_accept_forward_stage` 顺向自动确认 + `StageHistoryEntry` 携带 `thread_id`/`run_outcome` 可追溯 + auto-accept 路径自动从 `test_results` 提取 lint/test outcome 填充 + 前端「阶段流转历史」Timeline 可视化）。
+- **运行时 file_changed custom event**（gateway 不支持 `events` stream mode 导致前端 `on_tool_end` 不触发；改为在 worker stream 循环中检测 `diff` 状态增量变化，主动推送 `file_changed` SSE custom event，前端 `onQiongqiEvent` 接收后实时刷新文件浏览器和阶段面板）。
+- **TodoMiddleware 用户交互门控**（`after_model` 新增用户面向响应放行检查：当 agent 的无 tool call 响应以问号结尾或包含明确提问/确认短语时不强制推进，避免“agent 向用户提问被 todo 强制打断”；新增 `todo_strict_completion` 配置开关可完全禁用强制推进）。
 
 后续可继续增强：
 
@@ -404,3 +406,36 @@ pnpm --dir frontend run typecheck
 - Review finding 的精确行号映射和更细粒度 evidence。
 - 项目私有 skills 的治理策略和导入/导出能力。
 - rename_symbol 扩展为跨文件跨项目重命名（当前仅单文件）。
+
+### 架构演进方案（非必做，按需评估）
+
+当前 coding agent 架构（LangGraph 后端 + Next.js 前端）在实时事件可见性和中间件优先级方面已通过方案 A（file_changed custom event + TodoMiddleware 放行检查 + isLoading 轮询兑底）补齐。以下两个方案为可选演进方向，**不是必做项**，仅在方案 A 被证明不足以应对未来复杂场景时才需考虑。
+
+**评估原则**（来自架构决策成本评估原则）：优先原地补齐，全量迁移预估 3-5 人月含工具集重写、中间件协议重新设计、Checkpoint 回滚逻辑重写、测试套件全部重写，仅在执行模型限制被证明是根本性且无法补齐时才考虑。
+
+#### 方案 B（可选）：混合架构——LangGraph 跑循环，Node 跑控制流
+
+如果未来 stage 管理、用户确认、实时事件越来越复杂，可将「控制流层」抽到 Node 微服务：
+
+- Node 层：管理 stage pipeline、用户交互门控、实时事件广播（WebSocket/SSE）。
+- Python 层：只负责 model + tool 循环，通过 gRPC/HTTP 把状态变更推给 Node 层。
+
+**适用场景**：当需要多语言团队协作、或前端需要更细粒度的实时控制流（如复杂的多阶段确认流）。
+
+**成本**：中等。分离关注点但引入跨进程通信复杂度。
+
+#### 方案 C（可选）：全量迁移 Node+Express
+
+将 coding agent 后端从 Python/LangGraph 全量迁移到 Node.js/Express。
+
+**适用场景**：当 LangGraph 的执行模型限制被证明是根本性且无法通过 custom event 补齐的（如需要 subgraph 级事件流、多 agent 编排事件等）。
+
+**成本**：高（3-5 人月）。需重写：
+
+- 工具集（~18 个目录 Python→TS）。
+- 中间件系统（5+ 个，需重新设计协议）。
+- Checkpoint + 回滚（worker.py 核心 ~90 行精密逻辑）。
+- 模型 provider 抽象（LangChain models → Vercel AI SDK）。
+- 测试套件（137+ 个测试文件全部重写）。
+
+**建议**：方案 A 补齐后再观察是否仍有架构瓶颈。如补齐后执行模型仍是瓶颈，优先考虑方案 B；仅在确需单语言栈且预算充足时才考虑方案 C。

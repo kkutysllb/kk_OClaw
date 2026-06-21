@@ -55,6 +55,73 @@ def _format_todos(todos: list[Todo]) -> str:
     return "\n".join(lines)
 
 
+# Phrases that strongly indicate the agent is explicitly asking the user
+# to make a decision or provide input.  Conservative list — common words
+# like "是否" (whether) are intentionally excluded because they appear in
+# self-talk ("I need to check whether the file exists") and would cause
+# false positives.
+_STRONG_USER_PROMPT_PHRASES = (
+    # Chinese — explicit decision requests
+    "请确认", "请你确认", "确认一下", "你来决定", "你来选择",
+    "你希望我", "你倾向", "你想要", "是否需要我",
+    "要不要我", "是否要我", "等你确认", "你选哪个",
+    # English — explicit decision requests
+    "please confirm", "would you prefer", "would you like me to",
+    "shall i", "which option do you prefer", "which would you like",
+    "could you confirm", "can you confirm", "what do you think",
+)
+
+
+def _extract_response_text(message: AIMessage) -> str:
+    """Extract plain text from an AIMessage's content.
+
+    Handles both ``str`` content and multi-part ``list`` content (e.g.
+    messages that include images or tool-output blocks).
+    """
+    content = message.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(part.get("text", ""))
+            elif isinstance(part, str):
+                parts.append(part)
+        return " ".join(parts)
+    return ""
+
+
+def _is_user_facing_response(message: AIMessage) -> bool:
+    """Return True if *message* appears to be addressing the user.
+
+    This detects responses where the agent is asking a question or
+    requesting confirmation — situations where the agent should be
+    allowed to hand back to the user rather than being forced to continue
+    working on the todo list.
+
+    Two signals are checked:
+
+    1. **Strong signal**: the response ends with a question mark (``?`` or
+       full-width ``？``).
+    2. **Phrase signal**: the last ~3 sentences (300 chars) contain an
+       explicit decision-request phrase from :data:`_STRONG_USER_PROMPT_PHRASES`.
+
+    Only the tail of the response is checked to avoid matching the same
+    phrases embedded in earlier self-talk.
+    """
+    text = _extract_response_text(message)
+    if not text:
+        return False
+    stripped = text.rstrip()
+    # Strong signal: ends with a question mark
+    if stripped.endswith(("?", "？")):
+        return True
+    # Phrase signal: check only the last ~300 characters
+    tail = stripped[-300:].lower()
+    return any(phrase in tail for phrase in _STRONG_USER_PROMPT_PHRASES)
+
+
 class TodoMiddleware(TodoListMiddleware):
     """Extends TodoListMiddleware with `write_todos` context-loss detection.
 
@@ -132,6 +199,20 @@ class TodoMiddleware(TodoListMiddleware):
             pass
         return self._MAX_COMPLETION_REMINDERS
 
+    def _effective_strict_completion(self) -> bool:
+        """Return whether the force-continue behavior is enabled.
+
+        Reads ``AppConfig.todo_strict_completion`` so operators can disable
+        the safety net entirely (fully interactive mode) from ``config.yaml``.
+        Any failure reading config defaults to ``True`` (enabled).
+        """
+        try:
+            from kkoclaw.config.app_config import get_app_config
+
+            return bool(get_app_config().todo_strict_completion)
+        except Exception:  # noqa: BLE001 — never break the agent loop on config read
+            return True
+
     @hook_config(can_jump_to=["model"])
     @override
     def after_model(
@@ -161,16 +242,29 @@ class TodoMiddleware(TodoListMiddleware):
         if not last_ai or last_ai.tool_calls:
             return None
 
-        # 3. Allow exit when all todos are completed or there are no todos.
+        # 3. If strict completion is disabled (fully interactive mode),
+        #    never force-continue — let the agent hand back to the user.
+        if not self._effective_strict_completion():
+            return None
+
+        # 4. User-facing-response gate: if the agent appears to be asking
+        #    the user a question or requesting confirmation, let it through.
+        #    This prevents the middleware from steamrolling natural-language
+        #    questions that happen to have no tool calls (e.g. "Which option
+        #    do you prefer?", "请确认是否继续？").
+        if _is_user_facing_response(last_ai):
+            return None
+
+        # 5. Allow exit when all todos are completed or there are no todos.
         todos: list[Todo] = state.get("todos") or []  # type: ignore[assignment]
         if not todos or all(t.get("status") == "completed" for t in todos):
             return None
 
-        # 4. Enforce a reminder cap to prevent infinite re-engagement loops.
+        # 6. Enforce a reminder cap to prevent infinite re-engagement loops.
         if _completion_reminder_count(messages) >= self._effective_max_reminders():
             return None
 
-        # 5. Inject a reminder and force the agent back to the model.
+        # 7. Inject a reminder and force the agent back to the model.
         incomplete = [t for t in todos if t.get("status") != "completed"]
         incomplete_text = "\n".join(f"- [{t.get('status', 'pending')}] {t.get('content', '')}" for t in incomplete)
         reminder = HumanMessage(

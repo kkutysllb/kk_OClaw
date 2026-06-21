@@ -9,6 +9,7 @@ from kkoclaw.agents.middlewares.todo_middleware import (
     TodoMiddleware,
     _completion_reminder_count,
     _format_todos,
+    _is_user_facing_response,
     _reminder_in_messages,
     _todos_in_messages,
 )
@@ -319,3 +320,99 @@ class TestAafterModel:
         assert result is not None
         assert result["jump_to"] == "model"
         assert result["messages"][0].name == "todo_completion_reminder"
+
+
+# ---------------------------------------------------------------------------
+# User-facing-response gate (prevents TodoMiddleware from steamrolling
+# natural-language questions that have no tool calls)
+# ---------------------------------------------------------------------------
+
+
+class TestIsUserFacingResponse:
+    def test_true_when_ends_with_question_mark(self):
+        assert _is_user_facing_response(AIMessage(content="Which option do you prefer?"))
+
+    def test_true_when_ends_with_fullwidth_question_mark(self):
+        assert _is_user_facing_response(AIMessage(content="请确认是否继续？"))
+
+    def test_true_with_chinese_confirmation_phrase(self):
+        msg = AIMessage(content="我已经完成了分析。请确认是否继续实现。")
+        assert _is_user_facing_response(msg) is True
+
+    def test_true_with_english_shall_i(self):
+        msg = AIMessage(content="I've finished the analysis. Shall I proceed?")
+        assert _is_user_facing_response(msg) is True
+
+    def test_false_for_plain_done(self):
+        assert not _is_user_facing_response(AIMessage(content="I've completed all the tasks."))
+
+    def test_false_for_self_talk_with_excluded_phrase(self):
+        # '是否' alone is excluded — it appears in self-talk like this:
+        assert not _is_user_facing_response(
+            AIMessage(content="我需要检查文件是否存在，然后再继续。")
+        )
+
+    def test_false_for_empty_content(self):
+        assert not _is_user_facing_response(AIMessage(content=""))
+
+    def test_true_with_multipart_content_ending_in_question(self):
+        msg = AIMessage(content=[{"type": "text", "text": "Here's my plan. Does this look good?"}])
+        assert _is_user_facing_response(msg) is True
+
+
+class TestUserFacingGateInAfterModel:
+    """When the agent asks a question, after_model must let it through."""
+
+    def test_lets_user_facing_question_through(self):
+        mw = TodoMiddleware()
+        state = {
+            "messages": [
+                HumanMessage(content="hi"),
+                AIMessage(content="我已经完成了分析。请确认是否继续实现？"),
+            ],
+            "todos": _incomplete_todos(),
+        }
+        assert mw.after_model(state, _make_runtime()) is None
+
+    def test_force_continues_on_plain_done(self):
+        mw = TodoMiddleware()
+        state = {
+            "messages": [HumanMessage(content="hi"), _ai_no_tool_calls()],
+            "todos": _incomplete_todos(),
+        }
+        result = mw.after_model(state, _make_runtime())
+        assert result is not None
+        assert result["jump_to"] == "model"
+
+    def test_user_facing_gate_does_not_override_all_completed(self):
+        """Even if the message ends with ?, all-completed todos should exit."""
+        mw = TodoMiddleware()
+        state = {
+            "messages": [AIMessage(content="All done, anything else?")],
+            "todos": _all_completed_todos(),
+        }
+        assert mw.after_model(state, _make_runtime()) is None
+
+
+class TestStrictCompletionSwitch:
+    """Config switch todo_strict_completion=False disables force-continue."""
+
+    def test_disabled_switch_lets_plain_done_through(self):
+        mw = TodoMiddleware()
+        mw._effective_strict_completion = lambda: False
+        state = {
+            "messages": [HumanMessage(content="hi"), _ai_no_tool_calls()],
+            "todos": _incomplete_todos(),
+        }
+        assert mw.after_model(state, _make_runtime()) is None
+
+    def test_enabled_switch_still_force_continues(self):
+        mw = TodoMiddleware()
+        mw._effective_strict_completion = lambda: True
+        state = {
+            "messages": [HumanMessage(content="hi"), _ai_no_tool_calls()],
+            "todos": _incomplete_todos(),
+        }
+        result = mw.after_model(state, _make_runtime())
+        assert result is not None
+        assert result["jump_to"] == "model"

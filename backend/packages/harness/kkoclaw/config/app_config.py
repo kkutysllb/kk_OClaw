@@ -131,6 +131,19 @@ class AppConfig(BaseModel):
             "set to 0 to disable the safety net entirely (not recommended)."
         ),
     )
+    todo_strict_completion: bool = Field(
+        default=True,
+        description=(
+            "When True (default), TodoMiddleware prevents the agent from "
+            "exiting while todo items are still incomplete, with a "
+            "user-facing-response exception: if the agent's final message "
+            "appears to be asking the user a question or requesting "
+            "confirmation, the middleware lets it through so the user can "
+            "respond. Set to False to disable the force-continue behavior "
+            "entirely — use this for fully interactive sessions where the "
+            "agent should never override the user's ability to respond."
+        ),
+    )
     model_config = ConfigDict(extra="allow")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Unified database backend configuration")
     run_events: RunEventsConfig = Field(default_factory=RunEventsConfig, description="Run event storage configuration")

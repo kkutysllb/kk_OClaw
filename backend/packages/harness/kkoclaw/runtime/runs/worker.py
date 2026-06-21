@@ -304,6 +304,11 @@ async def run_agent(
 
         logger.info("Run %s: streaming with modes %s (requested: %s)", run_id, lg_modes, requested_modes)
 
+        # Tracker for incremental diff changes — powers file_changed
+        # custom SSE events so the frontend file browser refreshes in real
+        # time (see _publish_file_changed_if_diff_updated).
+        diff_tracker = _StateDiffTracker()
+
         # 7. Stream using graph.astream
         if len(lg_modes) == 1 and not stream_subgraphs:
             # Single mode, no subgraphs: astream yields raw chunks
@@ -315,6 +320,10 @@ async def run_agent(
                 sse_event = _lg_mode_to_sse_event(single_mode)
                 await bridge.publish(run_id, sse_event, serialize(chunk, mode=single_mode))
                 await _publish_interrupt_if_present(run_id, chunk, mode=single_mode, bridge=bridge)
+                await _publish_file_changed_if_diff_updated(
+                    run_id, chunk, mode=single_mode, bridge=bridge,
+                    state_tracker=diff_tracker, thread_id=thread_id,
+                )
         else:
             # Multiple modes or subgraphs: astream yields tuples
             async for item in agent.astream(
@@ -334,6 +343,10 @@ async def run_agent(
                 sse_event = _lg_mode_to_sse_event(mode)
                 await bridge.publish(run_id, sse_event, serialize(chunk, mode=mode))
                 await _publish_interrupt_if_present(run_id, chunk, mode=mode, bridge=bridge)
+                await _publish_file_changed_if_diff_updated(
+                    run_id, chunk, mode=mode, bridge=bridge,
+                    state_tracker=diff_tracker, thread_id=thread_id,
+                )
 
         # 8. Final status
         if record.abort_event.is_set():
@@ -603,6 +616,82 @@ def _extract_interrupt_info(msg: Any) -> dict | None:
         return None
     info = kwargs.get("task_interrupted")
     return info if isinstance(info, dict) else None
+
+
+@dataclass
+class _StateDiffTracker:
+    """Tracks seen diff entries to detect incremental file changes.
+
+    Used by :func:`_publish_file_changed_if_diff_updated` to emit
+    ``file_changed`` custom SSE events only when new or updated file diffs
+    appear — not on every ``values`` chunk (which would flood the stream).
+    """
+
+    seen: dict[str, tuple] = field(default_factory=dict)
+
+
+async def _publish_file_changed_if_diff_updated(
+    run_id: str,
+    chunk: Any,
+    *,
+    mode: str,
+    bridge: StreamBridge,
+    state_tracker: _StateDiffTracker,
+    thread_id: str,
+) -> None:
+    """Detect incremental changes to the ``diff`` state field and publish a
+    ``file_changed`` custom SSE event.
+
+    The gateway does not support ``events`` stream mode (see module
+    docstring), so ``on_tool_end`` never fires in the frontend SDK.  This
+    custom event is the primary real-time signal for file mutations during
+    a coding agent run — the frontend uses it to refresh the file browser
+    and stage panel without polling.
+
+    Only ``values`` mode chunks contain the full state dict with the
+    ``diff`` field, so this helper is a no-op for all other modes.
+    """
+    if mode != "values" or not isinstance(chunk, dict):
+        return
+
+    diffs = chunk.get("diff")
+    if not isinstance(diffs, list):
+        return
+
+    new_files: list[str] = []
+    for entry in diffs:
+        if not isinstance(entry, dict):
+            continue
+        file_path = entry.get("file_path")
+        if not isinstance(file_path, str) or not file_path:
+            continue
+        fingerprint = (
+            entry.get("status", ""),
+            entry.get("additions", 0),
+            entry.get("deletions", 0),
+        )
+        prev = state_tracker.seen.get(file_path)
+        if prev != fingerprint:
+            new_files.append(file_path)
+            state_tracker.seen[file_path] = fingerprint
+
+    if not new_files:
+        return
+
+    logger.info(
+        "Run %s: publishing file_changed custom event (%d file(s) changed)",
+        run_id,
+        len(new_files),
+    )
+    await bridge.publish(
+        run_id,
+        "custom",
+        {
+            "type": "file_changed",
+            "files": new_files,
+            "thread_id": thread_id,
+        },
+    )
 
 
 def _lg_mode_to_sse_event(mode: str) -> str:
