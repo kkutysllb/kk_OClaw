@@ -10,9 +10,10 @@ called a verification tool (run_tests, run_linter, bash) after the last
 edit, no new reminder is added. This avoids nagging while still enforcing
 the edit-verify loop.
 
-Configurable via ``coding_agent.post_edit_verify`` in config.yaml:
-    enabled: true|false  (default true)
-    mode:   "soft"|"hard"  (soft = reminder, hard = block model exit)
+Configurable via ``coding_agent.post_edit_verify_enabled`` and
+``coding_agent.post_edit_verify_mode`` in config.yaml:
+    post_edit_verify_enabled: true|false  (default true)
+    post_edit_verify_mode:   "soft"|"hard"  (soft = reminder, hard = block model exit)
 """
 
 from __future__ import annotations

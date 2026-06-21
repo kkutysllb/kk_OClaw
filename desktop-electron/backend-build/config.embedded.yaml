@@ -185,6 +185,8 @@ coding_agent:
   model: null
   sandbox: local
   default_permission_mode: safe-only
+  post_edit_verify_enabled: true
+  post_edit_verify_mode: soft
   worktree:
     enabled: true
     auto_create: false

@@ -31,6 +31,14 @@ class CodingAgentConfig(BaseModel):
         default="safe-only",
         description="Default permission policy for coding-agent tools",
     )
+    post_edit_verify_enabled: bool = Field(
+        default=True,
+        description="Inject a verification reminder after successful coding edits",
+    )
+    post_edit_verify_mode: Literal["soft", "hard"] = Field(
+        default="soft",
+        description="Post-edit verification enforcement mode",
+    )
     worktree: CodingAgentWorktreeConfig = Field(default_factory=CodingAgentWorktreeConfig)
     git: CodingAgentGitConfig = Field(default_factory=CodingAgentGitConfig)
     test: CodingAgentTestConfig = Field(default_factory=CodingAgentTestConfig)

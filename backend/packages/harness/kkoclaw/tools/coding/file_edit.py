@@ -114,6 +114,16 @@ def _apply_hunks(lines: list[str], hunks: list[dict]) -> list[str]:
     return result
 
 
+def _resolve_edit_path(runtime: Runtime, file_path: str) -> tuple[str, str]:
+    requested_path = file_path
+    resolved_path = file_path
+    if is_local_sandbox(runtime):
+        thread_data = get_thread_data(runtime)
+        validate_local_tool_path(file_path, thread_data)
+        resolved_path = _resolve_and_validate_user_data_path(file_path, thread_data)
+    return requested_path, resolved_path
+
+
 @tool("apply_diff", parse_docstring=True)
 def apply_diff_tool(
     runtime: Runtime,
@@ -133,11 +143,7 @@ def apply_diff_tool(
     try:
         sandbox = ensure_sandbox_initialized(runtime)
         ensure_thread_directories_exist(runtime)
-        requested_path = file_path
-        if is_local_sandbox(runtime):
-            thread_data = get_thread_data(runtime)
-            validate_local_tool_path(file_path, thread_data)
-            file_path = _resolve_and_validate_user_data_path(file_path, thread_data)
+        requested_path, file_path = _resolve_edit_path(runtime, file_path)
 
         hunks = _parse_unified_diff(diff)
         if not hunks:
@@ -150,14 +156,13 @@ def apply_diff_tool(
             new_content = "\n".join(new_lines)
             if content and content.endswith("\n"):
                 new_content += "\n"
-            sandbox.write_file(file_path, new_content)
-            # Record snapshot BEFORE change-tracking so undo can restore
             record_edit_snapshot(
                 runtime,
                 file_path=file_path,
                 before=content,
                 tool="apply_diff",
             )
+            sandbox.write_file(file_path, new_content)
             record_runtime_file_change(
                 runtime,
                 file_path=file_path,
@@ -198,11 +203,7 @@ def insert_at_line_tool(
     try:
         sandbox = ensure_sandbox_initialized(runtime)
         ensure_thread_directories_exist(runtime)
-        requested_path = file_path
-        if is_local_sandbox(runtime):
-            thread_data = get_thread_data(runtime)
-            validate_local_tool_path(file_path, thread_data)
-            file_path = _resolve_and_validate_user_data_path(file_path, thread_data)
+        requested_path, file_path = _resolve_edit_path(runtime, file_path)
 
         with get_file_operation_lock(sandbox, file_path):
             original = sandbox.read_file(file_path) or ""
@@ -217,6 +218,12 @@ def insert_at_line_tool(
             new_content = "\n".join(new_lines)
             if original.endswith("\n"):
                 new_content += "\n"
+            record_edit_snapshot(
+                runtime,
+                file_path=file_path,
+                before=original,
+                tool="insert_at_line",
+            )
             sandbox.write_file(file_path, new_content)
             record_runtime_file_change(
                 runtime,
@@ -275,14 +282,9 @@ def multi_edit_tool(
                 return "Error: Each edit must include 'file_path'."
             by_file.setdefault(fp, []).append(ed)
 
+        planned_writes: list[tuple[str, str, str, str]] = []
         for file_path, file_edits in by_file.items():
-            requested_path = file_path
-            resolved_path = file_path
-            if is_local_sandbox(runtime):
-                thread_data = get_thread_data(runtime)
-                validate_local_tool_path(file_path, thread_data)
-                resolved_path = _resolve_and_validate_user_data_path(file_path, thread_data)
-
+            requested_path, resolved_path = _resolve_edit_path(runtime, file_path)
             with get_file_operation_lock(sandbox, resolved_path):
                 content = sandbox.read_file(resolved_path) or ""
                 original = content
@@ -314,13 +316,23 @@ def multi_edit_tool(
                     applied += 1
                     results.append(f"  OK: edit #{applied} applied to {requested_path}")
 
-                sandbox.write_file(resolved_path, content)
+                planned_writes.append((requested_path, resolved_path, original, content))
+
+        for requested_path, resolved_path, original, _content in planned_writes:
+            with get_file_operation_lock(sandbox, resolved_path):
+                current = sandbox.read_file(resolved_path) or ""
+                if current != original:
+                    return f"Error: {requested_path} changed during multi_edit planning — multi_edit aborted."
+
+        for _requested_path, resolved_path, original, content in planned_writes:
+            with get_file_operation_lock(sandbox, resolved_path):
                 record_edit_snapshot(
                     runtime,
                     file_path=resolved_path,
                     before=original,
                     tool="multi_edit",
                 )
+                sandbox.write_file(resolved_path, content)
                 record_runtime_file_change(
                     runtime,
                     file_path=resolved_path,

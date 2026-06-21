@@ -27,6 +27,8 @@ interface CodingAgentConfig {
   model: string | null;
   sandbox: "local" | "docker";
   default_permission_mode: "safe-only" | "safe" | "yolo";
+  post_edit_verify_enabled: boolean;
+  post_edit_verify_mode: "soft" | "hard";
   worktree: {
     enabled: boolean;
     auto_create: boolean;
@@ -52,6 +54,8 @@ const defaultConfig: CodingAgentConfig = {
   model: null,
   sandbox: "local",
   default_permission_mode: "safe-only",
+  post_edit_verify_enabled: true,
+  post_edit_verify_mode: "soft",
   worktree: {
     enabled: true,
     auto_create: false,
@@ -207,6 +211,46 @@ export function CodingAgentForm() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={labelCls}>编辑后验证</p>
+                <p className={hintCls}>
+                  apply_diff / multi_edit / insert_at_line 成功后注入验证提醒，要求先调用 run_linter / run_tests
+                </p>
+              </div>
+              <Switch
+                checked={local.post_edit_verify_enabled}
+                onCheckedChange={(v) => update("post_edit_verify_enabled", v)}
+                disabled={saving}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label className={labelCls}>验证模式</label>
+              <Select
+                value={local.post_edit_verify_mode}
+                onValueChange={(value) =>
+                  update(
+                    "post_edit_verify_mode",
+                    value as CodingAgentConfig["post_edit_verify_mode"],
+                  )
+                }
+                disabled={saving || !local.post_edit_verify_enabled}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="soft">soft（仅提醒）</SelectItem>
+                  <SelectItem value="hard">hard（验证未通过前阻止报告完成）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className={hintCls}>
+                soft：仅注入提醒；hard：模型在验证通过前不允许报告任务完成
+              </p>
             </div>
           </div>
 

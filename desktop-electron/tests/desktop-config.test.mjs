@@ -32,8 +32,16 @@ test("desktop default config enables the agents API used by the desktop UI", () 
 test("desktop default config includes coding agent settings", () => {
   assert.match(embeddedConfig, /coding_agent:\s*\n\s+enabled:\s+true/);
   assert.match(embeddedConfig, /default_permission_mode:\s+safe-only/);
+  assert.match(embeddedConfig, /post_edit_verify_enabled:\s+true/);
+  assert.match(embeddedConfig, /post_edit_verify_mode:\s+soft/);
   assert.match(embeddedConfig, /worktree:\s*\n\s+enabled:\s+true/);
-  assert.match(embeddedConfig, /frameworks:\s*\n\s+- pytest\n\s+- jest\n\s+- vitest\n\s+- go test/);
+  assert.ok(
+    embeddedConfig.includes("- pytest") &&
+      embeddedConfig.includes("- jest") &&
+      embeddedConfig.includes("- vitest") &&
+      embeddedConfig.includes("- go test"),
+    "embedded config must list pytest/jest/vitest/go test frameworks",
+  );
 });
 
 test("desktop default config stores sqlite under the desktop data directory", () => {
@@ -46,9 +54,13 @@ test("desktop backend uses an isolated extensions config instead of repo MCP con
   assert.match(backendSource, /initExtensionsConfig\(\)/);
 });
 
-test("desktop backend only initializes public skills", () => {
-  assert.doesNotMatch(backendSource, /customTarget/);
-  assert.doesNotMatch(backendSource, /mkdirSync\(.*custom/);
+test("desktop seeds public skills and allows user-created custom skills", () => {
+  // Still seed bundled public skills so first run has a non-empty skill set.
   assert.match(backendSource, /publicTarget/);
-  assert.match(backendSource, /KKOCLAW_PUBLIC_SKILLS_ONLY:\s*"1"/);
+  // Create an empty custom/ dir so users can author their own skills at
+  // runtime (web-to-desktop migration also depends on this).
+  assert.match(backendSource, /mkdirSync\(join\(skillsRoot,\s*"custom"\)/);
+  // Intentionally do NOT set KKOCLAW_PUBLIC_SKILLS_ONLY at runtime — that
+  // flag was for bundling-time, not for forbidding user-created skills.
+  assert.doesNotMatch(backendSource, /KKOCLAW_PUBLIC_SKILLS_ONLY:\s*"1"/);
 });

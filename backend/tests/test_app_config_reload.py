@@ -118,6 +118,8 @@ def test_app_config_loads_coding_agent_config(tmp_path, monkeypatch):
                     "model": "coding-model",
                     "sandbox": "local",
                     "default_permission_mode": "safe",
+                    "post_edit_verify_enabled": False,
+                    "post_edit_verify_mode": "hard",
                     "worktree": {
                         "enabled": True,
                         "auto_create": True,
@@ -144,6 +146,8 @@ def test_app_config_loads_coding_agent_config(tmp_path, monkeypatch):
     assert config.coding_agent.enabled is True
     assert config.coding_agent.model == "coding-model"
     assert config.coding_agent.default_permission_mode == "safe"
+    assert config.coding_agent.post_edit_verify_enabled is False
+    assert config.coding_agent.post_edit_verify_mode == "hard"
     assert config.coding_agent.worktree.auto_create is True
     assert config.coding_agent.worktree.base_branch == "develop"
     assert config.coding_agent.git.auto_commit is True

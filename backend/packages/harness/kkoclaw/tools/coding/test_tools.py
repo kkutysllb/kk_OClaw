@@ -43,15 +43,22 @@ def _command_with_project_root(runtime: Runtime, cmd: str) -> str:
     return cmd
 
 
+def _project_root_from_runtime(runtime: Runtime) -> str:
+    thread_data = get_thread_data(runtime)
+    project_root = thread_data.get("project_root") if thread_data else None
+    return project_root or "/mnt/user-data/workspace"
+
+
 def _detect_test_framework(runtime: Runtime) -> str | None:
     """Detect the most likely test framework based on project files."""
     sandbox = ensure_sandbox_initialized(runtime)
     ensure_thread_directories_exist(runtime)
+    project_root = _project_root_from_runtime(runtime)
 
     for framework, markers, _ in _FRAMEWORK_DETECTORS:
         for marker in markers:
             try:
-                files, _ = sandbox.glob("/mnt/user-data/workspace", marker, include_dirs=False, max_results=1)
+                files, _ = sandbox.glob(project_root, marker, include_dirs=False, max_results=1)
                 if files:
                     return framework
             except Exception:
@@ -470,6 +477,9 @@ def run_linter_tool(
 _LINTER_ISSUE_RE = re.compile(
     r"^(?P<file>[^\s:]+):(?P<line>\d+)(?::(?P<col>\d+))?:\s*(?P<message>.+)$"
 )
+_TSC_ISSUE_RE = re.compile(
+    r"^(?P<file>.+?)\((?P<line>\d+),(?P<col>\d+)\):\s*(?P<message>.+)$"
+)
 
 
 def _parse_linter_issues(output: str, linter: str) -> list[dict]:
@@ -487,7 +497,7 @@ def _parse_linter_issues(output: str, linter: str) -> list[dict]:
             "found", "warning", "error", "checking", "processing",
         )) and ":" not in stripped:
             continue
-        m = _LINTER_ISSUE_RE.match(stripped)
+        m = _TSC_ISSUE_RE.match(stripped) or _LINTER_ISSUE_RE.match(stripped)
         if m:
             try:
                 line_no = int(m.group("line"))
