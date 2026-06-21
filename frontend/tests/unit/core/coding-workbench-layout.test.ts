@@ -23,10 +23,9 @@ describe("coding workbench layout", () => {
       "utf8",
     );
 
-    expect(workbench).toContain("PanelHeaderToggle");
     expect(workbench).toContain("CollapsedPanelRestore");
     expect(workbench).toContain("left-panel-toggle");
-    expect(workbench).toContain("left-panel-toggle-expanded");
+    expect(workbench).not.toContain("left-panel-toggle-expanded");
     expect(workbench).not.toContain("right-panel-toggle-expanded");
     expect(workbench).toContain("Agent Inspector");
     expect(workbench).toContain("showFileExplorer");
@@ -99,6 +98,7 @@ describe("coding workbench layout", () => {
     expect(workbench).not.toContain(">编辑<");
     expect(workbench).not.toContain(">删除<");
     expect(workbench).toContain("focusWorkbenchFile");
+    expect(workbench).toContain("handleSelectExplorerFile");
     expect(workbench).toContain("onFocusFile");
     expect(workbench).toContain("getEventFocusTarget");
     expect(workbench).toContain("CodingTaskChangesPanel");
@@ -141,7 +141,7 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("<ReviewPanel");
     expect(workbench).toContain('label="Code Review"');
     expect(workbench).toContain("EnvironmentInfoFloatingCard");
-    expect(workbench).toContain("showWorkbenchPane");
+    expect(workbench).toContain("visible={!showWorkbenchPane}");
     expect(workbench).toContain("gitBranch");
     expect(workbench).toContain("useProjectEnvironment");
     expect(workbench).toContain("useProjectGitCommit");

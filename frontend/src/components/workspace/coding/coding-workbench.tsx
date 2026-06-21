@@ -13,9 +13,7 @@ import {
   GitCompareIcon,
   GitCommitHorizontalIcon,
   PackageOpenIcon,
-  PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  PanelRightCloseIcon,
   PanelRightOpenIcon,
   ActivityIcon,
   GaugeIcon,
@@ -238,6 +236,10 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     }
   };
 
+  const handleSelectExplorerFile = (filePath: string) => {
+    focusWorkbenchFile(filePath, "code");
+  };
+
   const handleOpenTerminal = async () => {
     const result = await openProjectTerminal(project.path);
     if (result === "opened") {
@@ -452,6 +454,26 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                   onClick={toggleLeft}
                 />
               )}
+              <EnvironmentInfoFloatingCard
+                additions={totalAdditions}
+                deletions={totalDeletions}
+                branch={gitBranch}
+                githubCli={environment?.github_cli ?? null}
+                sourceLabel={environment?.source.label ?? "仅本地"}
+                sourceRemote={environment?.source.remote ?? null}
+                head={environment?.head ?? null}
+                ahead={environment?.ahead ?? 0}
+                behind={environment?.behind ?? 0}
+                changedFiles={environment?.changed_files ?? diff?.files.length ?? 0}
+                commitPending={commitMutation.isPending}
+                pushPending={pushMutation.isPending}
+                commitDisabled={!environment?.is_git_repo || (environment?.changed_files ?? 0) === 0}
+                pushDisabled={!environment?.is_git_repo}
+                onCommit={() => setCommitDialogOpen(true)}
+                onPush={() => void handlePush()}
+                path={project.path}
+                visible={!showWorkbenchPane}
+              />
               {/* Left: File Explorer */}
               <ResizablePanel
                 panelRef={leftPanelRef}
@@ -463,17 +485,9 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 onResize={(size) => setLeftCollapsed(size.asPercentage === 0)}
               >
                 <FileExplorer
-                  headerAction={
-                    <PanelHeaderToggle
-                      id="left-panel-toggle-expanded"
-                      label="收起文件"
-                      side="left"
-                      onClick={toggleLeft}
-                    />
-                  }
                   projectId={projectId}
                   selectedFile={selectedFile}
-                  onSelectFile={setSelectedFile}
+                  onSelectFile={handleSelectExplorerFile}
                 />
               </ResizablePanel>
               <ResizableHandle
@@ -514,27 +528,6 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 onResize={(size) => setRightCollapsed(size.asPercentage === 0)}
               >
                 <div className="relative flex h-full min-h-0 flex-col border-l">
-                  <EnvironmentInfoFloatingCard
-                    additions={totalAdditions}
-                    deletions={totalDeletions}
-                    branch={gitBranch}
-                    githubCli={environment?.github_cli ?? null}
-                    sourceLabel={environment?.source.label ?? "仅本地"}
-                    sourceRemote={environment?.source.remote ?? null}
-                    head={environment?.head ?? null}
-                    ahead={environment?.ahead ?? 0}
-                    behind={environment?.behind ?? 0}
-                    changedFiles={environment?.changed_files ?? diff?.files.length ?? 0}
-                    commitPending={commitMutation.isPending}
-                    pushPending={pushMutation.isPending}
-                    commitDisabled={!environment?.is_git_repo || (environment?.changed_files ?? 0) === 0}
-                    pushDisabled={!environment?.is_git_repo}
-                    onCommit={() => setCommitDialogOpen(true)}
-                    onPush={() => void handlePush()}
-                    path={project.path}
-                    visible={true}
-                    docked={showWorkbenchPane}
-                  />
                   {workbenchView === "code" && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <CodeViewer projectId={projectId} filePath={selectedFile} />
@@ -672,36 +665,6 @@ function WorkbenchToolbarButton({
   );
 }
 
-function PanelHeaderToggle({
-  id,
-  label,
-  onClick,
-  side,
-}: {
-  id: string;
-  label: string;
-  onClick: () => void;
-  side: "left" | "right";
-}) {
-  const Icon = side === "left" ? PanelLeftCloseIcon : PanelRightCloseIcon;
-
-  return (
-    <button
-      aria-label={label}
-      className={cn(
-        "text-muted-foreground hover:bg-muted hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors",
-        side === "left" ? "-mr-1" : "-ml-1",
-      )}
-      data-testid={id}
-      title={label}
-      type="button"
-      onClick={onClick}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
 function CollapsedPanelRestore({
   id,
   label,
@@ -833,7 +796,6 @@ function EnvironmentInfoFloatingCard({
   commitDisabled,
   commitPending,
   deletions,
-  docked,
   githubCli,
   head,
   onCommit,
@@ -853,7 +815,6 @@ function EnvironmentInfoFloatingCard({
   commitDisabled: boolean;
   commitPending: boolean;
   deletions: number;
-  docked: boolean;
   githubCli: {
     available: boolean;
     authenticated: boolean;
@@ -881,8 +842,7 @@ function EnvironmentInfoFloatingCard({
     <div
       className={cn(
         "absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border bg-background/96 p-3 shadow-xl backdrop-blur transition-all",
-        docked && "right-4 top-4",
-        visible ? "opacity-100" : "opacity-0",
+        visible ? "opacity-100" : "pointer-events-none opacity-0",
       )}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
