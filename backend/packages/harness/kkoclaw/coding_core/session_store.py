@@ -48,7 +48,7 @@ class QiongqiSessionStore:
     root: Path
 
     @classmethod
-    def from_home(cls) -> "QiongqiSessionStore":
+    def from_home(cls) -> QiongqiSessionStore:
         return cls(coding_home())
 
     def persist_session(
@@ -291,10 +291,18 @@ def _suggestion_payload(suggestion: StageSuggestion | None) -> dict[str, Any] | 
 
 
 def _history_payload(entry: Any) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "from_stage_id": entry.from_stage_id,
         "to_stage_id": entry.to_stage_id,
         "reason": entry.reason,
         "source": entry.source,
         "timestamp": entry.timestamp,
     }
+    # G1/G2 traceability fields — optional, may be absent on older entries.
+    thread_id = getattr(entry, "thread_id", None)
+    if thread_id:
+        payload["thread_id"] = thread_id
+    run_outcome = getattr(entry, "run_outcome", None)
+    if run_outcome:
+        payload["run_outcome"] = run_outcome
+    return payload

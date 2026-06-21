@@ -63,6 +63,7 @@ import type {
   ProjectStageState,
   QiongqiEvent,
   QiongqiRoiReport,
+  StageHistoryEntry,
   StageSuggestion,
 } from "@/core/projects";
 import { cn } from "@/lib/utils";
@@ -1459,6 +1460,14 @@ function CodingWorkflowInspector({
                 })}
               </div>
             </div>
+
+            {/* Stage transition history timeline (G3) */}
+            {stageState && stageState.stage_history.length > 0 && (
+              <StageHistoryTimeline
+                history={stageState.stage_history}
+                stages={stages}
+              />
+            )}
           </div>
         </ScrollArea>
       )}
@@ -1770,6 +1779,120 @@ async function copyWorkflowPrompt(nextPrompt: string): Promise<void> {
   }
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  user: "用户",
+  agent_suggested: "Agent 建议",
+  agent_accepted: "Agent 已接受",
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  user: "border-blue-500/40 text-blue-600 dark:text-blue-400",
+  agent_suggested: "border-amber-500/40 text-amber-600 dark:text-amber-400",
+  agent_accepted: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+};
+
+function formatStageTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch {
+    return iso;
+  }
+}
+
+function StageHistoryTimeline({
+  history,
+  stages,
+}: {
+  history: StageHistoryEntry[];
+  stages: DeliveryStage[];
+}) {
+  const stageTitle = (id: string | null) =>
+    id ? (stages.find((s) => s.id === id)?.title ?? id) : "—";
+
+  // Latest transitions first.
+  const entries = [...history].reverse();
+
+  return (
+    <div className="rounded-md border p-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold">阶段流转历史</p>
+        <span className="text-muted-foreground text-[10px]">
+          {history.length} 次转换
+        </span>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {entries.map((entry, idx) => {
+          const isLatest = idx === 0;
+          return (
+            <div
+              key={`${entry.to_stage_id}-${entry.timestamp}-${idx}`}
+              className={cn(
+                "rounded border px-2 py-1.5",
+                isLatest
+                  ? "bg-muted/40"
+                  : "bg-transparent",
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium">
+                  {stageTitle(entry.from_stage_id)}
+                </span>
+                <ChevronRightIcon className="text-muted-foreground size-3 shrink-0" />
+                <span className="text-[11px] font-semibold">
+                  {stageTitle(entry.to_stage_id)}
+                </span>
+                {isLatest && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-auto rounded px-1.5 text-[9px]"
+                  >
+                    最新
+                  </Badge>
+                )}
+              </div>
+              {entry.reason && (
+                <p className="text-muted-foreground mt-0.5 line-clamp-2 text-[10px] leading-3.5">
+                  {entry.reason}
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "rounded px-1 text-[9px]",
+                    SOURCE_COLORS[entry.source] ?? "",
+                  )}
+                >
+                  {SOURCE_LABELS[entry.source] ?? entry.source}
+                </Badge>
+                <span className="text-muted-foreground font-mono text-[9px]">
+                  {formatStageTimestamp(entry.timestamp)}
+                </span>
+                {entry.thread_id && (
+                  <span
+                    className="text-muted-foreground max-w-[80px] truncate font-mono text-[9px]"
+                    title={entry.thread_id}
+                  >
+                    @{entry.thread_id.slice(-8)}
+                  </span>
+                )}
+                {entry.run_outcome && (
+                  <Badge
+                    variant="outline"
+                    className="rounded px-1 text-[9px]"
+                  >
+                    {entry.run_outcome}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 
 function SkillCategoryFilter({
