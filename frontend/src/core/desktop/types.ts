@@ -30,6 +30,14 @@ export interface UpdateInfo {
   body?: string;
 }
 
+export interface EmbeddedTerminalSession {
+  sessionId: string;
+  cwd: string;
+  shell: string;
+  projectName: string;
+  promptLabel: string;
+}
+
 export interface FileDialogOptions {
   multiple?: boolean;
   filters?: { name: string; extensions: string[] }[];
@@ -219,7 +227,20 @@ export interface DesktopBridge {
   // ── System integration ────────────────────────────────────────────
   openExternal(url: string): Promise<void>;
   openFolder(folderPath: string): Promise<void>;
-  openTerminal(folderPath: string): Promise<void>;
+  startTerminal(folderPath: string): Promise<EmbeddedTerminalSession>;
+  writeTerminal(sessionId: string, data: string): Promise<void>;
+  resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void>;
+  stopTerminal(sessionId: string): Promise<void>;
+  onTerminalData(
+    handler: (event: { sessionId: string; data: string }) => void,
+  ): () => void;
+  onTerminalExit(
+    handler: (event: {
+      sessionId: string;
+      code: number | null;
+      signal: string | null;
+    }) => void,
+  ): () => void;
   onFileDrop(
     handler: (files: PickedFile[]) => void,
   ): () => void;

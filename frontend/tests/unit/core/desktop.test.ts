@@ -30,7 +30,18 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
     pickDirectory: vi.fn(async () => null),
     openExternal: vi.fn(async (_url: string) => undefined),
     openFolder: vi.fn(async (_path: string) => undefined),
-    openTerminal: vi.fn(async (_path: string) => undefined),
+    startTerminal: vi.fn(async (_path: string) => ({
+      sessionId: "term-1",
+      cwd: "/tmp/project",
+      shell: "/bin/zsh",
+      projectName: "project",
+      promptLabel: "libing@host project %",
+    })),
+    writeTerminal: vi.fn(async (_sessionId: string, _data: string) => undefined),
+    resizeTerminal: vi.fn(async (_sessionId: string, _cols: number, _rows: number) => undefined),
+    stopTerminal: vi.fn(async (_sessionId: string) => undefined),
+    onTerminalData: vi.fn(() => unsubscribe),
+    onTerminalExit: vi.fn(() => unsubscribe),
     onFileDrop: vi.fn(() => unsubscribe),
     checkForUpdates: vi.fn(async () => ({ available: false })),
     installUpdate: vi.fn(async () => true),
@@ -192,12 +203,7 @@ describe("desktop integration — Electron mode", () => {
     expect(getLogs).toHaveBeenCalled();
   });
 
-  test("openProjectTerminal opens terminal through bridge", async () => {
-    const openTerminal = Reflect.get(
-      bridge,
-      "openTerminal",
-    ) as ReturnType<typeof vi.fn>;
+  test("openProjectTerminal opens the embedded terminal surface in desktop mode", async () => {
     await expect(openProjectTerminal("/tmp/project")).resolves.toBe("opened");
-    expect(openTerminal).toHaveBeenCalledWith("/tmp/project");
   });
 });

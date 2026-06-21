@@ -17,12 +17,15 @@
     "build:gateway": "bash scripts/build-gateway.sh",
     "build:frontend": "pnpm --dir ../frontend run build:desktop",
     "verify:package-resources": "node scripts/verify-package-resources.mjs",
+    "fix:node-pty-permissions": "node scripts/fix-node-pty-permissions.mjs",
+    "postinstall": "node scripts/fix-node-pty-permissions.mjs",
     "build:app": "pnpm run build && pnpm run build:gateway && pnpm run build:frontend && pnpm run verify:package-resources && electron-builder",
     "build:app:full": "pnpm run build:app",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.preload.json --noEmit"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
@@ -31,6 +34,9 @@
     "typescript": "^5.8.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["electron"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "node-pty"
+    ]
   }
 }

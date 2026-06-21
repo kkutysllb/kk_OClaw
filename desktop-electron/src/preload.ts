@@ -42,6 +42,14 @@ interface UpdateInfo {
   body?: string;
 }
 
+interface EmbeddedTerminalSession {
+  sessionId: string;
+  cwd: string;
+  shell: string;
+  projectName: string;
+  promptLabel: string;
+}
+
 // ── Path authorization ────────────────────────────────────────────────────
 
 interface AuthorizePathResult {
@@ -138,8 +146,46 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
     ipcRenderer.invoke("shell:open-external", url),
   openFolder: (folderPath: string): Promise<void> =>
     ipcRenderer.invoke("shell:open-folder", folderPath),
-  openTerminal: (folderPath: string): Promise<void> =>
-    ipcRenderer.invoke("shell:open-terminal", folderPath),
+  startTerminal: (folderPath: string): Promise<EmbeddedTerminalSession> =>
+    ipcRenderer.invoke("terminal:start", folderPath),
+  writeTerminal: (sessionId: string, data: string): Promise<void> =>
+    ipcRenderer.invoke("terminal:write", sessionId, data),
+  resizeTerminal: (
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): Promise<void> =>
+    ipcRenderer.invoke("terminal:resize", sessionId, cols, rows),
+  stopTerminal: (sessionId: string): Promise<void> =>
+    ipcRenderer.invoke("terminal:stop", sessionId),
+  onTerminalData: (
+    handler: (event: { sessionId: string; data: string }) => void,
+  ): (() => void) => {
+    const listener = (
+      _evt: IpcRendererEvent,
+      event: { sessionId: string; data: string },
+    ): void => {
+      handler(event);
+    };
+    ipcRenderer.on("terminal:data", listener);
+    return () => {
+      ipcRenderer.removeListener("terminal:data", listener);
+    };
+  },
+  onTerminalExit: (
+    handler: (event: { sessionId: string; code: number | null; signal: string | null }) => void,
+  ): (() => void) => {
+    const listener = (
+      _evt: IpcRendererEvent,
+      event: { sessionId: string; code: number | null; signal: string | null },
+    ): void => {
+      handler(event);
+    };
+    ipcRenderer.on("terminal:exit", listener);
+    return () => {
+      ipcRenderer.removeListener("terminal:exit", listener);
+    };
+  },
   onFileDrop: (handler: (files: PickedFile[]) => void): (() => void) => {
     const listener = (
       _evt: IpcRendererEvent,

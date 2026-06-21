@@ -14,6 +14,7 @@ import { isDesktop } from "../config";
 export type {
   BackendStatus,
   BackendStatusKind,
+  EmbeddedTerminalSession,
   EnvCheckInfo,
   EnvVarInfo,
   FileDialogOptions,
@@ -26,6 +27,7 @@ export type {
 
 import type {
   BackendStatus,
+  EmbeddedTerminalSession,
   FileDialogOptions,
   PickedFile,
   StartupDiagnostics,
@@ -196,10 +198,7 @@ export async function openFolder(folderPath: string): Promise<void> {
   }
 }
 
-/**
- * Open a real local terminal at the project path in desktop mode.
- * Browser mode cannot launch native terminals, so it copies the path instead.
- */
+/** Open the embedded project terminal in desktop mode, or copy path on web. */
 export async function openProjectTerminal(
   folderPath: string,
 ): Promise<OpenProjectTerminalResult> {
@@ -215,17 +214,86 @@ export async function openProjectTerminal(
     }
   }
 
+  return "opened";
+}
+
+export async function startEmbeddedTerminal(
+  folderPath: string,
+): Promise<EmbeddedTerminalSession | null> {
+  if (!folderPath.trim() || !isDesktop()) return null;
   try {
-    await window.oclawDesktop!.openTerminal(folderPath);
-    return "opened";
+    return await window.oclawDesktop!.startTerminal(folderPath);
   } catch (e) {
-    console.warn("[desktop] openTerminal failed:", e);
-    try {
-      await navigator.clipboard.writeText(folderPath);
-      return "copied";
-    } catch {
-      return "failed";
-    }
+    console.warn("[desktop] startTerminal failed:", e);
+    return null;
+  }
+}
+
+export async function writeEmbeddedTerminal(
+  sessionId: string,
+  data: string,
+): Promise<boolean> {
+  if (!sessionId || !isDesktop()) return false;
+  try {
+    await window.oclawDesktop!.writeTerminal(sessionId, data);
+    return true;
+  } catch (e) {
+    console.warn("[desktop] writeTerminal failed:", e);
+    return false;
+  }
+}
+
+export async function resizeEmbeddedTerminal(
+  sessionId: string,
+  cols: number,
+  rows: number,
+): Promise<boolean> {
+  if (!sessionId || !isDesktop()) return false;
+  try {
+    await window.oclawDesktop!.resizeTerminal(sessionId, cols, rows);
+    return true;
+  } catch (e) {
+    console.warn("[desktop] resizeTerminal failed:", e);
+    return false;
+  }
+}
+
+export async function stopEmbeddedTerminal(
+  sessionId: string,
+): Promise<void> {
+  if (!sessionId || !isDesktop()) return;
+  try {
+    await window.oclawDesktop!.stopTerminal(sessionId);
+  } catch (e) {
+    console.warn("[desktop] stopTerminal failed:", e);
+  }
+}
+
+export function onEmbeddedTerminalData(
+  handler: (event: { sessionId: string; data: string }) => void,
+): () => void {
+  if (!isDesktop()) return () => undefined;
+  return window.oclawDesktop!.onTerminalData(handler);
+}
+
+export function onEmbeddedTerminalExit(
+  handler: (event: {
+    sessionId: string;
+    code: number | null;
+    signal: string | null;
+  }) => void,
+): () => void {
+  if (!isDesktop()) return () => undefined;
+  return window.oclawDesktop!.onTerminalExit(handler);
+}
+
+export async function copyProjectTerminalPath(folderPath: string): Promise<OpenProjectTerminalResult> {
+  try {
+    await navigator.clipboard.writeText(folderPath);
+    return "copied";
+  } catch (e) {
+    console.warn("[web] copy project path failed:", e);
+    return "failed";
   }
 }
 

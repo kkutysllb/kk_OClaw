@@ -1,10 +1,14 @@
 "use client";
 
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal as XTerm } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
 import {
   ArrowLeftIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   ClipboardCheckIcon,
+  CopyIcon,
   CloudIcon,
   GithubIcon,
   FileTextIcon,
@@ -15,6 +19,8 @@ import {
   PackageOpenIcon,
   PanelLeftOpenIcon,
   PanelRightOpenIcon,
+  PlusIcon,
+  XIcon,
   ActivityIcon,
   GaugeIcon,
   InfoIcon,
@@ -29,7 +35,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +55,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
-import { openProjectTerminal } from "@/core/desktop";
+import {
+  copyProjectTerminalPath,
+  onEmbeddedTerminalData,
+  onEmbeddedTerminalExit,
+  openProjectTerminal,
+  resizeEmbeddedTerminal,
+  startEmbeddedTerminal,
+  stopEmbeddedTerminal,
+  writeEmbeddedTerminal,
+} from "@/core/desktop";
 import {
   ProjectFetchError,
   useAcceptStageSuggestion,
@@ -102,6 +118,15 @@ type WorkbenchFocusHandler = (
   taskId?: string,
   line?: number | null,
 ) => void;
+
+type EmbeddedTerminalTab = {
+  id: string;
+  title: string;
+  cwd: string;
+  shell: string;
+  promptLabel: string;
+  running: boolean;
+};
 
 const LEFT_PANEL_DEFAULT_WIDTH = 320;
 const LEFT_PANEL_MIN_WIDTH = 240;
@@ -203,6 +228,32 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_DEFAULT_WIDTH);
   const [environmentCardCollapsed, setEnvironmentCardCollapsed] =
     useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalTabs, setTerminalTabs] = useState<EmbeddedTerminalTab[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const terminalWritersRef = useRef(new Map<string, (data: string) => void>());
+
+  useEffect(() => {
+    const unsubscribeData = onEmbeddedTerminalData((event) => {
+      terminalWritersRef.current.get(event.sessionId)?.(event.data);
+    });
+    const unsubscribeExit = onEmbeddedTerminalExit((event) => {
+      terminalWritersRef.current.get(event.sessionId)?.(
+        `\r\n[terminal exited: ${event.signal ?? event.code ?? "closed"}]\r\n`,
+      );
+      setTerminalTabs((tabs) =>
+        tabs.map((tab) =>
+          tab.id === event.sessionId
+            ? { ...tab, running: false }
+            : tab,
+        ),
+      );
+    });
+    return () => {
+      unsubscribeData();
+      unsubscribeExit();
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -305,20 +356,67 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const handleOpenTerminal = async () => {
     const result = await openProjectTerminal(project.path);
     if (result === "opened") {
-      toast.success("已打开本地终端", {
-        description: project.path,
-      });
+      setTerminalOpen(true);
+      const session = await startEmbeddedTerminal(project.path);
+      if (!session) {
+        toast.error("无法创建项目终端", {
+          description: project.path,
+        });
+        return;
+      }
+      const nextTab: EmbeddedTerminalTab = {
+        id: session.sessionId,
+        title: session.projectName,
+        cwd: session.cwd,
+        shell: session.shell,
+        promptLabel: session.promptLabel,
+        running: true,
+      };
+      setTerminalTabs((tabs) => [...tabs, nextTab]);
+      setActiveTerminalId(session.sessionId);
       return;
     }
     if (result === "copied") {
-      toast.info("Web 端无法直接打开本地终端，已复制项目路径", {
+      toast.info("Web 端无法直接打开本机终端，已复制项目路径", {
         description: project.path,
       });
       return;
     }
-    toast.error("无法打开本地终端", {
+    toast.error("无法打开本机终端", {
       description: project.path || "项目路径不可用",
     });
+  };
+
+  const handleCloseTerminalTab = async (sessionId: string) => {
+    terminalWritersRef.current.delete(sessionId);
+    await stopEmbeddedTerminal(sessionId);
+    setTerminalTabs((tabs) => {
+      const nextTabs = tabs.filter((tab) => tab.id !== sessionId);
+      if (nextTabs.length === 0) {
+        setTerminalOpen(false);
+        setActiveTerminalId(null);
+      } else if (activeTerminalId === sessionId) {
+        setActiveTerminalId(nextTabs[nextTabs.length - 1]?.id ?? null);
+      }
+      return nextTabs;
+    });
+  };
+
+  const handleCloseTerminalPanel = async () => {
+    const sessions = terminalTabs.map((tab) => tab.id);
+    setTerminalOpen(false);
+    setTerminalTabs([]);
+    setActiveTerminalId(null);
+    await Promise.all(sessions.map((sessionId) => stopEmbeddedTerminal(sessionId)));
+  };
+
+  const handleCopyTerminalPath = async () => {
+    const result = await copyProjectTerminalPath(project.path);
+    if (result === "copied") {
+      toast.success("已复制项目路径");
+    } else {
+      toast.error("复制项目路径失败");
+    }
   };
 
   const handleToggleFileExplorer = () => {
@@ -490,15 +588,26 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
               <MonitorCogIcon className="h-4 w-4" />
             </Button>
             <Button
-              aria-label="打开本地终端"
+              aria-label="打开项目终端"
               className="size-8 shrink-0"
               size="icon-sm"
-              title="打开本地终端"
+              title="打开项目终端"
               type="button"
               variant="ghost"
               onClick={() => void handleOpenTerminal()}
             >
               <TerminalIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              aria-label="新建项目终端"
+              className="size-8 shrink-0"
+              size="icon-sm"
+              title="新建项目终端"
+              type="button"
+              variant="ghost"
+              onClick={() => void handleOpenTerminal()}
+            >
+              <PlusIcon className="h-4 w-4" />
             </Button>
             <Button
               aria-label="切换文件树"
@@ -651,6 +760,29 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
               )}
             </div>
           </div>
+          {terminalOpen && (
+            <EmbeddedTerminalTabsPanel
+              activeId={activeTerminalId}
+              tabs={terminalTabs}
+              onActivate={setActiveTerminalId}
+              onAdd={() => void handleOpenTerminal()}
+              onClose={() => void handleCloseTerminalPanel()}
+              onCloseTab={(sessionId) => void handleCloseTerminalTab(sessionId)}
+              onCopyPath={() => void handleCopyTerminalPath()}
+              onRegisterWriter={(sessionId, writer) => {
+                terminalWritersRef.current.set(sessionId, writer);
+              }}
+              onResize={(sessionId, cols, rows) =>
+                void resizeEmbeddedTerminal(sessionId, cols, rows)
+              }
+              onUnregisterWriter={(sessionId) => {
+                terminalWritersRef.current.delete(sessionId);
+              }}
+              onWrite={(sessionId, data) =>
+                void writeEmbeddedTerminal(sessionId, data)
+              }
+            />
+          )}
         </div>
       </div>
       <Dialog open={isCommitDialogOpen} onOpenChange={setCommitDialogOpen}>
@@ -741,6 +873,251 @@ function WorkbenchToolbarButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+function EmbeddedTerminalTabsPanel({
+  activeId,
+  tabs,
+  onActivate,
+  onAdd,
+  onClose,
+  onCloseTab,
+  onCopyPath,
+  onRegisterWriter,
+  onResize,
+  onUnregisterWriter,
+  onWrite,
+}: {
+  activeId: string | null;
+  tabs: EmbeddedTerminalTab[];
+  onActivate: (sessionId: string) => void;
+  onAdd: () => void;
+  onClose: () => void;
+  onCloseTab: (sessionId: string) => void;
+  onCopyPath: () => void;
+  onRegisterWriter: (sessionId: string, writer: (data: string) => void) => void;
+  onResize: (sessionId: string, cols: number, rows: number) => void;
+  onUnregisterWriter: (sessionId: string) => void;
+  onWrite: (sessionId: string, data: string) => void;
+}) {
+  const activeTab = tabs.find((tab) => tab.id === activeId) ?? tabs[0] ?? null;
+
+  return (
+    <section
+      aria-label="项目终端"
+      className="bg-background flex h-[30vh] min-h-[220px] shrink-0 flex-col border-t"
+      data-testid="embedded-project-terminal"
+    >
+      <div className="bg-muted/40 flex h-10 shrink-0 items-center gap-1 border-b px-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {tabs.map((tab, index) => (
+            <div
+              key={tab.id}
+              className={cn(
+                "inline-flex h-7 max-w-[210px] shrink-0 items-center rounded-md text-xs transition-colors",
+                activeTab?.id === tab.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+              )}
+              title={tab.cwd}
+            >
+              <button
+                className="inline-flex h-full min-w-0 flex-1 items-center gap-1.5 px-2"
+                type="button"
+                onClick={() => onActivate(tab.id)}
+              >
+                <TerminalIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{tab.title || `终端 ${index + 1}`}</span>
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 rounded-full",
+                    tab.running ? "bg-emerald-500" : "bg-muted-foreground/40",
+                  )}
+                />
+              </button>
+              <button
+                aria-label={`关闭终端标签 ${index + 1}`}
+                className="hover:bg-muted-foreground/10 mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded"
+                title={`关闭终端 ${index + 1}`}
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseTab(tab.id);
+                }}
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          <Button
+            aria-label="新建项目终端"
+            className="size-7 shrink-0"
+            size="icon-sm"
+            title="新建项目终端"
+            type="button"
+            variant="ghost"
+            onClick={onAdd}
+          >
+            <PlusIcon className="h-4 w-4" />
+          </Button>
+        </div>
+        {activeTab && (
+          <span className="text-muted-foreground hidden max-w-[40vw] truncate font-mono text-xs lg:inline">
+            {activeTab.cwd}
+          </span>
+        )}
+        <Button
+          aria-label="复制项目路径"
+          className="size-7"
+          size="icon-sm"
+          title="复制项目路径"
+          type="button"
+          variant="ghost"
+          onClick={onCopyPath}
+        >
+          <CopyIcon className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          aria-label="关闭终端面板"
+          className="size-7"
+          size="icon-sm"
+          title="关闭终端面板"
+          type="button"
+          variant="ghost"
+          onClick={onClose}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="bg-background min-h-0 flex-1 overflow-hidden">
+        {tabs.length > 0 ? (
+          tabs.map((tab) => (
+            <EmbeddedXtermViewport
+              key={tab.id}
+              active={activeTab?.id === tab.id}
+              tab={tab}
+              onRegisterWriter={onRegisterWriter}
+              onResize={onResize}
+              onUnregisterWriter={onUnregisterWriter}
+              onWrite={onWrite}
+            />
+          ))
+        ) : (
+          <span className="text-muted-foreground">点击 + 新建项目终端</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EmbeddedXtermViewport({
+  active,
+  tab,
+  onRegisterWriter,
+  onResize,
+  onUnregisterWriter,
+  onWrite,
+}: {
+  active: boolean;
+  tab: EmbeddedTerminalTab;
+  onRegisterWriter: (sessionId: string, writer: (data: string) => void) => void;
+  onResize: (sessionId: string, cols: number, rows: number) => void;
+  onUnregisterWriter: (sessionId: string) => void;
+  onWrite: (sessionId: string, data: string) => void;
+}) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const { resolvedTheme } = useTheme();
+
+  /** Read the actual computed CSS custom-property value at runtime. */
+  const readCssVar = (name: string): string => {
+    if (typeof document === "undefined") return "";
+    return getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
+  };
+
+  const getTerminalTheme = () => ({
+    background: readCssVar("--background") || "#0a0a0a",
+    foreground: readCssVar("--foreground") || "#fafafa",
+    cursor: readCssVar("--foreground") || "#fafafa",
+    selectionBackground: readCssVar("--muted") || "#333333",
+  });
+
+  useEffect(() => {
+    const host = viewportRef.current;
+    if (!host) return;
+
+    const terminal = new XTerm({
+      allowProposedApi: false,
+      convertEol: true,
+      cursorBlink: true,
+      cursorStyle: "block",
+      fontFamily:
+        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+      fontSize: 12,
+      lineHeight: 1.25,
+      scrollback: 5000,
+      theme: getTerminalTheme(),
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(host);
+    fitAddon.fit();
+    onResize(tab.id, terminal.cols, terminal.rows);
+    terminal.focus();
+
+    const dataDisposable = terminal.onData((data) => onWrite(tab.id, data));
+    onRegisterWriter(tab.id, (data) => terminal.write(data));
+
+    const observer = new ResizeObserver(() => {
+      fitAddon.fit();
+      onResize(tab.id, terminal.cols, terminal.rows);
+    });
+    observer.observe(host);
+
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+
+    return () => {
+      observer.disconnect();
+      dataDisposable.dispose();
+      onUnregisterWriter(tab.id);
+      terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, [onRegisterWriter, onResize, onUnregisterWriter, onWrite, tab.id]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setTimeout(() => {
+      fitAddonRef.current?.fit();
+      const terminal = terminalRef.current;
+      if (terminal) {
+        onResize(tab.id, terminal.cols, terminal.rows);
+        terminal.focus();
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [active, onResize, tab.id]);
+
+  // React to theme changes so the terminal background/foreground stays in
+  // sync with the app theme without requiring a terminal restart.
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.options.theme = getTerminalTheme();
+  }, [resolvedTheme]);
+
+  return (
+    <div
+      className={cn("size-full p-2", !active && "hidden")}
+      data-testid="embedded-project-terminal-viewport"
+      ref={viewportRef}
+    />
   );
 }
 
