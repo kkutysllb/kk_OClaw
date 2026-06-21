@@ -11,7 +11,7 @@ import { getAPIClient } from "../api";
 import { fetch } from "../api/fetcher";
 import { getBackendBaseURL, isDesktop } from "../config";
 import { useI18n } from "../i18n/hooks";
-import type { FileInMessage } from "../messages/utils";
+import { isHiddenFromUIMessage, type FileInMessage } from "../messages/utils";
 import type { LocalSettings } from "../settings";
 import { useUpdateSubtask } from "../tasks/context";
 import type { UploadedFileInfo } from "../uploads";
@@ -797,12 +797,8 @@ export function useThreadStream({
     messagesRef.current = thread.messages;
   }
 
-  // Filter out middleware messages from thread.messages before merging
   const filteredThreadMessages = thread.messages.filter(
-    (msg) => {
-      const meta = (msg as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
-      return !(typeof meta?.caller === "string" && meta.caller.startsWith("middleware:"));
-    }
+    (msg) => !isHiddenFromUIMessage(msg),
   );
 
   // Always merge all three sources.  When the outer `threadId` prop is still
@@ -925,7 +921,7 @@ export function useThreadHistory(
         return res.json();
       });
       const _messages = result.data
-        .filter((m) => !m.metadata.caller?.startsWith("middleware:"))
+        .filter((m) => !isHiddenFromUIMessage(m.content))
         .map((m) => m.content);
       setMessages((prev) => [..._messages, ...prev]);
       indexRef.current -= 1;

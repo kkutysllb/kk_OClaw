@@ -16,6 +16,7 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
+  isHiddenFromUIMessage,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { Subtask } from "@/core/tasks";
@@ -163,11 +164,7 @@ export function MessageList({
   const { t } = useI18n();
   const rehypePlugins = useRehypeSplitWordsIntoSpans(thread.isLoading);
   const updateSubtask = useUpdateSubtask();
-  // Filter out middleware messages from real-time stream
-  const messages = thread.messages.filter((msg) => {
-    const metadata = (msg as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
-    return !(typeof metadata?.caller === "string" && metadata.caller.startsWith("middleware:"));
-  });
+  const messages = thread.messages.filter((msg) => !isHiddenFromUIMessage(msg));
 
   if (thread.isThreadLoading && messages.length === 0) {
     return <MessageListSkeleton />;

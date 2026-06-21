@@ -363,7 +363,7 @@ export function isHiddenFromUIMessage(message: Message) {
   // These are AI agent internal planning blocks that should never be shown to users.
   // We check the full extracted content AND individual content blocks (for array
   // content where the header might not be at the start of the joined text).
-  if (message.type === "ai" && !message.tool_calls?.length) {
+  if (message.type !== "tool" && !("tool_calls" in message && message.tool_calls?.length)) {
     const content = extractContentFromMessage(message);
     if (content && AGENT_ARTIFACT_HEADER_RE.test(content.trim())) {
       return true;

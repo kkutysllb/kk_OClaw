@@ -1,5 +1,6 @@
 import type { Run } from "@langchain/langgraph-sdk";
 
+import { isHiddenFromUIMessage } from "@/core/messages/utils";
 import type { AgentThreadState, RunMessage } from "@/core/threads/types";
 
 import { getRuntimeRefreshQueries, type TaskRuntimeTarget } from "./task-runtime-adapters";
@@ -43,7 +44,7 @@ export async function refreshRuntimeTargetsOnce(
         activeRun.run_id,
       );
       const messages = runMessages
-        .filter((message) => !message.metadata.caller?.startsWith("middleware:"))
+        .filter((message) => !isHiddenFromUIMessage(message.content))
         .map((message) => message.content);
       const current = getThreadRuntimeSnapshot(target.threadId);
       const values = current?.values ?? {

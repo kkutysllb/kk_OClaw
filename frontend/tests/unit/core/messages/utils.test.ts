@@ -33,6 +33,33 @@ test("isHiddenFromUIMessage hides ai messages whose internal header uses non-bre
   expect(isHiddenFromUIMessage(message as never)).toBe(true);
 });
 
+test("isHiddenFromUIMessage hides summarization human messages with internal headers", () => {
+  const message = {
+    type: "human",
+    name: "summary",
+    content: [
+      {
+        type: "text",
+        text: "SESSION INTENT\nThe user wants to review implementation progress.\n\nSUMMARY\nProject root available.",
+      },
+    ],
+    additional_kwargs: {},
+  };
+
+  expect(isHiddenFromUIMessage(message as never)).toBe(true);
+});
+
+test("isHiddenFromUIMessage hides internal header messages even without metadata", () => {
+  const message = {
+    type: "human",
+    content:
+      "SESSION INTENT\nThe user wants to review implementation progress.\n\nSUMMARY\nProject root available.",
+    additional_kwargs: {},
+  };
+
+  expect(isHiddenFromUIMessage(message as never)).toBe(true);
+});
+
 test("extractContentFromMessage strips internal planning blocks from tool messages", () => {
   const message = {
     type: "tool",

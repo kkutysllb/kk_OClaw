@@ -65,6 +65,55 @@ describe("workspace runtime refresh", () => {
     expect(invalidateQueries).toHaveBeenCalledWith(["threads", "search"]);
   });
 
+  test("hides internal middleware summary messages during runtime refresh", async () => {
+    const invalidateQueries = vi.fn();
+
+    await refreshRuntimeTargetsOnce(
+      [
+        {
+          taskId: "chat:thread-a",
+          kind: "chat",
+          threadId: "thread-a",
+        },
+      ],
+      {
+        listRuns: vi.fn(async () => [
+          { run_id: "run-a", status: "running" as const },
+        ]),
+        fetchRunMessages: vi.fn(async () => [
+          {
+            run_id: "run-a",
+            content: {
+              type: "human" as const,
+              id: "summary-a",
+              name: "summary",
+              content:
+                "SESSION INTENT\nThe user wants status.\n\nSUMMARY\nInternal state only.",
+            },
+            metadata: { caller: "agent" },
+            created_at: "2026-06-21T00:00:00Z",
+          },
+          {
+            run_id: "run-a",
+            content: {
+              type: "human" as const,
+              id: "m-a",
+              content: "visible update",
+            },
+            metadata: { caller: "agent" },
+            created_at: "2026-06-21T00:00:01Z",
+          },
+        ]),
+        invalidateQueries,
+        getFallbackState: makeState,
+      },
+    );
+
+    expect(getThreadRuntimeSnapshot("thread-a")?.messages).toEqual([
+      { type: "human", id: "m-a", content: "visible update" },
+    ]);
+  });
+
   test("uses task adapters to refresh coding-specific queries", async () => {
     const invalidateQueries = vi.fn();
 
