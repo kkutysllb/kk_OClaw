@@ -79,7 +79,15 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (projectId: string) => deleteProject(projectId),
-    onSuccess: () => {
+    onSuccess: (_result, projectId) => {
+      // Critical: purge all cached queries for the deleted project BEFORE
+      // invalidating the list. Otherwise `invalidateQueries({ queryKey: ["projects"] })`
+      // uses prefix matching (exact:false by default) and re-fetches the now-
+      // deleted project's detail, worktrees, files, diff, etc. — all returning
+      // 404 and entering react-query's retry loop. Combined with
+      // refetchOnWindowFocus/refetchOnMount this pins the UI for tens of
+      // seconds (see gateway.log lines 199-210: repeated 404s after delete).
+      queryClient.removeQueries({ queryKey: ["projects", projectId] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });

@@ -23,8 +23,10 @@ import {
   SearchIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useRef, useState, useEffect, useMemo } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import {
+  ProjectFetchError,
   useAcceptStageSuggestion,
   useCodingRoiReports,
   useCodingRoiSummary,
@@ -85,8 +88,20 @@ type WorkbenchFocusHandler = (
 ) => void;
 
 export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
-  const { project, isLoading } = useProject(projectId);
+  const router = useRouter();
+  const { project, isLoading, error } = useProject(projectId);
   const { worktrees } = useWorktrees(projectId);
+
+  // If the project genuinely does not exist (HTTP 404 — typically because it
+  // was deleted from another tab/session), bounce the user back to the list.
+  // We deliberately only react to 404 and NOT to transient network/5xx errors,
+  // so a flaky gateway doesn't kick users out of an otherwise valid project.
+  useEffect(() => {
+    if (!isLoading && project === null && error instanceof ProjectFetchError && error.status === 404) {
+      toast.error("项目不存在或已被删除，已返回项目列表");
+      router.replace("/workspace/coding");
+    }
+  }, [isLoading, project, error, router]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [focusedLine, setFocusedLine] = useState<number | null>(null);

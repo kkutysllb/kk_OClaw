@@ -45,9 +45,30 @@ export async function listProjects(): Promise<Project[]> {
   return data.projects;
 }
 
+/** Error thrown when ``GET /api/projects/{id}`` returns a non-OK response.
+ *
+ * The ``status`` field lets callers distinguish a genuine 404 (project deleted
+ * or never existed) from transient network/server failures, so the UI can
+ * decide whether to redirect away or show a retry affordance.
+ */
+export class ProjectFetchError extends Error {
+  readonly status: number;
+  constructor(projectId: string, status: number, statusText: string) {
+    super(
+      status === 404
+        ? `Project '${projectId}' not found`
+        : `Failed to load project (${status} ${statusText})`,
+    );
+    this.name = "ProjectFetchError";
+    this.status = status;
+  }
+}
+
 export async function getProject(projectId: string): Promise<Project> {
   const res = await fetch(`${getBackendBaseURL()}/api/projects/${projectId}`);
-  if (!res.ok) throw new Error(`Project '${projectId}' not found`);
+  if (!res.ok) {
+    throw new ProjectFetchError(projectId, res.status, res.statusText);
+  }
   return res.json() as Promise<Project>;
 }
 

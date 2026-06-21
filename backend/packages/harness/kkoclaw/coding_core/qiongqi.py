@@ -483,9 +483,22 @@ def _build_delivery_stage_section(project_root: str) -> str | None:
     try:
         from kkoclaw.coding_core.stage_state import ProjectStageStore
 
-        stage_state = ProjectStageStore.from_home().get_state(project_root)
+        store = ProjectStageStore.from_home()
+        stage_state = store.get_state(project_root)
+
+        # Cold-start bootstrap: when a project has no stage yet, automatically
+        # enter "requirements". This is idempotent — once set, subsequent
+        # calls take the normal rendering path below. "requirements" is
+        # the mandatory entry point for every project, so there is no
+        # decision to defer to the user here (unlike forward transitions
+        # which still respect auto_accept_forward_stage / manual confirm).
         if not stage_state.current_stage:
-            return None
+            stage_state = store.set_current_stage(
+                project_root,
+                "requirements",
+                reason="项目冷启动：自动进入需求阶段",
+                source="agent_accepted",
+            )
 
         from kkoclaw.coding_core.delivery_stages import get_stage
 
