@@ -14,6 +14,12 @@ directories:
   output: release
   buildResources: build
 
+# node-pty@1.1.0 ships prebuilds compatible with Electron 33 (Node ABI 130)
+# for darwin-arm64, darwin-x64, win32-arm64, and win32-x64.  Rebuilding from
+# source via node-gyp fails on Python ≥ 3.12 (missing distutils) and is
+# unnecessary — the prebuilds already match the target Electron runtime.
+npmRebuild: false
+
 # Entry point + compiled preload (relative to desktop-electron/).
 files:
   - dist/**/*
