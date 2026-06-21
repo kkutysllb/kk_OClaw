@@ -68,7 +68,7 @@ backend/packages/harness/kkoclaw/coding_core
   - `roi_middleware.py`：ROI telemetry 采集。
   - `prompt.py`：Coding prompt 装配。
 - `backend/packages/harness/kkoclaw/agents/middlewares/`
-  - `post_edit_verify_middleware.py`：改→验证闭环中间件，检测 mutation 后无 verification 则注入提醒。
+  - `post_edit_verify_middleware.py`：轻量 TDD-first + 改→验证闭环中间件，检测 feature/bugfix 先改生产代码且无测试动作时注入 TDD 提醒；检测 mutation 后无 verification 时注入验证提醒。
 - `backend/packages/harness/kkoclaw/tools/coding/`
   - `file_read.py`、`file_edit.py`、`git_tools.py`、`pr_tools.py`、`test_tools.py`（结构化解析 + 多语言 linter）、`worktree.py`。
   - `symbol_tools.py`：符号级导航（find_symbols / read_symbol，支持 Python/JS-TS/Go/Rust）。
@@ -128,7 +128,10 @@ Qiongqi 的稳定提示词（`_STABLE_QIONGQI_PROMPT`）强调：
 
 **Workflow Patterns（工作流模式）**：Feature 实现 / Bug 修复 / 重构 / Code Review 四种模式。
 
-**PostEditVerifyMiddleware** 在运行时强制执行「改→验证闭环」：检测 mutation 工具成功调用后若无 verification 工具调用，在下一轮自动注入提醒，幂等设计避免循环。
+**PostEditVerifyMiddleware** 在运行时执行两层质量提醒：
+
+- **轻量 TDD-first guard**：当最新用户任务看起来是功能实现或缺陷修复时，如果 agent 先修改生产代码、但尚未出现测试文件变更或 run_tests/run_linter/bash 等测试动作，会在下一轮注入隐藏提醒，要求补齐测试先行证据或说明无测试条件。当前为 soft guard，不阻断执行。
+- **改→验证闭环**：检测 mutation 工具成功调用后若无 verification 工具调用，在下一轮自动注入验证提醒，幂等设计避免循环。
 
 **Dynamic Context（动态上下文）** 除项目路径/技能/任务细节外，现在还自动注入：
 
@@ -391,6 +394,7 @@ pnpm --dir frontend run typecheck
 - **结构化重构工具**（rename_symbol token-boundary / extract_function，多语言函数语法：Python `def` / JS-TS `function` / Go `func` / Rust `fn`，**参数与返回值自动推断**：Python 用 `ast` 模块精确分析 Load/Store，JS-TS/Go/Rust 用启发式正则）。
 - **编辑事务回滚**（EditSnapshotStore + undo_last_edit / list_edit_snapshots；所有编辑工具（含 rename_symbol/extract_function）统一 `record_edit_snapshot → write_file` 顺序，确保快照在文件写入前完成，达到事务级 undo 可靠性）。
 - **PostEditVerifyMiddleware**（改→验证闭环；覆盖 apply_diff / multi_edit / insert_at_line / rename_symbol / extract_function 等所有文件修改工具）。
+- **轻量 TDD-first guard**（集成在 PostEditVerifyMiddleware 中；对 feature/bugfix 类任务检测“先改生产代码、无测试动作”的路径，并注入 soft reminder，提示先补测试、先跑失败测试或说明无测试条件）。
 - **测试结果结构化解析**（pytest --json-report 优先 + jest + 多语言 linter 检测）。
 - Qiongqi events、task changes、ROI。
 - 基于 diff/task/events/PR context 的 Code Review。
@@ -403,6 +407,11 @@ pnpm --dir frontend run typecheck
 
 后续可继续增强：
 
+- 将轻量 TDD-first guard 升级为显式 TDD 状态机：`idle → test_written/test_run → red_seen → implementation_edit → green_seen`。
+- 对 run_tests/run_linter 输出做红灯语义解析，区分“预期失败测试”“环境错误”“依赖缺失”“无测试可跑”。
+- 将 TDD 状态写入 graph state / session，并在前端 Session 或 Workflow 面板可视化展示。
+- 为纯样式、文档、配置、迁移脚本、紧急热修等场景提供更精确的例外规则。
+- 支持 hard mode：在配置允许时，对未验证完成声明或未满足 TDD 状态的完成响应进行阻断。
 - 跨提交/跨分支的更复杂 PR 审查策略。
 - Review finding 的精确行号映射和更细粒度 evidence。
 - 项目私有 skills 的治理策略和导入/导出能力。

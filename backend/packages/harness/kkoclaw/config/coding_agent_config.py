@@ -33,7 +33,7 @@ class CodingAgentConfig(BaseModel):
     )
     post_edit_verify_enabled: bool = Field(
         default=True,
-        description="Inject a verification reminder after successful coding edits",
+        description="Enable the default lightweight TDD-first and post-edit verification guard",
     )
     post_edit_verify_mode: Literal["soft", "hard"] = Field(
         default="soft",

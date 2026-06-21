@@ -1127,9 +1127,9 @@ cron_management:
 #   sandbox: local
 #   # 默认权限模式：safe-only（只读+安全操作）| safe（需确认危险操作）| yolo（全自动）
 #   default_permission_mode: safe-only
-#   # 编辑后验证：apply_diff/multi_edit/insert_at_line 成功后注入验证提醒
-#   post_edit_verify_enabled: true
-#   # 验证模式：soft（仅提醒）| hard（阻止 model 在验证通过前报告完成）
+#   # 轻量 TDD-first + 编辑后验证默认开启，无需手动配置。
+#   # 如需特殊关闭，可显式设置 post_edit_verify_enabled: false。
+#   # 如需更严格的验证策略，可切换验证模式：soft（仅提醒）| hard（预留强约束模式）
 #   post_edit_verify_mode: soft
 #   # 顺向前向阶段转移自动接受（回退/跳级/进 delivery 仍需人工确认）
 #   auto_accept_forward_stage: false
@@ -1156,7 +1156,6 @@ coding_agent:
   model: null
   sandbox: local
   default_permission_mode: safe-only
-  post_edit_verify_enabled: true
   post_edit_verify_mode: soft
   auto_accept_forward_stage: false
   worktree:

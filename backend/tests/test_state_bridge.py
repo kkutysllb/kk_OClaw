@@ -330,3 +330,53 @@ class TestPostEditVerifyCoversRefactorTools:
             ),
         ]
         assert mw._needs_reminder(messages) is False
+
+    def test_tdd_guard_reminds_when_feature_edits_production_before_test(self):
+        from langchain_core.messages import HumanMessage, ToolMessage
+
+        mw = PostEditVerifyMiddleware(mode="soft")
+        messages = [
+            HumanMessage(content="请修复登录失败 bug，并补齐回归测试"),
+            ToolMessage(
+                content="Modified src/auth/login.py",
+                name="apply_diff",
+                tool_call_id="tc1",
+            ),
+        ]
+
+        assert mw._needs_tdd_first_reminder(messages) is True
+
+    def test_tdd_guard_suppressed_after_test_file_edit(self):
+        from langchain_core.messages import HumanMessage, ToolMessage
+
+        mw = PostEditVerifyMiddleware(mode="soft")
+        messages = [
+            HumanMessage(content="请实现支付回调功能"),
+            ToolMessage(
+                content="Modified tests/test_payment_callback.py",
+                name="apply_diff",
+                tool_call_id="tc1",
+            ),
+            ToolMessage(
+                content="Modified src/payment/callback.py",
+                name="apply_diff",
+                tool_call_id="tc2",
+            ),
+        ]
+
+        assert mw._needs_tdd_first_reminder(messages) is False
+
+    def test_tdd_guard_ignores_docs_only_task(self):
+        from langchain_core.messages import HumanMessage, ToolMessage
+
+        mw = PostEditVerifyMiddleware(mode="soft")
+        messages = [
+            HumanMessage(content="请更新 README 文档说明"),
+            ToolMessage(
+                content="Modified src/auth/login.py",
+                name="apply_diff",
+                tool_call_id="tc1",
+            ),
+        ]
+
+        assert mw._needs_tdd_first_reminder(messages) is False
