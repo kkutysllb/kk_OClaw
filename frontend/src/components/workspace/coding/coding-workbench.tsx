@@ -155,6 +155,34 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const resultsThreadId = codingThreadId;
   const { changes: historicalChanges } = useCodingSessionChanges(codingThreadId);
   const { review } = useLatestCodingReview(codingThreadId);
+  const reviewSummary = review?.summary;
+  const taskChangeSummary = useMemo(
+    () => ({
+      additions: historicalChanges.reduce((sum, change) => sum + change.additions, 0),
+      deletions: historicalChanges.reduce((sum, change) => sum + change.deletions, 0),
+      changedFiles: new Set(historicalChanges.map((change) => change.path)).size,
+    }),
+    [historicalChanges],
+  );
+  const reviewChangeSummary = reviewSummary
+    ? {
+        additions: reviewSummary.additions,
+        deletions: reviewSummary.deletions,
+        changedFiles:
+          reviewSummary.project_files > 0
+            ? reviewSummary.project_files
+            : reviewSummary.task_changes,
+      }
+    : {
+        additions: 0,
+        deletions: 0,
+        changedFiles: 0,
+      };
+  const historicalChangeSummary = {
+    additions: reviewChangeSummary.additions || taskChangeSummary.additions,
+    deletions: reviewChangeSummary.deletions || taskChangeSummary.deletions,
+    changedFiles: reviewChangeSummary.changedFiles || taskChangeSummary.changedFiles,
+  };
 
   const [activeCodeTab, setActiveCodeTab] = useState<
     "code" | "task-changes" | "diff" | "results" | "review"
@@ -354,21 +382,6 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     environment?.branch ??
     worktrees.find((worktree) => worktree.branch)?.branch ??
     (project.is_git_repo ? "main" : "未连接");
-  const reviewSummary = review?.summary;
-  const historicalChangeSummary = reviewSummary
-    ? {
-        additions: reviewSummary.additions,
-        deletions: reviewSummary.deletions,
-        changedFiles:
-          reviewSummary.project_files > 0
-            ? reviewSummary.project_files
-            : reviewSummary.task_changes,
-      }
-    : {
-        additions: historicalChanges.reduce((sum, change) => sum + change.additions, 0),
-        deletions: historicalChanges.reduce((sum, change) => sum + change.deletions, 0),
-        changedFiles: new Set(historicalChanges.map((change) => change.path)).size,
-      };
   const diffAdditions = diff?.files.reduce((sum, file) => sum + file.additions, 0) ?? 0;
   const diffDeletions = diff?.files.reduce((sum, file) => sum + file.deletions, 0) ?? 0;
   const environmentChangedFiles = environment?.changed_files ?? 0;
@@ -1551,6 +1564,16 @@ function CodingRoiInspector({ threadId }: { threadId: string }) {
   const { reports } = useCodingRoiReports(threadId);
   const [expandedReport, setExpandedReport] = useState<number | null>(null);
   const derived = summary?.derived;
+  const actualTokens = derived?.actual_tokens ?? summary?.provider_usage.total_tokens ?? 0;
+  const estimatedSavedTokens = derived?.estimated_saved_tokens ?? 0;
+  const estimatedBaselineTokens =
+    derived?.estimated_baseline_tokens ?? actualTokens + estimatedSavedTokens;
+  const savingRatio = derived?.saving_ratio ?? 0;
+  const roiHasSavings =
+    estimatedSavedTokens > 0 ||
+    (summary?.tool_output.externalized_chars ?? 0) > 0 ||
+    (summary?.token_economy.compressed_chars_saved ?? 0) > 0 ||
+    (summary?.latest?.hidden_tool_count ?? 0) > 0;
 
   return (
     <InspectorSection
@@ -1571,71 +1594,79 @@ function CodingRoiInspector({ threadId }: { threadId: string }) {
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-3 p-3">
-            {/* Trend sparkline */}
-            {reports.length > 1 && (
-              <RoiTrendSparkline reports={reports} />
-            )}
-            <MetricGrid
-              items={[
-                [
-                  "节省率",
-                  formatPercent(derived?.saving_ratio ?? 0),
-                  "估算节省 token / 估算基线 token",
-                ],
-                [
-                  "估算节省",
-                  derived?.estimated_saved_tokens ?? 0,
-                  "工具裁剪、输出外部化和上下文压缩带来的估算 token 收益",
-                ],
-                [
-                  "工具裁剪",
-                  derived?.tool_catalog_saved_tokens ?? 0,
-                  "隐藏工具 schema 带来的估算 token 收益",
-                ],
-                [
-                  "压缩收益",
-                  derived?.token_economy_saved_tokens ?? 0,
-                  "历史工具结果压缩带来的估算 token 收益",
-                ],
-              ]}
-            />
-            <div className="space-y-2 rounded-md border p-2">
-              <p className="text-xs font-medium">收益构成</p>
-              <MetricGrid
-                items={[
-                  [
-                    "基线",
-                    derived?.estimated_baseline_tokens ?? 0,
-                    "如果不启用 Qiongqi ROI 优化的估算 token 基线",
-                  ],
-                  [
-                    "实际",
-                    derived?.actual_tokens ?? 0,
-                    "模型实际 provider usage total tokens",
-                  ],
-                  [
-                    "外部化",
-                    derived?.tool_output_saved_tokens ?? 0,
-                    "工具输出外部化带来的估算 token 收益",
-                  ],
-                  [
-                    "隐藏率",
-                    formatPercent(derived?.tool_hidden_ratio ?? 0),
-                    "隐藏工具数 / 全量工具数",
-                  ],
-                ]}
-              />
+            <div className="rounded-md border bg-muted/10 p-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_128px]">
+                <div className="grid grid-cols-2 gap-2">
+                  <RoiHeroMetric
+                    label="估算节省"
+                    value={formatCompactNumber(estimatedSavedTokens)}
+                    detail={`${formatPercent(savingRatio)} 节省率`}
+                  />
+                  <RoiHeroMetric
+                    label="实际成本"
+                    value={formatCompactNumber(actualTokens)}
+                    detail={`${summary.report_count} 次模型调用报告`}
+                  />
+                  <RoiHeroMetric
+                    label="估算基线"
+                    value={formatCompactNumber(estimatedBaselineTokens)}
+                    detail="未启用 ROI 优化的估算 token"
+                  />
+                  <RoiHeroMetric
+                    label="隐藏率"
+                    value={formatPercent(derived?.tool_hidden_ratio ?? 0)}
+                    detail={`${summary.latest?.hidden_tool_count ?? 0} 个隐藏工具`}
+                  />
+                </div>
+                <RoiSavingsDonut ratio={savingRatio} />
+              </div>
+              {!roiHasSavings && (
+                <p className="text-muted-foreground mt-3 rounded-md border border-dashed px-2 py-1.5 text-[11px] leading-4">
+                  历史报告保存了 token 成本，但没有保存工具裁剪、输出外部化或压缩计数；后续任务会从运行消息中持续采集这些收益项。
+                </p>
+              )}
             </div>
-            <div className="space-y-2 rounded-md border p-2">
-              <p className="text-xs font-medium">成本明细</p>
-              <MetricGrid
-                items={[
-                  ["Total tokens", summary.provider_usage.total_tokens ?? 0, "累计令牌消耗"],
-                  ["Input", summary.provider_usage.input_tokens ?? 0, "提示词输入令牌"],
-                  ["Output", summary.provider_usage.output_tokens ?? 0, "模型输出令牌"],
-                  ["Hidden tools", summary.latest?.hidden_tool_count ?? 0, "当前最新报告的隐藏工具数量"],
-                ]}
-              />
+            {reports.length > 1 && <RoiTrendSparkline reports={reports} />}
+            <div className="grid gap-3 xl:grid-cols-2">
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">收益构成</p>
+                  <span className="text-muted-foreground font-mono text-[10px]">
+                    {formatCompactNumber(estimatedSavedTokens)}
+                  </span>
+                </div>
+                <RoiContributionBars
+                  items={[
+                    {
+                      label: "工具裁剪",
+                      value: derived?.tool_catalog_saved_tokens ?? 0,
+                      tone: "emerald",
+                    },
+                    {
+                      label: "输出外部化",
+                      value: derived?.tool_output_saved_tokens ?? 0,
+                      tone: "cyan",
+                    },
+                    {
+                      label: "上下文压缩",
+                      value: derived?.token_economy_saved_tokens ?? 0,
+                      tone: "amber",
+                    },
+                  ]}
+                />
+              </div>
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">成本明细</p>
+                  <span className="text-muted-foreground font-mono text-[10px]">
+                    {formatCompactNumber(summary.provider_usage.total_tokens ?? 0)}
+                  </span>
+                </div>
+                <RoiCostBreakdown
+                  input={summary.provider_usage.input_tokens ?? 0}
+                  output={summary.provider_usage.output_tokens ?? 0}
+                />
+              </div>
             </div>
             {/* Report history */}
             {reports.length > 0 && (
@@ -1713,22 +1744,147 @@ function RoiTrendSparkline({ reports }: { reports: QiongqiRoiReport[] }) {
   const sorted = reports.slice().sort((a, b) => a.seq - b.seq);
   const maxTokens = Math.max(...sorted.map((r) => r.provider_usage?.input_tokens ?? 0), 1);
   return (
-    <div className="rounded-md border p-2">
-      <p className="text-muted-foreground mb-1.5 text-[10px]">
-        Input tokens 趋势（#{sorted[0]?.seq} → #{sorted[sorted.length - 1]?.seq}）
-      </p>
-      <div className="flex items-end gap-px" style={{ height: 40 }}>
+    <div className="rounded-md border p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-medium">Input tokens 趋势</p>
+        <span className="text-muted-foreground font-mono text-[10px]">
+          #{sorted[0]?.seq} → #{sorted[sorted.length - 1]?.seq}
+        </span>
+      </div>
+      <div className="flex items-end gap-px" style={{ height: 52 }}>
         {sorted.map((report) => {
-          const height = ((report.provider_usage?.input_tokens ?? 0) / maxTokens) * 36;
+          const height = ((report.provider_usage?.input_tokens ?? 0) / maxTokens) * 48;
           return (
             <div
               key={report.seq}
-              className="bg-emerald-500/60 hover:bg-emerald-500/90 flex-1 rounded-t-sm transition-colors"
+              className="bg-emerald-500/55 hover:bg-emerald-400 flex-1 rounded-t-[2px] transition-colors"
               style={{ height: Math.max(2, height) }}
               title={`#${report.seq}: ${report.provider_usage?.input_tokens ?? 0} input tokens`}
             />
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function RoiHeroMetric({
+  detail,
+  label,
+  value,
+}: {
+  detail: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background/60 p-2">
+      <p className="text-muted-foreground text-[11px]">{label}</p>
+      <p className="mt-1 truncate font-mono text-base font-semibold">{value}</p>
+      <p className="text-muted-foreground mt-0.5 truncate text-[10px]">{detail}</p>
+    </div>
+  );
+}
+
+function RoiSavingsDonut({ ratio }: { ratio: number }) {
+  const normalized = clampRatio(ratio);
+  const degree = Math.round(normalized * 360);
+  return (
+    <div className="flex flex-col items-center justify-center rounded-md border bg-background/60 p-2">
+      <div
+        aria-label="节省率"
+        className="relative grid size-24 place-items-center rounded-full"
+        style={{
+          background: `conic-gradient(rgb(16 185 129) ${degree}deg, rgb(39 39 42) ${degree}deg 360deg)`,
+        }}
+      >
+        <div className="bg-background grid size-16 place-items-center rounded-full border">
+          <span className="font-mono text-sm font-semibold">
+            {formatPercent(normalized)}
+          </span>
+        </div>
+      </div>
+      <p className="text-muted-foreground mt-2 text-[10px]">节省率</p>
+    </div>
+  );
+}
+
+function RoiContributionBars({
+  items,
+}: {
+  items: Array<{ label: string; value: number; tone: "emerald" | "cyan" | "amber" }>;
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <RoiBar
+          key={item.label}
+          label={item.label}
+          percent={(item.value / maxValue) * 100}
+          tone={item.tone}
+          value={formatCompactNumber(item.value)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RoiCostBreakdown({ input, output }: { input: number; output: number }) {
+  const total = Math.max(input + output, 1);
+  return (
+    <div className="space-y-3">
+      <RoiBar
+        label="Input"
+        percent={(input / total) * 100}
+        tone="cyan"
+        value={formatCompactNumber(input)}
+      />
+      <RoiBar
+        label="Output"
+        percent={(output / total) * 100}
+        tone="amber"
+        value={formatCompactNumber(output)}
+      />
+      <div className="bg-muted h-2 overflow-hidden rounded-full">
+        <div
+          className="h-full bg-cyan-500"
+          style={{ width: `${Math.max(0, Math.min(100, (input / total) * 100))}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RoiBar({
+  label,
+  percent,
+  tone,
+  value,
+}: {
+  label: string;
+  percent: number;
+  tone: "emerald" | "cyan" | "amber";
+  value: string;
+}) {
+  const width = Math.max(0, Math.min(100, percent));
+  const toneClass =
+    tone === "emerald"
+      ? "bg-emerald-500"
+      : tone === "cyan"
+        ? "bg-cyan-500"
+        : "bg-amber-500";
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono">{value}</span>
+      </div>
+      <div className="bg-muted h-2 overflow-hidden rounded-full">
+        <div
+          className={cn("h-full rounded-full", toneClass)}
+          style={{ width: `${width}%` }}
+        />
       </div>
     </div>
   );
@@ -2778,6 +2934,18 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
 
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+    notation: value >= 100000 ? "compact" : "standard",
+  }).format(value);
+}
+
 function formatPercent(value: number): string {
-  return `${Math.round(value * 100)}%`;
+  return `${Math.round(clampRatio(value) * 100)}%`;
+}
+
+function clampRatio(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
 }

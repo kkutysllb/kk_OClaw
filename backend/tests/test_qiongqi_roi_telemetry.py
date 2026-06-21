@@ -134,7 +134,7 @@ def test_qiongqi_engine_persists_roi_telemetry(tmp_path, monkeypatch):
 
 
 def test_qiongqi_roi_middleware_persists_latest_model_usage(tmp_path, monkeypatch):
-    from langchain_core.messages import AIMessage
+    from langchain_core.messages import AIMessage, ToolMessage
 
     from kkoclaw.agents.coding_agent.roi_middleware import QiongqiRoiTelemetryMiddleware
     from kkoclaw.coding_core.qiongqi import QiongqiEngine
@@ -150,6 +150,20 @@ def test_qiongqi_roi_middleware_persists_latest_model_usage(tmp_path, monkeypatc
     middleware = QiongqiRoiTelemetryMiddleware(engine, report=engine.roi_metadata(report))
     state = {
         "messages": [
+            ToolMessage(
+                content=(
+                    "head\n\n[Full bash output saved to /mnt/user-data/outputs/tool-output/bash.txt "
+                    "(4000 chars, ~1000 tokens). Use read_file with start_line and end_line "
+                    "to access specific sections. 3000 chars omitted from this preview.]\n\ntail"
+                ),
+                name="bash",
+                tool_call_id="tool-1",
+            ),
+            ToolMessage(
+                content="head\n\n[... 1200 chars omitted by token economy ...]\n\ntail",
+                name="read_file",
+                tool_call_id="tool-2",
+            ),
             AIMessage(
                 content="done",
                 usage_metadata={"input_tokens": 8, "output_tokens": 5, "total_tokens": 13},
@@ -162,6 +176,16 @@ def test_qiongqi_roi_middleware_persists_latest_model_usage(tmp_path, monkeypatc
     summary = QiongqiRoiTelemetryStore.from_home().summary("thread-roi")
     assert summary["report_count"] == 1
     assert summary["provider_usage"]["total_tokens"] == 13
+    assert summary["tool_output"] == {
+        "externalized_count": 1,
+        "externalized_chars": 4000,
+    }
+    assert summary["token_economy"] == {
+        "compressed_messages": 1,
+        "compressed_chars_saved": 1200,
+    }
+    assert summary["derived"]["tool_output_saved_tokens"] == 1000
+    assert summary["derived"]["token_economy_saved_tokens"] == 300
 
 
 def test_coding_roi_gateway_service_and_router_expose_telemetry(tmp_path, monkeypatch):

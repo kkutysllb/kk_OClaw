@@ -76,6 +76,9 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("节省率");
     expect(workbench).toContain("估算节省");
     expect(workbench).toContain("工具裁剪");
+    expect(workbench).toContain("RoiSavingsDonut");
+    expect(workbench).toContain("RoiContributionBars");
+    expect(workbench).toContain("RoiCostBreakdown");
     expect(workbench).toContain("成本明细");
     expect(workbench).toContain("CodingWorkflowInspector");
     expect(workbench).toContain("CodingSkillsInspector");
@@ -180,7 +183,11 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("gitBranch");
     expect(workbench).toContain("useProjectEnvironment");
     expect(workbench).toContain("useCodingSessionChanges");
-    expect(workbench).toContain("const historicalChangeSummary = reviewSummary");
+    expect(workbench).toContain("const taskChangeSummary = useMemo");
+    expect(workbench).toContain("const reviewChangeSummary = reviewSummary");
+    expect(workbench).toContain("reviewChangeSummary.additions || taskChangeSummary.additions");
+    expect(workbench).toContain("reviewChangeSummary.deletions || taskChangeSummary.deletions");
+    expect(workbench).toContain("reviewChangeSummary.changedFiles || taskChangeSummary.changedFiles");
     expect(workbench).toContain("review?.summary");
     expect(workbench).toContain("useProjectGitCommit");
     expect(workbench).toContain("useProjectGitPush");
