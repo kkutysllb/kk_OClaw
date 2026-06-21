@@ -252,6 +252,9 @@ PR review 的上下文包括：
 - 标记认证、权限、配置、路由、数据库、支付等高风险路径。
 - 标记单文件大变更导致的审查成本和回归风险。
 - 如果看不到测试文件变更或 Qiongqi 测试事件，则提示测试缺口。
+- 检测变更中的行尾空白/缺失末尾换行（可一键规范化）。
+- 检测项目根 `.env` 未被 `.gitignore` 忽略（可一键追加）。
+- 检测新增/修改的 Python 源文件缺少对应测试文件（可一键生成 skip 骨架）。
 
 审查结论使用 `decision` 表示：
 
@@ -265,15 +268,16 @@ PR review 的上下文包括：
 
 已支持的自动修复：
 
-- Python 文件中单行硬编码 secret/token/password/API key 赋值。
-- 替换为 `os.environ.get("ENV_NAME", "")`。
-- 如缺少 `import os`，自动插入。
+- **硬编码 secret**（`replace_python_secret_with_env`）：Python 文件中单行硬编码 secret/token/password/API key 赋值，替换为 `os.environ.get("ENV_NAME", "")`，如缺少 `import os` 则自动插入。
+- **简单 lint**（`normalize_whitespace`）：去除行尾空白并补齐文件末尾换行符，对齐 ruff W291/W292/W293；整文件确定性规范化。
+- **配置风险**（`gitignore_dotenv`）：检测到项目根存在 `.env` 但 `.gitignore` 未忽略时，一键追加 `.env` 忽略规则。
+- **测试缺口**（`create_test_skeleton`）：新增/修改的 Python 源文件若无对应 `tests/test_<module>.py`，一键创建含 `@pytest.mark.skip` 占位的骨架文件，供用户补充断言后移除 skip。
 
 安全约束：
 
-- 修复目标必须位于 `project_root` 内。
-- 修复目标必须是文件。
-- 应用前检查 review 中记录的 expected 内容仍存在，避免 stale patch 覆盖用户新改动。
+- 修复目标必须位于 `project_root` 内（拒绝路径穿越）。
+- 现有文件修复：应用前检查 review 中记录的 expected 内容仍存在，避免 stale patch 覆盖用户新改动。
+- 新建文件修复（如测试骨架）：检查目标文件不存在才创建，拒绝覆盖已有文件。
 - 修复后更新 review JSON 中的 applied 状态。
 
 当前边界：
@@ -281,6 +285,7 @@ PR review 的上下文包括：
 - 不做跨文件自动重构。
 - 不自动修复复杂安全问题。
 - 不对非 Python secret 赋值做自动替换。
+- 不自动编写真实测试逻辑（仅生成 skip 骨架）。
 
 ## 前端 Workbench
 
@@ -395,7 +400,6 @@ pnpm --dir frontend run typecheck
 
 后续可继续增强：
 
-- 更丰富的自动修复类型，例如测试缺口、简单 lint、配置风险。
 - 跨提交/跨分支的更复杂 PR 审查策略。
 - Review finding 的精确行号映射和更细粒度 evidence。
 - 项目私有 skills 的治理策略和导入/导出能力。

@@ -280,3 +280,208 @@ def test_coding_review_pr_scope_auto_detects_base_branch(tmp_path, monkeypatch):
     assert review["source"]["pr_context"]["base_ref"] == "master"
     assert review["source"]["pr_context"]["requested_base_ref"] == "main"
     assert review["summary"]["commits"] == 1
+
+
+# ------------------------------------------------------------------ #
+# Auto-fix: simple lint / config risk / test-gap                    #
+# ------------------------------------------------------------------ #
+
+def _init_repo(repo: Path) -> None:
+    """Create a git repo with identity configured and an initial commit."""
+    _git(repo, "init")
+    _git(repo, "checkout", "-b", "master")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test User")
+
+
+def test_whitespace_fix_unit_applicable_and_clean(tmp_path) -> None:
+    from app.gateway.coding_review_services import _build_whitespace_fix
+
+    (tmp_path / "app.py").write_text("x = 1   \ny = 2\n", encoding="utf-8")
+    fix = _build_whitespace_fix(project_root=str(tmp_path), path="app.py")
+    assert fix["applicable"] is True
+    assert fix["kind"] == "normalize_whitespace"
+    assert "x = 1   \n" in fix["expected"]
+    assert "x = 1\n" in fix["replacement"]
+
+
+def test_whitespace_fix_unit_already_clean(tmp_path) -> None:
+    from app.gateway.coding_review_services import _build_whitespace_fix
+
+    (tmp_path / "app.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    fix = _build_whitespace_fix(project_root=str(tmp_path), path="app.py")
+    assert fix["applicable"] is False
+
+
+def test_gitignore_dotenv_fix_unit_scenarios(tmp_path) -> None:
+    from app.gateway.coding_review_services import _build_gitignore_dotenv_fix
+
+    root = str(tmp_path)
+    # .env absent
+    assert _build_gitignore_dotenv_fix(project_root=root)["applicable"] is False
+
+    # .env present, .gitignore absent
+    (tmp_path / ".env").write_text("TOKEN=abc\n", encoding="utf-8")
+    assert _build_gitignore_dotenv_fix(project_root=root)["applicable"] is False
+
+    # .env + .gitignore without rule
+    (tmp_path / ".gitignore").write_text("__pycache__/\n*.pyc\n", encoding="utf-8")
+    fix = _build_gitignore_dotenv_fix(project_root=root)
+    assert fix["applicable"] is True
+    assert fix["kind"] == "gitignore_dotenv"
+    assert ".env" in fix["replacement"]
+    assert "__pycache__/" in fix["replacement"]  # original content preserved
+
+    # .env + .gitignore already has rule
+    (tmp_path / ".gitignore").write_text(".env\n", encoding="utf-8")
+    assert _build_gitignore_dotenv_fix(project_root=root)["applicable"] is False
+
+
+def test_test_skeleton_fix_unit_scenarios(tmp_path) -> None:
+    from app.gateway.coding_review_services import _build_test_skeleton_fix
+
+    root = str(tmp_path)
+    # Non-python source
+    assert _build_test_skeleton_fix(project_root=root, source_path="readme.md")[
+        "applicable"
+    ] is False
+
+    # Python source present
+    (tmp_path / "feature.py").write_text("def add(a,b): return a+b\n", encoding="utf-8")
+    fix = _build_test_skeleton_fix(project_root=root, source_path="feature.py")
+    assert fix["applicable"] is True
+    assert fix["kind"] == "create_test_skeleton"
+    assert fix["target_path"] == "tests/test_feature.py"
+    assert fix["expected"] == ""  # new-file mode
+    assert "pytest.mark.skip" in fix["replacement"]
+    assert "def test_feature_skeleton" in fix["replacement"]
+
+    # Existing test file blocks the fix
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_feature.py").write_text("# exists\n", encoding="utf-8")
+    again = _build_test_skeleton_fix(project_root=root, source_path="feature.py")
+    assert again["applicable"] is False
+
+
+def test_review_applies_whitespace_fix_e2e(tmp_path, monkeypatch) -> None:
+    from app.gateway.coding_review_services import CodingReviewService
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "utils.py").write_text("x = 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    # Introduce trailing whitespace to produce a diff.
+    (repo / "utils.py").write_text("x = 1   \ny = 2\n", encoding="utf-8")
+
+    review = CodingReviewService.run_review(
+        project_id="p1", project_root=str(repo), thread_id="t-ws", scope="project_diff",
+    )
+    lint_findings = [f for f in review["findings"] if f["category"] == "lint"]
+    assert len(lint_findings) == 1
+    assert lint_findings[0]["fix"]["kind"] == "normalize_whitespace"
+
+    applied = CodingReviewService.apply_fix(
+        thread_id="t-ws", review_id=review["review_id"], finding_id=lint_findings[0]["id"],
+    )
+    assert applied["applied"] is True
+    content = (repo / "utils.py").read_text(encoding="utf-8")
+    assert "x = 1   \n" not in content
+    assert "x = 1\ny = 2\n" == content
+
+
+def test_review_applies_gitignore_dotenv_fix_e2e(tmp_path, monkeypatch) -> None:
+    from app.gateway.coding_review_services import CodingReviewService
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    (repo / "app.py").write_text("print('bye')\n", encoding="utf-8")
+    (repo / ".env").write_text("SECRET=abc123\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+
+    review = CodingReviewService.run_review(
+        project_id="p1", project_root=str(repo), thread_id="t-env", scope="project_diff",
+    )
+    config_findings = [f for f in review["findings"] if f["category"] == "config"]
+    assert len(config_findings) == 1
+    assert config_findings[0]["fix"]["kind"] == "gitignore_dotenv"
+
+    applied = CodingReviewService.apply_fix(
+        thread_id="t-env", review_id=review["review_id"], finding_id=config_findings[0]["id"],
+    )
+    assert applied["applied"] is True
+    ignore = (repo / ".gitignore").read_text(encoding="utf-8")
+    assert ".env" in ignore
+    assert "__pycache__/" in ignore  # original rule preserved
+
+
+def test_review_applies_test_skeleton_fix_e2e(tmp_path, monkeypatch) -> None:
+    from app.gateway.coding_review_services import CodingReviewService
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "feature.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    (repo / "feature.py").write_text("def add(a, b):\n    return a + b + 1\n", encoding="utf-8")
+
+    review = CodingReviewService.run_review(
+        project_id="p1", project_root=str(repo), thread_id="t-skel", scope="project_diff",
+    )
+    skel_findings = [
+        f for f in review["findings"]
+        if f["category"] == "tests" and f.get("fix", {}).get("kind") == "create_test_skeleton"
+    ]
+    assert len(skel_findings) == 1
+
+    applied = CodingReviewService.apply_fix(
+        thread_id="t-skel", review_id=review["review_id"], finding_id=skel_findings[0]["id"],
+    )
+    assert applied["applied"] is True
+    test_file = repo / "tests" / "test_feature.py"
+    assert test_file.is_file()
+    content = test_file.read_text(encoding="utf-8")
+    assert "pytest.mark.skip" in content
+    assert "def test_feature_skeleton" in content
+    assert "from feature import feature" in content
+
+
+def test_apply_fix_refuses_to_overwrite_existing_test_file(tmp_path, monkeypatch) -> None:
+    """New-file mode must fail if the target already exists (stale fix)."""
+    from app.gateway.coding_review_services import CodingReviewService
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    (repo / "feature.py").write_text("def f(): pass\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+    (repo / "feature.py").write_text("def f(): return 1\n", encoding="utf-8")
+
+    review = CodingReviewService.run_review(
+        project_id="p1", project_root=str(repo), thread_id="t-skel2", scope="project_diff",
+    )
+    skel = next(
+        f for f in review["findings"]
+        if f.get("fix", {}).get("kind") == "create_test_skeleton"
+    )
+    # Manually create the target file so the fix is now stale.
+    (repo / "tests").mkdir(parents=True)
+    (repo / "tests" / "test_feature.py").write_text("# manual\n", encoding="utf-8")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="already exists"):
+        CodingReviewService.apply_fix(
+            thread_id="t-skel2", review_id=review["review_id"], finding_id=skel["id"],
+        )

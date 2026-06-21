@@ -122,19 +122,36 @@ class CodingReviewService:
         fix = finding.get("fix")
         if not isinstance(fix, dict) or not fix.get("applicable"):
             raise ValueError("Finding does not have an applicable automatic fix")
-        file_path = finding.get("file")
-        if not isinstance(file_path, str) or not file_path:
-            raise ValueError("Finding fix requires a file path")
-
         project_root = str(review.get("project_root") or "")
-        target = _safe_project_file(project_root, file_path)
-        before = target.read_text(encoding="utf-8")
         expected = str(fix.get("expected") or "")
         replacement = str(fix.get("replacement") or "")
-        if expected not in before:
-            raise ValueError("Automatic fix is stale; expected text no longer exists")
-        after = before.replace(expected, replacement, 1)
-        target.write_text(after, encoding="utf-8")
+
+        if expected == "":
+            # New-file creation mode (e.g. create_test_skeleton). The target
+            # path lives in fix.target_path; we refuse to overwrite an
+            # existing file to stay conservative.
+            target_path = fix.get("target_path") or finding.get("file")
+            if not isinstance(target_path, str) or not target_path:
+                raise ValueError("Finding fix requires a file path")
+            target = _resolve_safe_project_path(project_root, target_path)
+            if target.exists():
+                raise ValueError(
+                    f"Automatic fix target already exists: {target_path}"
+                )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(replacement, encoding="utf-8")
+            file_path = target_path
+        else:
+            # Existing-file replace mode (e.g. secret / whitespace / gitignore).
+            file_path = finding.get("file")
+            if not isinstance(file_path, str) or not file_path:
+                raise ValueError("Finding fix requires a file path")
+            target = _safe_project_file(project_root, file_path)
+            before = target.read_text(encoding="utf-8")
+            if expected not in before:
+                raise ValueError("Automatic fix is stale; expected text no longer exists")
+            after = before.replace(expected, replacement, 1)
+            target.write_text(after, encoding="utf-8")
 
         finding["fix"]["applied"] = True
         finding["fix"]["applied_at"] = datetime.now(UTC).isoformat()
@@ -199,6 +216,43 @@ def _build_findings(
                 )
             )
 
+        # --- Simple lint: trailing whitespace / missing final newline -----
+        if _has_whitespace_issue_in_diff(diff):
+            ws_fix = _build_whitespace_fix(project_root=project_root, path=path)
+            if ws_fix.get("applicable"):
+                findings.append(
+                    _finding(
+                        severity="minor",
+                        category="lint",
+                        file=path,
+                        task_id=task.get("task_id") if task else None,
+                        message="变更包含行尾空白或文件末尾缺失换行符。",
+                        suggestion="一键去除行尾空白并补齐末尾换行（对齐 ruff W291/W292/W293）。",
+                        fix=ws_fix,
+                    )
+                )
+
+        # --- Test gap: Python source module without a matching test file --
+        if _is_python_source(path):
+            skel_fix = _build_test_skeleton_fix(
+                project_root=project_root, source_path=path,
+            )
+            if skel_fix.get("applicable"):
+                findings.append(
+                    _finding(
+                        severity="minor",
+                        category="tests",
+                        file=path,
+                        task_id=task.get("task_id") if task else None,
+                        message=f"源文件 {path} 未检测到对应的测试文件。",
+                        suggestion=(
+                            "一键创建 tests/test_<module>.py 骨架（含 skip 占位），"
+                            "补充断言后移除 skip 标记。"
+                        ),
+                        fix=skel_fix,
+                    )
+                )
+
     if diff_files and not _has_test_signal(diff_files, events):
         findings.append(
             _finding(
@@ -208,6 +262,21 @@ def _build_findings(
                 task_id=None,
                 message="未看到测试文件变更或 Qiongqi 测试运行事件。",
                 suggestion="在合并前运行相关测试；如果是行为变更，补充覆盖本次 diff 的回归测试。",
+            )
+        )
+
+    # --- Config risk: .env exists but is not ignored by .gitignore -------
+    config_fix = _build_gitignore_dotenv_fix(project_root=project_root)
+    if config_fix.get("applicable"):
+        findings.append(
+            _finding(
+                severity="major",
+                category="config",
+                file=".gitignore",
+                task_id=None,
+                message="检测到 .env 文件存在但未被 .gitignore 忽略。",
+                suggestion="一键在 .gitignore 追加 .env 忽略规则，避免本地密钥被意外提交。",
+                fix=config_fix,
             )
         )
 
@@ -360,6 +429,205 @@ def _build_secret_fix(*, project_root: str, path: str) -> dict[str, Any]:
     }
 
 
+def _no_fix(reason: str) -> dict[str, Any]:
+    """Standard non-applicable fix payload."""
+    return {
+        "applicable": False,
+        "kind": None,
+        "description": reason,
+        "patch": "",
+        "applied": False,
+    }
+
+
+def _has_whitespace_issue_in_diff(diff: str) -> bool:
+    """Heuristic: detect trailing whitespace on added lines or missing-EOF marker.
+
+    Conservative — may over-report; the fix builder re-reads the file and
+    returns ``applicable=False`` when no actual change is needed.
+    """
+    for line in diff.splitlines():
+        if line.startswith("+++"):
+            continue
+        if line.startswith("+"):
+            content = line[1:]
+            # Trailing whitespace on a non-blank added line.
+            if content.strip() and content.rstrip() != content:
+                return True
+        if line.startswith("\\ No newline at end of file"):
+            return True
+    return False
+
+
+def _build_whitespace_fix(*, project_root: str, path: str) -> dict[str, Any]:
+    """Strip trailing whitespace and ensure a single trailing newline.
+
+    Deterministic, whole-file normalisation aligned with ruff W291/W292/W293.
+    Does NOT collapse multiple blank lines (W391) — that is a stylistic
+    judgement outside the conservative auto-fix boundary.
+    """
+    try:
+        target = _safe_project_file(project_root, path)
+        before = target.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return _no_fix("无法安全读取目标文件。")
+
+    normalized_lines = [line.rstrip() for line in before.splitlines()]
+    after = "\n".join(normalized_lines)
+    if after and not after.endswith("\n"):
+        after += "\n"
+
+    if after == before:
+        return _no_fix("文件已符合空白规范。")
+
+    patch = _unified_diff_text(before, after, path)
+    return {
+        "applicable": True,
+        "kind": "normalize_whitespace",
+        "description": "去除行尾空白并补齐文件末尾换行符（ruff W291/W292/W293）。",
+        "patch": patch,
+        "expected": before,
+        "replacement": after,
+        "applied": False,
+    }
+
+
+def _build_gitignore_dotenv_fix(*, project_root: str) -> dict[str, Any]:
+    """Append a ``.env`` ignore rule when ``.env`` exists untracked.
+
+    Project-level check (not per-diff-file). Only modifies an existing
+    ``.gitignore`` — never creates one, to avoid surprising the user.
+    """
+    root = Path(project_root).expanduser().resolve()
+    dotenv = root / ".env"
+    gitignore = root / ".gitignore"
+
+    if not dotenv.is_file():
+        return _no_fix("项目根目录不存在 .env 文件。")
+    if not gitignore.is_file():
+        return _no_fix(".gitignore 不存在；请先手动创建后再使用自动修复。")
+
+    before = gitignore.read_text(encoding="utf-8")
+    stripped_lines = [ln.strip() for ln in before.splitlines()]
+    if any(line in {".env", "/.env"} for line in stripped_lines):
+        return _no_fix(".gitignore 已包含 .env 忽略规则。")
+
+    addition = "\n# Added by OClaw code review: local secrets should not be committed\n.env\n"
+    if before and not before.endswith("\n"):
+        addition = "\n" + addition
+    after = before + addition
+
+    patch = _unified_diff_text(before, after, ".gitignore")
+    return {
+        "applicable": True,
+        "kind": "gitignore_dotenv",
+        "description": "在 .gitignore 追加 .env 忽略规则，避免本地密钥被提交。",
+        "patch": patch,
+        "expected": before,
+        "replacement": after,
+        "applied": False,
+    }
+
+
+def _is_python_source(path: str) -> bool:
+    """True for Python files outside the tests/ tree."""
+    if not path.endswith(".py"):
+        return False
+    lowered = path.lower().replace("\\", "/")
+    return not (
+        lowered.startswith("tests/")
+        or lowered.startswith("test/")
+        or "/tests/" in lowered
+        or lowered.endswith("_test.py")
+        or lowered.endswith("conftest.py")
+    )
+
+
+def _build_test_skeleton_fix(*, project_root: str, source_path: str) -> dict[str, Any]:
+    """Create a skipped pytest skeleton next to a source module lacking tests.
+
+    Convention: ``tests/test_<module>.py`` at project root. The skeleton
+    is wrapped in ``@pytest.mark.skip`` so it never runs until the user
+    fills in real assertions and removes the marker.
+    """
+    root = Path(project_root).expanduser().resolve()
+    source = (root / source_path).resolve()
+    try:
+        source.relative_to(root)
+    except ValueError:
+        return _no_fix("源文件不在项目根目录内。")
+    if not source.is_file():
+        return _no_fix("源文件不存在或不是常规文件。")
+
+    module_name = source.stem
+    test_rel_path = f"tests/test_{module_name}.py"
+    test_file = root / test_rel_path
+    if test_file.exists():
+        return _no_fix(f"测试文件 {test_rel_path} 已存在。")
+
+    content = _test_skeleton_content(source_path=source_path, module_name=module_name)
+    patch = "\n".join(
+        difflib.unified_diff(
+            [],
+            content.splitlines(keepends=True),
+            fromfile="/dev/null",
+            tofile=f"b/{test_rel_path}",
+        )
+    )
+    return {
+        "applicable": True,
+        "kind": "create_test_skeleton",
+        "description": (
+            f"创建 {test_rel_path} 骨架（含 skip 占位）；补充断言后移除 skip 标记。"
+        ),
+        "patch": patch,
+        # expected="" signals the new-file creation path in apply_fix.
+        "expected": "",
+        "replacement": content,
+        "target_path": test_rel_path,
+        "applied": False,
+    }
+
+
+def _test_skeleton_content(*, source_path: str, module_name: str) -> str:
+    """Render a deterministic pytest skeleton with a skip guard."""
+    dotted = source_path[:-3].replace("/", ".").replace("\\", ".")
+    for prefix in ("src.", "app.", "lib."):
+        if dotted.startswith(prefix):
+            dotted = dotted[len(prefix):]
+
+    header = f'''"""Auto-generated test skeleton.
+
+Fill in assertions for `{module_name}` then remove the skip marker.
+"""
+
+'''
+    body = (
+        "import pytest\n"
+        "\n"
+        f"from {dotted} import {module_name}  "
+        "# noqa: F401 — adjust the import path as needed\n"
+        "\n"
+        "\n"
+        '@pytest.mark.skip(reason="auto-generated skeleton — fill in assertions")\n'
+        f"def test_{module_name}_skeleton() -> None:\n"
+        f"    # TODO: replace with real assertions against {module_name}\n"
+        f"    assert {module_name} is not None\n"
+    )
+    return header + body
+
+
+def _unified_diff_text(before: str, after: str, path: str) -> str:
+    return "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+        )
+    )
+
+
 def _env_name(name: str) -> str:
     chars: list[str] = []
     previous_lower = False
@@ -375,13 +643,23 @@ def _env_name(name: str) -> str:
     return re.sub(r"_+", "_", "".join(chars)).strip("_")
 
 
-def _safe_project_file(project_root: str, path: str) -> Path:
+def _resolve_safe_project_path(project_root: str, path: str) -> Path:
+    """Resolve *path* under *project_root*, rejecting path traversal.
+
+    Does NOT check existence — use ``_safe_project_file`` when the file
+    must already exist, or this helper when creating a new file.
+    """
     root = Path(project_root).expanduser().resolve()
     target = (root / path).resolve()
     try:
         target.relative_to(root)
     except ValueError:
         raise ValueError("Fix target is outside the project root") from None
+    return target
+
+
+def _safe_project_file(project_root: str, path: str) -> Path:
+    target = _resolve_safe_project_path(project_root, path)
     if not target.is_file():
         raise ValueError(f"Fix target is not a file: {path}")
     return target
