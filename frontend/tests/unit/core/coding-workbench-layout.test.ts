@@ -23,8 +23,8 @@ describe("coding workbench layout", () => {
       "utf8",
     );
 
-    expect(workbench).toContain("CollapsedPanelRestore");
-    expect(workbench).toContain("left-panel-toggle");
+    expect(workbench).not.toContain("CollapsedPanelRestore");
+    expect(workbench).not.toContain("left-panel-toggle");
     expect(workbench).not.toContain("left-panel-toggle-expanded");
     expect(workbench).not.toContain("right-panel-toggle-expanded");
     expect(workbench).toContain("Agent Inspector");
@@ -34,7 +34,28 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("closeWorkbenchPane");
     expect(workbench).toContain("const [leftCollapsed, setLeftCollapsed] = useState(false)");
     expect(workbench).toContain("const [rightCollapsed, setRightCollapsed] = useState(true)");
-    expect(workbench).toContain("defaultSize=\"20%\"");
+    expect(workbench).toContain("environmentCardCollapsed");
+    expect(workbench).toContain("useState(false)");
+    expect(workbench).toContain("const showEnvironmentCard = !showWorkbenchPane && !environmentCardCollapsed");
+    expect(workbench).toContain("LEFT_PANEL_DEFAULT_WIDTH = 320");
+    expect(workbench).toContain("LEFT_PANEL_MIN_WIDTH = 240");
+    expect(workbench).toContain("LEFT_PANEL_MAX_WIDTH = 520");
+    expect(workbench).toContain("RIGHT_PANEL_DEFAULT_WIDTH = 640");
+    expect(workbench).toContain("RIGHT_PANEL_MIN_WIDTH = 420");
+    expect(workbench).toContain("RIGHT_PANEL_MAX_WIDTH = 1120");
+    expect(workbench).toContain("leftPanelWidth");
+    expect(workbench).toContain("rightPanelWidth");
+    expect(workbench).toContain("startPanelResize");
+    expect(workbench).toContain('window.addEventListener("pointermove"');
+    expect(workbench).toContain("PanelResizeHandle");
+    expect(workbench).not.toContain("PanelImperativeHandle");
+    expect(workbench).not.toContain("ResizablePanelGroup");
+    expect(workbench).not.toContain("ResizablePanel");
+    expect(workbench).not.toContain("ResizableHandle");
+    expect(workbench).toContain("{showFileExplorer && (");
+    expect(workbench).toContain("style={{ width: leftPanelWidth }}");
+    expect(workbench).toContain("style={{ width: rightPanelWidth }}");
+    expect(workbench).toContain("2xl:pr-[360px] xl:pr-[340px]");
     expect(workbench).toContain('data-testid="coding-workbench-right-panel"');
     expect(workbench).toContain("const [workbenchView, setWorkbenchView]");
     expect(workbench).toContain('TabsTrigger value="agent"');
@@ -112,6 +133,7 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain('event.event_type === "diff_summarized"');
     expect(workbench).toContain('target: WorkbenchFocusTarget = "code"');
     expect(workbench).toContain("openWorkbenchPane()");
+    expect(workbench).not.toContain('setActiveInspectorTab("events")');
     expect(workbench).not.toContain("后续接入 Qiongqi");
     expect(workbench).not.toContain("InspectorPlaceholder");
     expect(workbench).not.toContain("absolute top-1/2");
@@ -129,6 +151,9 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("overflow-x-auto border-b");
     expect(workbench).toContain('aria-label="代码区视图"');
     expect(workbench).toContain("mr-auto inline-flex");
+    expect(workbench).toContain('aria-label="切换环境信息面板"');
+    expect(workbench).toContain("setEnvironmentCardCollapsed((value) => !value)");
+    expect(workbench).toContain("MonitorCogIcon");
     expect(workbench).toContain('aria-label="打开本地终端"');
     expect(workbench).toContain('aria-label="切换文件树"');
     expect(workbench).toContain('aria-label="切换代码面板"');
@@ -143,7 +168,7 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain("<ReviewPanel");
     expect(workbench).toContain('label="Code Review"');
     expect(workbench).toContain("EnvironmentInfoFloatingCard");
-    expect(workbench).toContain("visible={!showWorkbenchPane}");
+    expect(workbench).toContain("visible={showEnvironmentCard}");
     expect(workbench).toContain("gitBranch");
     expect(workbench).toContain("useProjectEnvironment");
     expect(workbench).toContain("useCodingSessionChanges");

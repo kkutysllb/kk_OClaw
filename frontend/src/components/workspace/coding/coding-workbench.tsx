@@ -29,8 +29,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useEffect, useMemo } from "react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -44,11 +43,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -107,6 +101,13 @@ type WorkbenchFocusHandler = (
   taskId?: string,
   line?: number | null,
 ) => void;
+
+const LEFT_PANEL_DEFAULT_WIDTH = 320;
+const LEFT_PANEL_MIN_WIDTH = 240;
+const LEFT_PANEL_MAX_WIDTH = 520;
+const RIGHT_PANEL_DEFAULT_WIDTH = 640;
+const RIGHT_PANEL_MIN_WIDTH = 420;
+const RIGHT_PANEL_MAX_WIDTH = 1120;
 
 export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const router = useRouter();
@@ -169,10 +170,10 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   // Collapse state for the left file explorer and the right workbench panel.
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(true);
-
-  // Refs to the imperative panel handles for collapse/expand control.
-  const leftPanelRef = useRef<PanelImperativeHandle>(null);
-  const rightPanelRef = useRef<PanelImperativeHandle>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
+  const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_DEFAULT_WIDTH);
+  const [environmentCardCollapsed, setEnvironmentCardCollapsed] =
+    useState(false);
 
   if (isLoading) {
     return (
@@ -200,27 +201,57 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   }
 
   const toggleLeft = () => {
-    const next = !leftCollapsed;
-    setLeftCollapsed(next);
-    if (next) {
-      leftPanelRef.current?.collapse();
-    } else {
-      leftPanelRef.current?.expand();
-    }
+    setLeftCollapsed((value) => !value);
   };
 
   const openWorkbenchPane = () => {
     setRightCollapsed(false);
-    rightPanelRef.current?.expand();
   };
 
   const closeWorkbenchPane = () => {
     setRightCollapsed(true);
-    rightPanelRef.current?.collapse();
   };
 
   const showFileExplorer = !leftCollapsed;
   const showWorkbenchPane = !rightCollapsed;
+  const showEnvironmentCard = !showWorkbenchPane && !environmentCardCollapsed;
+
+  const startPanelResize = (
+    side: "left" | "right",
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = side === "left" ? leftPanelWidth : rightPanelWidth;
+    const minWidth =
+      side === "left" ? LEFT_PANEL_MIN_WIDTH : RIGHT_PANEL_MIN_WIDTH;
+    const maxWidth =
+      side === "left" ? LEFT_PANEL_MAX_WIDTH : RIGHT_PANEL_MAX_WIDTH;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth =
+        side === "left" ? startWidth + delta : startWidth - delta;
+      const clampedWidth = Math.min(maxWidth, Math.max(minWidth, nextWidth));
+      if (side === "left") {
+        setLeftPanelWidth(clampedWidth);
+      } else {
+        setRightPanelWidth(clampedWidth);
+      }
+    };
+
+    const stopResize = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize, { once: true });
+  };
 
   const focusWorkbenchFile = (
     filePath: string,
@@ -235,7 +266,6 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     openWorkbenchPane();
     if (taskId) {
       setSelectedTaskId(taskId);
-      setActiveInspectorTab("events");
     }
   };
 
@@ -434,6 +464,18 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
               />
             </div>
             <Button
+              aria-label="切换环境信息面板"
+              aria-pressed={showEnvironmentCard}
+              className="size-8 shrink-0"
+              size="icon-sm"
+              title={showEnvironmentCard ? "折叠环境信息" : "展开环境信息"}
+              type="button"
+              variant="ghost"
+              onClick={() => setEnvironmentCardCollapsed((value) => !value)}
+            >
+              <MonitorCogIcon className="h-4 w-4" />
+            </Button>
+            <Button
               aria-label="打开本地终端"
               className="size-8 shrink-0"
               size="icon-sm"
@@ -470,18 +512,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
             </Button>
           </div>
           <div className="mt-0 flex min-h-0 flex-1 overflow-hidden">
-            <ResizablePanelGroup
-              orientation="horizontal"
-              className="relative h-full"
-            >
-              {leftCollapsed && (
-                <CollapsedPanelRestore
-                  id="left-panel-toggle"
-                  side="left"
-                  label="展开文件"
-                  onClick={toggleLeft}
-                />
-              )}
+            <div className="relative flex size-full min-w-0 overflow-hidden">
               <EnvironmentInfoFloatingCard
                 additions={totalAdditions}
                 deletions={totalDeletions}
@@ -500,33 +531,36 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 onCommit={() => setCommitDialogOpen(true)}
                 onPush={() => void handlePush()}
                 path={project.path}
-                visible={!showWorkbenchPane}
+                visible={showEnvironmentCard}
               />
-              {/* Left: File Explorer */}
-              <ResizablePanel
-                panelRef={leftPanelRef}
-                defaultSize="20%"
-                minSize="12%"
-                maxSize="35%"
-                collapsible
-                collapsedSize="0%"
-                onResize={(size) => setLeftCollapsed(size.asPercentage === 0)}
-              >
-                <FileExplorer
-                  projectId={projectId}
-                  selectedFile={selectedFile}
-                  onSelectFile={handleSelectExplorerFile}
-                />
-              </ResizablePanel>
-              <ResizableHandle
-                disabled={leftCollapsed}
-                className={
-                  leftCollapsed ? "pointer-events-none w-0! opacity-0" : ""
-                }
-              />
-              {/* Middle: Agent Inspector */}
-              <ResizablePanel defaultSize={80} minSize="30%">
-                <div className="flex h-full min-h-0 flex-col">
+              {showFileExplorer && (
+                <>
+                  <aside
+                    className="overflow-hidden border-r"
+                    style={{ width: leftPanelWidth }}
+                  >
+                    <FileExplorer
+                      projectId={projectId}
+                      selectedFile={selectedFile}
+                      onSelectFile={handleSelectExplorerFile}
+                    />
+                  </aside>
+                  <PanelResizeHandle
+                    ariaLabel="调整文件浏览器宽度"
+                    onPointerDown={(event) =>
+                      startPanelResize("left", event)
+                    }
+                  />
+                </>
+              )}
+              {/* Middle: QiongQi Engine Agent Inspector */}
+              <section className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    "flex h-full min-h-0 flex-col transition-[padding] duration-200",
+                    showEnvironmentCard && "2xl:pr-[360px] xl:pr-[340px]",
+                  )}
+                >
                   <AgentInspector
                     onFocusFile={focusWorkbenchFile}
                     projectRoot={project.path}
@@ -538,68 +572,70 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                     onActiveTabChange={setActiveInspectorTab}
                   />
                 </div>
-              </ResizablePanel>
-              <ResizableHandle
-                disabled={rightCollapsed}
-                className={
-                  rightCollapsed ? "pointer-events-none w-0! opacity-0" : ""
-                }
-              />
+              </section>
               {/* Right: Code / Diff / Results / Review */}
-              <ResizablePanel
-                data-testid="coding-workbench-right-panel"
-                panelRef={rightPanelRef}
-                defaultSize={0}
-                minSize="15%"
-                maxSize="50%"
-                collapsible
-                collapsedSize="0%"
-                onResize={(size) => setRightCollapsed(size.asPercentage === 0)}
-              >
-                <div className="relative flex h-full min-h-0 flex-col border-l">
-                  {workbenchView === "code" && (
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <CodeViewer projectId={projectId} filePath={selectedFile} />
+              {showWorkbenchPane && (
+                <>
+                  <PanelResizeHandle
+                    ariaLabel="调整代码面板宽度"
+                    onPointerDown={(event) =>
+                      startPanelResize("right", event)
+                    }
+                  />
+                  <aside
+                    data-testid="coding-workbench-right-panel"
+                    className="overflow-hidden border-l"
+                    style={{ width: rightPanelWidth }}
+                  >
+                    <div className="relative flex h-full min-h-0 flex-col">
+                      {workbenchView === "code" && (
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                          <CodeViewer
+                            projectId={projectId}
+                            filePath={selectedFile}
+                          />
+                        </div>
+                      )}
+                      {workbenchView === "diff" && showWorkbenchPane && (
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                          <CodingDiffPanel
+                            projectId={projectId}
+                            selectedFilePath={selectedFile}
+                            focusLine={focusedLine}
+                          />
+                        </div>
+                      )}
+                      {workbenchView === "task-changes" && showWorkbenchPane && (
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                          <CodingTaskChangesPanel
+                            threadId={codingThreadId}
+                            selectedFilePath={selectedFile}
+                            highlightedTaskId={selectedTaskId}
+                            onSelectTask={setSelectedTaskId}
+                            onFocusFile={focusWorkbenchFile}
+                          />
+                        </div>
+                      )}
+                      {workbenchView === "results" && showWorkbenchPane && (
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                          <CodingResultsPanel threadId={resultsThreadId} />
+                        </div>
+                      )}
+                      {workbenchView === "review" && showWorkbenchPane && (
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                          <ReviewPanel
+                            projectId={projectId}
+                            projectRoot={project.path}
+                            threadId={codingThreadId}
+                            onFocusFile={focusWorkbenchFile}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {workbenchView === "diff" && showWorkbenchPane && (
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <CodingDiffPanel
-                        projectId={projectId}
-                        selectedFilePath={selectedFile}
-                        focusLine={focusedLine}
-                      />
-                    </div>
-                  )}
-                  {workbenchView === "task-changes" && showWorkbenchPane && (
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <CodingTaskChangesPanel
-                        threadId={codingThreadId}
-                        selectedFilePath={selectedFile}
-                        highlightedTaskId={selectedTaskId}
-                        onSelectTask={setSelectedTaskId}
-                        onFocusFile={focusWorkbenchFile}
-                      />
-                    </div>
-                  )}
-                  {workbenchView === "results" && showWorkbenchPane && (
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <CodingResultsPanel threadId={resultsThreadId} />
-                    </div>
-                  )}
-                  {workbenchView === "review" && showWorkbenchPane && (
-                    <div className="min-h-0 flex-1 overflow-hidden">
-                      <ReviewPanel
-                        projectId={projectId}
-                        projectRoot={project.path}
-                        threadId={codingThreadId}
-                        onFocusFile={focusWorkbenchFile}
-                      />
-                    </div>
-                  )}
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+                  </aside>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -694,33 +730,23 @@ function WorkbenchToolbarButton({
   );
 }
 
-function CollapsedPanelRestore({
-  id,
-  label,
-  onClick,
-  side,
+function PanelResizeHandle({
+  ariaLabel,
+  onPointerDown,
 }: {
-  id: string;
-  label: string;
-  onClick: () => void;
-  side: "left" | "right";
+  ariaLabel: string;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
-  const Icon = side === "left" ? PanelLeftOpenIcon : PanelRightOpenIcon;
-
   return (
-    <button
-      aria-label={label}
-      className={cn(
-        "bg-background text-muted-foreground hover:bg-muted hover:text-foreground absolute top-12 z-20 flex size-8 items-center justify-center rounded-md border shadow-sm transition-colors",
-        side === "left" ? "left-2" : "right-2",
-      )}
-      data-testid={id}
-      title={label}
-      type="button"
-      onClick={onClick}
+    <div
+      aria-label={ariaLabel}
+      className="group relative z-10 h-full w-2 shrink-0 cursor-col-resize touch-none"
+      role="separator"
+      tabIndex={0}
+      onPointerDown={onPointerDown}
     >
-      <Icon className="h-4 w-4" />
-    </button>
+      <div className="bg-border group-hover:bg-primary/60 absolute inset-y-0 left-1/2 w-px -translate-x-1/2 transition-colors" />
+    </div>
   );
 }
 
@@ -748,7 +774,7 @@ function AgentInspector({
       <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-semibold tracking-wide uppercase">
-            Agent Inspector
+            QiongQi Engine Agent Inspector
           </p>
         </div>
       </div>

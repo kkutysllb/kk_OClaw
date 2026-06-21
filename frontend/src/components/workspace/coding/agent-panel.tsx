@@ -51,7 +51,7 @@ type CodingAgentStatus =
   | "completed"
   | "error";
 
-const MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM = 150;
+const MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM = 92;
 
 /**
  * Right-hand Coding Agent chat panel.
@@ -62,13 +62,18 @@ const MESSAGE_LIST_CODING_CHANGES_EXTRA_PADDING_BOTTOM = 150;
  * context. One thread is derived per project so conversations persist across
  * page reloads within a session.
  */
-export function AgentPanel({ projectId, onThreadIdChange }: AgentPanelProps) {
+export function AgentPanel({
+  projectId,
+  onFocusFile,
+  onThreadIdChange,
+}: AgentPanelProps) {
   return (
     <FollowupsProvider>
       <SubtasksProvider>
         <PromptInputProvider>
           <AgentPanelInner
             projectId={projectId}
+            onFocusFile={onFocusFile}
             onThreadIdChange={onThreadIdChange}
           />
         </PromptInputProvider>
@@ -391,25 +396,28 @@ function AgentPanelInner({ projectId, onThreadIdChange, onFocusFile }: AgentPane
               loadMoreHistory={loadMoreHistory}
               isHistoryLoading={isHistoryLoading}
             />
-            <CodingChangeSummaryCard
-              changes={changes}
-              onFocusFile={onFocusFile}
-            />
-
             {/* Input */}
-            <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center px-3 pb-3">
-              <div className="relative w-full">
-                <InputBox
-                  className="bg-background/5 w-full"
-                  threadId={uiThreadId}
-                  autoFocus={false}
-                  status={status}
-                  context={settings.context}
-                  onContextChange={(context) => setSettings("context", context)}
-                  onFollowupsVisibilityChange={setShowFollowups}
-                  onSubmit={handleSubmit}
-                  onStop={handleStop}
+            <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center px-6 pb-5">
+              <div className="relative flex w-full max-w-4xl flex-col items-center gap-2">
+                <CodingChangeSummaryCard
+                  changes={changes}
+                  onFocusFile={onFocusFile}
                 />
+                <div className="w-full">
+                  <InputBox
+                    className="bg-background/5 min-h-32 w-full [&_[data-slot=input-group-control]]:min-h-20 [&_[data-slot=input-group]]:min-h-32"
+                    threadId={uiThreadId}
+                    autoFocus={false}
+                    status={status}
+                    context={settings.context}
+                    onContextChange={(context) =>
+                      setSettings("context", context)
+                    }
+                    onFollowupsVisibilityChange={setShowFollowups}
+                    onSubmit={handleSubmit}
+                    onStop={handleStop}
+                  />
+                </div>
               </div>
             </div>
           </main>
@@ -534,11 +542,15 @@ function CodingChangeSummaryCard({
   if (changedFiles.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center px-3">
-      <div className="bg-background/95 pointer-events-auto w-full max-w-(--container-width-md) overflow-hidden rounded-lg border shadow-sm backdrop-blur">
-        <div className="flex items-center justify-between gap-3 px-3 py-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-md">
+    <div className="pointer-events-auto w-full max-w-xl">
+      <div className="bg-background/95 overflow-hidden rounded-lg border shadow-sm backdrop-blur">
+        <button
+          className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left transition-colors"
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="bg-muted flex size-7 shrink-0 items-center justify-center rounded-md">
               <FileDiffIcon className="text-muted-foreground h-4 w-4" />
             </div>
             <div className="min-w-0">
@@ -555,43 +567,47 @@ function CodingChangeSummaryCard({
               </p>
             </div>
           </div>
-          {latestTaskId && (
-            <span className="text-muted-foreground hidden max-w-28 truncate font-mono text-[11px] sm:inline">
-              {latestTaskId}
-            </span>
-          )}
-        </div>
-        <div className="max-h-[172px] divide-y overflow-y-auto border-t">
-          {visibleFiles.map((file) => (
-            <button
-              key={file.path}
-              className="hover:bg-muted/60 flex w-full items-center gap-3 px-3 py-2 text-left transition-colors"
-              type="button"
-              onClick={() => onFocusFile?.(file.path, "task-changes", file.taskId)}
-            >
-              <span className="min-w-0 flex-1 truncate font-mono text-sm">
-                {file.path}
-              </span>
-              <span className="shrink-0 font-mono text-xs">
-                <span className="text-emerald-600 dark:text-emerald-400">
-                  +{file.additions}
-                </span>{" "}
-                <span className="text-red-600 dark:text-red-400">
-                  -{file.deletions}
+          <span className="text-muted-foreground hidden max-w-28 shrink-0 truncate text-[11px] sm:inline">
+            {!expanded && changedFiles.length > 4
+              ? `更多 ${changedFiles.length - 4} 个文件`
+              : latestTaskId}
+          </span>
+        </button>
+        {expanded && (
+          <div className="max-h-[172px] divide-y overflow-y-auto border-t">
+            {visibleFiles.map((file) => (
+              <button
+                key={file.path}
+                className="hover:bg-muted/60 flex w-full items-center gap-3 px-3 py-2 text-left transition-colors"
+                type="button"
+                onClick={() =>
+                  onFocusFile?.(file.path, "task-changes", file.taskId)
+                }
+              >
+                <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                  {file.path}
                 </span>
-              </span>
-            </button>
-          ))}
-          {changedFiles.length > 4 && (
-            <button
-              className="text-muted-foreground hover:bg-muted/60 flex w-full items-center justify-center px-3 py-1.5 text-xs transition-colors"
-              type="button"
-              onClick={() => setExpanded((value) => !value)}
-            >
-              {expanded ? "收起" : `更多 ${changedFiles.length - 4} 个文件`}
-            </button>
-          )}
-        </div>
+                <span className="shrink-0 font-mono text-xs">
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    +{file.additions}
+                  </span>{" "}
+                  <span className="text-red-600 dark:text-red-400">
+                    -{file.deletions}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {changedFiles.length > 4 && (
+              <button
+                className="text-muted-foreground hover:bg-muted/60 flex w-full items-center justify-center px-3 py-1.5 text-xs transition-colors"
+                type="button"
+                onClick={() => setExpanded(false)}
+              >
+                收起
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

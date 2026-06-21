@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 const repoRoot = resolve(__dirname, "../../..");
 
 describe("coding task changes panel", () => {
-  test("renders qiongqi session changes as a middle workbench view", () => {
+  test("renders qiongqi session changes in the right workbench pane", () => {
     const panel = readFileSync(
       resolve(
         repoRoot,
@@ -32,7 +32,7 @@ describe("coding task changes panel", () => {
     expect(workbench).toContain("threadId={codingThreadId}");
     expect(workbench).toContain("selectedFilePath={selectedFile}");
     expect(workbench).toContain("setActiveInspectorTab");
-    expect(workbench).toContain('setActiveInspectorTab("events")');
+    expect(workbench).not.toContain('setActiveInspectorTab("events")');
     expect(workbench).toContain('setWorkbenchView(target)');
     expect(workbench).toContain("openWorkbenchPane()");
     expect(workbench).toContain("onFocusFile={focusWorkbenchFile}");
