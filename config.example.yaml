@@ -1131,6 +1131,8 @@ cron_management:
 #   post_edit_verify_enabled: true
 #   # 验证模式：soft（仅提醒）| hard（阻止 model 在验证通过前报告完成）
 #   post_edit_verify_mode: soft
+#   # 顺向前向阶段转移自动接受（回退/跳级/进 delivery 仍需人工确认）
+#   auto_accept_forward_stage: false
 #   worktree:
 #     # 是否启用 git worktree 隔离
 #     enabled: true
@@ -1156,6 +1158,7 @@ coding_agent:
   default_permission_mode: safe-only
   post_edit_verify_enabled: true
   post_edit_verify_mode: soft
+  auto_accept_forward_stage: false
   worktree:
     enabled: true
     auto_create: false

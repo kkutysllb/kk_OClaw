@@ -39,6 +39,15 @@ class CodingAgentConfig(BaseModel):
         default="soft",
         description="Post-edit verification enforcement mode",
     )
+    auto_accept_forward_stage: bool = Field(
+        default=False,
+        description=(
+            "When true, agent suggestions that move the project exactly one "
+            "step forward (current.next_stage_id) are auto-accepted without "
+            "a confirmation banner. Backward, skip, or entry into the final "
+            "'delivery' stage still require manual confirmation."
+        ),
+    )
     worktree: CodingAgentWorktreeConfig = Field(default_factory=CodingAgentWorktreeConfig)
     git: CodingAgentGitConfig = Field(default_factory=CodingAgentGitConfig)
     test: CodingAgentTestConfig = Field(default_factory=CodingAgentTestConfig)

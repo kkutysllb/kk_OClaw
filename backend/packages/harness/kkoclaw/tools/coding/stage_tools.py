@@ -17,8 +17,13 @@ from langchain.tools import tool
 
 from kkoclaw.coding_core.delivery_stages import get_stage, is_valid_stage_id, list_stages
 from kkoclaw.coding_core.stage_state import ProjectStageStore
+from kkoclaw.config import get_app_config
 from kkoclaw.sandbox.tools import get_thread_data
 from kkoclaw.tools.types import Runtime
+
+# The terminal stage — entering it always requires manual confirmation,
+# even when ``auto_accept_forward_stage`` is enabled.
+_MANUAL_CONFIRM_STAGE = "delivery"
 
 
 @tool("suggest_delivery_stage", parse_docstring=True)
@@ -87,6 +92,33 @@ def suggest_delivery_stage_tool(
     )
 
     store = ProjectStageStore.from_home()
+    current_state = store.get_state(project_root)
+
+    # --- B: auto-accept forward transitions when configured -------------
+    # If auto_accept_forward_stage is enabled AND the suggestion moves
+    # exactly one step forward (current.next_stage_id) without entering
+    # the terminal 'delivery' stage, we transition immediately instead
+    # of creating a pending suggestion banner.
+    auto_accept = _is_auto_accept_enabled()
+    forward = _is_forward_transition(current_state.current_stage, stage_id)
+
+    if auto_accept and forward:
+        store.set_current_stage(
+            project_root,
+            stage_id,
+            reason=reason.strip(),
+            source="agent_accepted",
+            thread_id=thread_id,
+        )
+        stage = get_stage(stage_id)
+        title = stage.title if stage else stage_id
+        return (
+            f"✅ Automatically transitioned the project to the **{title}** "
+            f"stage (auto-accept enabled, forward transition).\n"
+            f"Reason: {reason.strip()}"
+        )
+    # ------------------------------------------------------------------
+
     store.suggest_stage(
         project_root,
         stage_id,
@@ -102,6 +134,40 @@ def suggest_delivery_stage_tool(
         f"Reason: {reason.strip()}\n"
         f"The user will see this suggestion and can accept or dismiss it."
     )
+
+
+def _is_auto_accept_enabled() -> bool:
+    """Read ``coding_agent.auto_accept_forward_stage`` from config.
+
+    Returns ``False`` on any error so a misconfigured environment never
+    silently bypasses the human-confirmation safeguard.
+    """
+    try:
+        return bool(get_app_config().coding_agent.auto_accept_forward_stage)
+    except Exception:  # noqa: BLE001 — config access must never crash the tool
+        return False
+
+
+def _is_forward_transition(
+    current_stage_id: str | None,
+    suggested_stage_id: str,
+) -> bool:
+    """True if *suggested_stage_id* is exactly one step forward from *current*.
+
+    Rules:
+    - Entering the terminal ``delivery`` stage is **always** manual.
+    - From ``None`` (project not started) only the first stage
+      (``requirements``) counts as forward.
+    - Otherwise the suggested stage must equal ``current.next_stage_id``.
+    """
+    if suggested_stage_id == _MANUAL_CONFIRM_STAGE:
+        return False
+    if current_stage_id is None:
+        return suggested_stage_id == "requirements"
+    current = get_stage(current_stage_id)
+    if current is None or current.next_stage_id is None:
+        return False
+    return current.next_stage_id == suggested_stage_id
 
 
 __all__ = ["suggest_delivery_stage_tool"]

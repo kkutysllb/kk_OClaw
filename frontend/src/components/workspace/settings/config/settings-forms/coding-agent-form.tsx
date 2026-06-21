@@ -29,6 +29,7 @@ interface CodingAgentConfig {
   default_permission_mode: "safe-only" | "safe" | "yolo";
   post_edit_verify_enabled: boolean;
   post_edit_verify_mode: "soft" | "hard";
+  auto_accept_forward_stage: boolean;
   worktree: {
     enabled: boolean;
     auto_create: boolean;
@@ -56,6 +57,7 @@ const defaultConfig: CodingAgentConfig = {
   default_permission_mode: "safe-only",
   post_edit_verify_enabled: true,
   post_edit_verify_mode: "soft",
+  auto_accept_forward_stage: false,
   worktree: {
     enabled: true,
     auto_create: false,
@@ -251,6 +253,22 @@ export function CodingAgentForm() {
               <p className={hintCls}>
                 soft：仅注入提醒；hard：模型在验证通过前不允许报告任务完成
               </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={labelCls}>顺向阶段自动接受</p>
+                <p className={hintCls}>
+                  Agent 建议进入下一阶段时自动接受，不弹确认横幅。回退、跳级、进入 delivery 仍需人工确认。
+                </p>
+              </div>
+              <Switch
+                checked={local.auto_accept_forward_stage}
+                onCheckedChange={(v) => update("auto_accept_forward_stage", v)}
+                disabled={saving}
+              />
             </div>
           </div>
 

@@ -55,6 +55,8 @@ class StageHistoryItem(BaseModel):
     reason: str
     source: str
     timestamp: str
+    thread_id: str | None = None
+    run_outcome: str | None = None
 
 
 class StageSuggestionItem(BaseModel):

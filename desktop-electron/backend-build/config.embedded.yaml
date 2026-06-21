@@ -187,6 +187,7 @@ coding_agent:
   default_permission_mode: safe-only
   post_edit_verify_enabled: true
   post_edit_verify_mode: soft
+  auto_accept_forward_stage: false
   worktree:
     enabled: true
     auto_create: false

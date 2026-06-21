@@ -48,13 +48,20 @@ StageSource = Literal["user", "agent_suggested", "agent_accepted"]
 
 @dataclass(frozen=True)
 class StageHistoryEntry:
-    """A single transition recorded in the project's stage history."""
+    """A single transition recorded in the project's stage history.
+
+    ``thread_id`` and ``run_outcome`` are optional metadata that bind a
+    transition to the specific agent run that triggered it (G1/G2).
+    They default to ``None`` so old persisted state still deserialises.
+    """
 
     from_stage_id: str | None
     to_stage_id: str
     reason: str
     source: StageSource
     timestamp: str  # ISO-8601 UTC
+    thread_id: str | None = None
+    run_outcome: str | None = None
 
 
 @dataclass(frozen=True)
@@ -91,7 +98,7 @@ class ProjectStageStore:
         self.root = root or coding_home()
 
     @classmethod
-    def from_home(cls) -> "ProjectStageStore":
+    def from_home(cls) -> ProjectStageStore:
         """Create a store rooted at the Coding Agent home directory."""
         return cls(coding_home())
 
@@ -117,10 +124,15 @@ class ProjectStageStore:
         *,
         reason: str,
         source: StageSource,
+        thread_id: str | None = None,
+        run_outcome: str | None = None,
     ) -> ProjectStageState:
         """Transition the project to *stage_id* and append a history entry.
 
         Raises ``ValueError`` if *stage_id* is not a known delivery stage.
+
+        ``thread_id`` / ``run_outcome`` are optional metadata binding the
+        transition to the agent run that triggered it (G1/G2).
         """
         if not is_valid_stage_id(stage_id):
             raise ValueError(f"Unknown delivery stage id: {stage_id!r}")
@@ -140,6 +152,8 @@ class ProjectStageStore:
             reason=reason,
             source=source,
             timestamp=_now_iso(),
+            thread_id=thread_id,
+            run_outcome=run_outcome,
         )
         new_state = ProjectStageState(
             project_root=project_root,
@@ -184,10 +198,17 @@ class ProjectStageStore:
         self._write_state(project_root, new_state)
         return new_state
 
-    def accept_suggestion(self, project_root: str) -> ProjectStageState:
+    def accept_suggestion(
+        self,
+        project_root: str,
+        *,
+        run_outcome: str | None = None,
+    ) -> ProjectStageState:
         """Apply the pending suggestion as the new current stage.
 
         Raises ``ValueError`` if there is no pending suggestion.
+        The originating ``thread_id`` from the suggestion is propagated
+        into the history entry (G1/G2).
         """
         state = self.get_state(project_root)
         if state.pending_suggestion is None:
@@ -199,6 +220,8 @@ class ProjectStageStore:
             suggestion.stage_id,
             reason=suggestion.reason,
             source="agent_accepted",
+            thread_id=suggestion.suggested_by_thread_id or None,
+            run_outcome=run_outcome,
         )
 
     def dismiss_suggestion(self, project_root: str) -> ProjectStageState:
@@ -329,12 +352,21 @@ def _parse_history_entry(raw: Any) -> StageHistoryEntry | None:
     timestamp = raw.get("timestamp")
     if not isinstance(timestamp, str):
         timestamp = _now_iso()
+    thread_id = raw.get("thread_id")
+    if not isinstance(thread_id, str) or not thread_id:
+        thread_id = None
+    run_outcome = raw.get("run_outcome")
+    if not isinstance(run_outcome, str) or not run_outcome:
+        run_outcome = None
+
     return StageHistoryEntry(
         from_stage_id=from_stage,
         to_stage_id=to_stage,
         reason=reason,
         source=source,  # type: ignore[arg-type]
         timestamp=timestamp,
+        thread_id=thread_id,
+        run_outcome=run_outcome,
     )
 
 
@@ -372,6 +404,8 @@ def _state_to_payload(state: ProjectStageState) -> dict[str, Any]:
                 "reason": entry.reason,
                 "source": entry.source,
                 "timestamp": entry.timestamp,
+                "thread_id": entry.thread_id,
+                "run_outcome": entry.run_outcome,
             }
             for entry in state.stage_history
         ],

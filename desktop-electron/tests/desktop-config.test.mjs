@@ -34,6 +34,7 @@ test("desktop default config includes coding agent settings", () => {
   assert.match(embeddedConfig, /default_permission_mode:\s+safe-only/);
   assert.match(embeddedConfig, /post_edit_verify_enabled:\s+true/);
   assert.match(embeddedConfig, /post_edit_verify_mode:\s+soft/);
+  assert.match(embeddedConfig, /auto_accept_forward_stage:\s+false/);
   assert.match(embeddedConfig, /worktree:\s*\n\s+enabled:\s+true/);
   assert.ok(
     embeddedConfig.includes("- pytest") &&

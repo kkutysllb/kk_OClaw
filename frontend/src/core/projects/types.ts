@@ -335,6 +335,8 @@ export interface StageHistoryEntry {
   reason: string;
   source: "user" | "agent_suggested" | "agent_accepted";
   timestamp: string;
+  thread_id?: string | null;
+  run_outcome?: string | null;
 }
 
 export interface StageSuggestion {
