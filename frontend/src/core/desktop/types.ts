@@ -219,6 +219,7 @@ export interface DesktopBridge {
   // ── System integration ────────────────────────────────────────────
   openExternal(url: string): Promise<void>;
   openFolder(folderPath: string): Promise<void>;
+  openTerminal(folderPath: string): Promise<void>;
   onFileDrop(
     handler: (files: PickedFile[]) => void,
   ): () => void;

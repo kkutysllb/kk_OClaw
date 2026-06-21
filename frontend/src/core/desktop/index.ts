@@ -31,6 +31,8 @@ import type {
   StartupDiagnostics,
 } from "./types";
 
+export type OpenProjectTerminalResult = "opened" | "copied" | "failed";
+
 // ── Backend management ───────────────────────────────────────────────────
 
 /** Get the current backend status via Electron IPC. */
@@ -191,6 +193,39 @@ export async function openFolder(folderPath: string): Promise<void> {
     await window.oclawDesktop!.openFolder(folderPath);
   } catch (e) {
     console.warn("[desktop] openFolder failed:", e);
+  }
+}
+
+/**
+ * Open a real local terminal at the project path in desktop mode.
+ * Browser mode cannot launch native terminals, so it copies the path instead.
+ */
+export async function openProjectTerminal(
+  folderPath: string,
+): Promise<OpenProjectTerminalResult> {
+  if (!folderPath.trim()) return "failed";
+
+  if (!isDesktop()) {
+    try {
+      await navigator.clipboard.writeText(folderPath);
+      return "copied";
+    } catch (e) {
+      console.warn("[web] copy project path failed:", e);
+      return "failed";
+    }
+  }
+
+  try {
+    await window.oclawDesktop!.openTerminal(folderPath);
+    return "opened";
+  } catch (e) {
+    console.warn("[desktop] openTerminal failed:", e);
+    try {
+      await navigator.clipboard.writeText(folderPath);
+      return "copied";
+    } catch {
+      return "failed";
+    }
   }
 }
 

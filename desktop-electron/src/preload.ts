@@ -138,6 +138,8 @@ contextBridge.exposeInMainWorld("oclawDesktop", {
     ipcRenderer.invoke("shell:open-external", url),
   openFolder: (folderPath: string): Promise<void> =>
     ipcRenderer.invoke("shell:open-folder", folderPath),
+  openTerminal: (folderPath: string): Promise<void> =>
+    ipcRenderer.invoke("shell:open-terminal", folderPath),
   onFileDrop: (handler: (files: PickedFile[]) => void): (() => void) => {
     const listener = (
       _evt: IpcRendererEvent,

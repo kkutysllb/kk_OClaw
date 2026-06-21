@@ -8,6 +8,7 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 
@@ -105,6 +106,53 @@ function guessMime(ext: string): string | undefined {
   return MIME_BY_EXT[ext.toLowerCase()];
 }
 
+function buildOpenTerminalCommand(
+  platform: NodeJS.Platform,
+  folderPath: string,
+): { command: string; args: string[] } {
+  if (platform === "darwin") {
+    return {
+      command: "open",
+      args: ["-a", "Terminal", folderPath],
+    };
+  }
+
+  if (platform === "win32") {
+    return {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-Command",
+        `Start-Process powershell.exe -ArgumentList '-NoExit','-Command','Set-Location -LiteralPath ''${folderPath.replaceAll("'", "''")}'''`,
+      ],
+    };
+  }
+
+  return {
+    command: "sh",
+    args: [
+      "-lc",
+      'for term in x-terminal-emulator gnome-terminal konsole xfce4-terminal mate-terminal lxterminal; do command -v "$term" >/dev/null 2>&1 && exec "$term" --working-directory "$PWD"; done; exec xterm',
+    ],
+  };
+}
+
+function openTerminalAtPath(folderPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const { command, args } = buildOpenTerminalCommand(process.platform, folderPath);
+    const child = spawn(command, args, {
+      cwd: folderPath,
+      detached: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
+
 /**
  * Register all backend-lifecycle and system-integration IPC handlers.
  *
@@ -174,6 +222,11 @@ export function registerIpc(): BackendManager {
   // ── Open local folder in system file manager (Finder / Explorer) ───
   ipcMain.handle("shell:open-folder", async (_evt, folderPath: string) => {
     await shell.openPath(folderPath);
+  });
+
+  // ── Open a real local terminal at the project path ─────────────────
+  ipcMain.handle("shell:open-terminal", async (_evt, folderPath: string) => {
+    await openTerminalAtPath(folderPath);
   });
 
   // ── Native directory picker (for Code Mode project selection) ───────

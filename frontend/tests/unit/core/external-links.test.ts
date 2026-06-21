@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import type { DesktopBridge } from "@/core/desktop/types";
 import { openExternalUrl } from "@/core/desktop/external-links";
+import type { DesktopBridge } from "@/core/desktop/types";
 
 function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
   const w = window as unknown as Record<string, unknown>;
+  const unsubscribe = () => undefined;
   if (bridge) {
     w.oclawDesktop = {
       gatewayPort: 19987,
@@ -19,12 +20,13 @@ function setDesktopBridge(bridge?: Partial<DesktopBridge>) {
       pickDirectory: vi.fn(),
       openExternal: vi.fn(),
       openFolder: vi.fn(),
+      openTerminal: vi.fn(),
       onFileDrop: vi.fn(),
       checkForUpdates: vi.fn(),
       installUpdate: vi.fn(),
-      onCheckUpdateRequest: vi.fn(() => () => {}),
-      onUpdateDownloading: vi.fn(() => () => {}),
-      onUpdateReady: vi.fn(() => () => {}),
+      onCheckUpdateRequest: vi.fn(() => unsubscribe),
+      onUpdateDownloading: vi.fn(() => unsubscribe),
+      onUpdateReady: vi.fn(() => unsubscribe),
       getStartupInfo: vi.fn(),
       getSkillModels: vi.fn(),
       setSkillModels: vi.fn(),

@@ -19,7 +19,11 @@ import type {
   FileContent,
   FileEntry,
   Project,
+  ProjectEnvironment,
   ProjectDiff,
+  ProjectGitCommitRequest,
+  ProjectGitCommitResult,
+  ProjectGitPushResult,
   ProjectStageState,
   QiongqiChangesList,
   QiongqiEventsList,
@@ -159,7 +163,7 @@ export async function removeWorktree(
 
 export async function listFiles(
   projectId: string,
-  subpath: string = ".",
+  subpath = ".",
 ): Promise<FileEntry[]> {
   const res = await fetch(
     `${getBackendBaseURL()}/api/projects/${projectId}/files?path=${encodeURIComponent(subpath)}`,
@@ -193,6 +197,21 @@ export async function getProjectDiff(projectId: string): Promise<ProjectDiff> {
   return res.json() as Promise<ProjectDiff>;
 }
 
+export async function getProjectEnvironment(
+  projectId: string,
+): Promise<ProjectEnvironment> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/projects/${projectId}/environment`,
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(
+      err.detail ?? `Failed to load project environment: ${res.statusText}`,
+    );
+  }
+  return res.json() as Promise<ProjectEnvironment>;
+}
+
 export async function discardProjectFileChange(
   projectId: string,
   request: DiscardProjectFileChangeRequest,
@@ -212,6 +231,41 @@ export async function discardProjectFileChange(
     );
   }
   return res.json() as Promise<DiscardProjectFileChangeResult>;
+}
+
+export async function gitCommitProject(
+  projectId: string,
+  request: ProjectGitCommitRequest,
+): Promise<ProjectGitCommitResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/projects/${projectId}/git/commit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Failed to commit project: ${res.statusText}`);
+  }
+  return res.json() as Promise<ProjectGitCommitResult>;
+}
+
+export async function gitPushProject(
+  projectId: string,
+): Promise<ProjectGitPushResult> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/projects/${projectId}/git/push`,
+    {
+      method: "POST",
+    },
+  );
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail ?? `Failed to push project: ${res.statusText}`);
+  }
+  return res.json() as Promise<ProjectGitPushResult>;
 }
 
 // ---------------------------------------------------------------------------

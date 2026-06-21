@@ -7,6 +7,7 @@ import {
   startBackend,
   stopBackend,
   restartBackend,
+  openProjectTerminal,
 } from "@/core/desktop";
 import type { BackendStatus, DesktopBridge } from "@/core/desktop/types";
 
@@ -14,6 +15,9 @@ import type { BackendStatus, DesktopBridge } from "@/core/desktop/types";
 function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
   const stopped: BackendStatus = { status: "stopped", port: 19987 };
   const starting: BackendStatus = { status: "starting", port: 19987 };
+  const unsubscribe = () => {
+    return undefined;
+  };
   return {
     gatewayPort: 19987,
     getGatewayConfig: vi.fn(async () => ({ port: 19987 })),
@@ -26,12 +30,13 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
     pickDirectory: vi.fn(async () => null),
     openExternal: vi.fn(async (_url: string) => undefined),
     openFolder: vi.fn(async (_path: string) => undefined),
-    onFileDrop: vi.fn(() => () => {}),
+    openTerminal: vi.fn(async (_path: string) => undefined),
+    onFileDrop: vi.fn(() => unsubscribe),
     checkForUpdates: vi.fn(async () => ({ available: false })),
     installUpdate: vi.fn(async () => true),
-    onCheckUpdateRequest: vi.fn(() => () => {}),
-    onUpdateDownloading: vi.fn(() => () => {}),
-    onUpdateReady: vi.fn(() => () => {}),
+    onCheckUpdateRequest: vi.fn(() => unsubscribe),
+    onUpdateDownloading: vi.fn(() => unsubscribe),
+    onUpdateReady: vi.fn(() => unsubscribe),
     getStartupInfo: vi.fn(async () => ({
       services: [],
       env_check: {
@@ -63,7 +68,7 @@ function makeBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
       },
     })),
     executeMigration: vi.fn(async () => ({ success: true, results: [], targetHome: "" })),
-    onMigrationAvailable: vi.fn(() => () => {}),
+    onMigrationAvailable: vi.fn(() => unsubscribe),
     ...overrides,
   };
 }
@@ -104,6 +109,17 @@ describe("desktop integration — web mode (no Electron bridge)", () => {
   test("getBackendLogs returns empty array in web mode", async () => {
     expect(await getBackendLogs()).toEqual([]);
   });
+
+  test("openProjectTerminal copies project path in web mode", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    await expect(openProjectTerminal("/tmp/project")).resolves.toBe("copied");
+    expect(writeText).toHaveBeenCalledWith("/tmp/project");
+  });
 });
 
 describe("desktop integration — Electron mode", () => {
@@ -119,53 +135,69 @@ describe("desktop integration — Electron mode", () => {
   });
 
   test("getBackendStatus calls the bridge and returns data", async () => {
-    (bridge.getBackendStatus as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      STOPPED,
-    );
+    const getStatus = Reflect.get(
+      bridge,
+      "getBackendStatus",
+    ) as ReturnType<typeof vi.fn>;
+    getStatus.mockResolvedValueOnce(STOPPED);
     const result = await getBackendStatus();
-    expect(bridge.getBackendStatus).toHaveBeenCalled();
+    expect(getStatus).toHaveBeenCalled();
     expect(result).toEqual(STOPPED);
   });
 
   test("getBackendStatus returns null on bridge error", async () => {
-    (bridge.getBackendStatus as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error("IPC error"),
-    );
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const getStatus = Reflect.get(
+      bridge,
+      "getBackendStatus",
+    ) as ReturnType<typeof vi.fn>;
+    getStatus.mockRejectedValueOnce(new Error("IPC error"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {
+      return undefined;
+    });
     expect(await getBackendStatus()).toBeNull();
     warnSpy.mockRestore();
   });
 
   test("startBackend calls the bridge", async () => {
-    (bridge.startBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      STARTING,
-    );
+    const start = Reflect.get(bridge, "startBackend") as ReturnType<typeof vi.fn>;
+    start.mockResolvedValueOnce(STARTING);
     expect(await startBackend()).toEqual(STARTING);
-    expect(bridge.startBackend).toHaveBeenCalled();
+    expect(start).toHaveBeenCalled();
   });
 
   test("stopBackend calls the bridge", async () => {
-    (bridge.stopBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      STOPPED,
-    );
+    const stop = Reflect.get(bridge, "stopBackend") as ReturnType<typeof vi.fn>;
+    stop.mockResolvedValueOnce(STOPPED);
     expect(await stopBackend()).toEqual(STOPPED);
-    expect(bridge.stopBackend).toHaveBeenCalled();
+    expect(stop).toHaveBeenCalled();
   });
 
   test("restartBackend calls the bridge", async () => {
-    (bridge.restartBackend as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      STARTING,
-    );
+    const restart = Reflect.get(
+      bridge,
+      "restartBackend",
+    ) as ReturnType<typeof vi.fn>;
+    restart.mockResolvedValueOnce(STARTING);
     expect(await restartBackend()).toEqual(STARTING);
-    expect(bridge.restartBackend).toHaveBeenCalled();
+    expect(restart).toHaveBeenCalled();
   });
 
   test("getBackendLogs calls the bridge", async () => {
-    (bridge.getBackendLogs as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
-      "line1",
-      "line2",
-    ]);
+    const getLogs = Reflect.get(
+      bridge,
+      "getBackendLogs",
+    ) as ReturnType<typeof vi.fn>;
+    getLogs.mockResolvedValueOnce(["line1", "line2"]);
     expect(await getBackendLogs()).toEqual(["line1", "line2"]);
-    expect(bridge.getBackendLogs).toHaveBeenCalled();
+    expect(getLogs).toHaveBeenCalled();
+  });
+
+  test("openProjectTerminal opens terminal through bridge", async () => {
+    const openTerminal = Reflect.get(
+      bridge,
+      "openTerminal",
+    ) as ReturnType<typeof vi.fn>;
+    await expect(openProjectTerminal("/tmp/project")).resolves.toBe("opened");
+    expect(openTerminal).toHaveBeenCalledWith("/tmp/project");
   });
 });

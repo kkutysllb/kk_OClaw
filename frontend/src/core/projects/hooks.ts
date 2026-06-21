@@ -9,6 +9,7 @@ import {
   deleteProject,
   deleteCodingSkill,
   discardProjectFileChange,
+  getProjectEnvironment,
   getDeliveryStages,
   getLatestCodingReview,
   getCodingSession,
@@ -27,6 +28,8 @@ import {
   readFile,
   removeWorktree,
   runCodingReview,
+  gitCommitProject,
+  gitPushProject,
   setCodingSkillEnabled,
   setProjectStage,
   dismissStageSuggestion,
@@ -138,7 +141,7 @@ export function useRemoveWorktree(projectId: string) {
 
 export function useFileList(
   projectId: string | null | undefined,
-  subpath: string = ".",
+  subpath = ".",
 ) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["projects", projectId, "files", subpath],
@@ -169,6 +172,15 @@ export function useProjectDiff(projectId: string | null | undefined) {
   return { diff: data ?? null, isLoading, isFetching, error, refetch };
 }
 
+export function useProjectEnvironment(projectId: string | null | undefined) {
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ["projects", projectId, "environment"],
+    queryFn: () => getProjectEnvironment(projectId!),
+    enabled: !!projectId,
+  });
+  return { environment: data ?? null, isLoading, isFetching, error, refetch };
+}
+
 export function useDiscardProjectFileChange(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -183,6 +195,36 @@ export function useDiscardProjectFileChange(projectId: string) {
       });
       void queryClient.invalidateQueries({
         queryKey: ["projects", projectId, "files"],
+      });
+    },
+  });
+}
+
+export function useProjectGitCommit(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (message: string) => gitCommitProject(projectId, { message }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "environment"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "diff"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "files"],
+      });
+    },
+  });
+}
+
+export function useProjectGitPush(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => gitPushProject(projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["projects", projectId, "environment"],
       });
     },
   });

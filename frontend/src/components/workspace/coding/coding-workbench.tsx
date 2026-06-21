@@ -5,10 +5,13 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ClipboardCheckIcon,
+  CloudIcon,
+  GithubIcon,
   FileTextIcon,
   FilterIcon,
   GitBranchIcon,
   GitCompareIcon,
+  GitCommitHorizontalIcon,
   PackageOpenIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -17,10 +20,14 @@ import {
   ActivityIcon,
   GaugeIcon,
   InfoIcon,
+  LoaderCircleIcon,
   SparklesIcon,
   MessageSquareIcon,
   RefreshCwIcon,
   SearchIcon,
+  SendIcon,
+  TerminalIcon,
+  MonitorCogIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,6 +38,15 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -38,8 +54,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
+import { openProjectTerminal } from "@/core/desktop";
 import {
   ProjectFetchError,
   useAcceptStageSuggestion,
@@ -51,7 +68,11 @@ import {
   useDeliveryStages,
   useDismissStageSuggestion,
   useLatestCodingReview,
+  useProjectEnvironment,
+  useProjectGitCommit,
+  useProjectGitPush,
   useProjectStage,
+  useProjectDiff,
   useSetCodingSkillEnabled,
   useSetProjectStage,
   useProject,
@@ -92,6 +113,10 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const router = useRouter();
   const { project, isLoading, error } = useProject(projectId);
   const { worktrees } = useWorktrees(projectId);
+  const { diff } = useProjectDiff(projectId);
+  const { environment } = useProjectEnvironment(projectId);
+  const commitMutation = useProjectGitCommit(projectId);
+  const pushMutation = useProjectGitPush(projectId);
 
   // If the project genuinely does not exist (HTTP 404 — typically because it
   // was deleted from another tab/session), bounce the user back to the list.
@@ -115,7 +140,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const [agentThreadId, setAgentThreadId] = useState<string | undefined>(
     () => {
       if (typeof window === "undefined") return undefined;
-      return window.localStorage.getItem(threadIdStorageKey) || undefined;
+      return window.localStorage.getItem(threadIdStorageKey) ?? undefined;
     },
   );
   useEffect(() => {
@@ -131,13 +156,18 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
   const [activeCodeTab, setActiveCodeTab] = useState<
     "code" | "task-changes" | "diff" | "results" | "review"
   >("code");
+  const [workbenchView, setWorkbenchView] = useState<
+    "code" | "task-changes" | "diff" | "results" | "review"
+  >("code");
   const [activeInspectorTab, setActiveInspectorTab] = useState<
     "agent" | "events" | "session" | "roi" | "workflow" | "skills"
   >("agent");
+  const [isCommitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
 
   // Collapse state for the left (File Explorer) and right (Agent) panels.
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(true);
+  const [rightCollapsed, setRightCollapsed] = useState(true);
 
   // Refs to the imperative panel handles for collapse/expand control.
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
@@ -156,7 +186,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <p className="text-lg font-semibold">项目未找到</p>
         <p className="text-muted-foreground text-sm">
-          项目 ID "{projectId}" 不存在或已被删除。
+          项目 ID &quot;{projectId}&quot; 不存在或已被删除。
         </p>
         <Link
           href="/workspace/coding"
@@ -178,15 +208,18 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     }
   };
 
-  const toggleRight = () => {
-    const next = !rightCollapsed;
-    setRightCollapsed(next);
-    if (next) {
-      rightPanelRef.current?.collapse();
-    } else {
-      rightPanelRef.current?.expand();
-    }
+  const openWorkbenchPane = () => {
+    setRightCollapsed(false);
+    rightPanelRef.current?.expand();
   };
+
+  const closeWorkbenchPane = () => {
+    setRightCollapsed(true);
+    rightPanelRef.current?.collapse();
+  };
+
+  const showFileExplorer = !leftCollapsed;
+  const showWorkbenchPane = !rightCollapsed;
 
   const focusWorkbenchFile = (
     filePath: string,
@@ -197,11 +230,102 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
     setSelectedFile(filePath);
     setFocusedLine(line ?? null);
     setActiveCodeTab(target);
+    setWorkbenchView(target);
+    openWorkbenchPane();
     if (taskId) {
       setSelectedTaskId(taskId);
       setActiveInspectorTab("events");
     }
   };
+
+  const handleOpenTerminal = async () => {
+    const result = await openProjectTerminal(project.path);
+    if (result === "opened") {
+      toast.success("已打开本地终端", {
+        description: project.path,
+      });
+      return;
+    }
+    if (result === "copied") {
+      toast.info("Web 端无法直接打开本地终端，已复制项目路径", {
+        description: project.path,
+      });
+      return;
+    }
+    toast.error("无法打开本地终端", {
+      description: project.path || "项目路径不可用",
+    });
+  };
+
+  const handleToggleFileExplorer = () => {
+    toggleLeft();
+  };
+
+  const handleToggleWorkbenchPane = () => {
+    if (showWorkbenchPane) {
+      closeWorkbenchPane();
+      return;
+    }
+    openWorkbenchPane();
+  };
+
+  const handleSelectWorkbenchTab = (
+    tab: "code" | "task-changes" | "diff" | "results" | "review",
+  ) => {
+    setActiveCodeTab(tab);
+    setWorkbenchView(tab);
+    if (tab !== "results") {
+      openWorkbenchPane();
+    }
+  };
+
+  const handleCommit = async () => {
+    const message = commitMessage.trim();
+    if (!message) {
+      toast.error("请输入提交说明");
+      return;
+    }
+    try {
+      const result = await commitMutation.mutateAsync(message);
+      toast.success("提交已创建", {
+        description: result.summary,
+      });
+      setCommitDialogOpen(false);
+      setCommitMessage("");
+    } catch (commitError) {
+      toast.error("提交失败", {
+        description:
+          commitError instanceof Error ? commitError.message : "请稍后重试",
+      });
+    }
+  };
+
+  const handlePush = async () => {
+    try {
+      const result = await pushMutation.mutateAsync();
+      toast.success("分支已推送", {
+        description: result.summary,
+      });
+    } catch (pushError) {
+      toast.error("推送失败", {
+        description:
+          pushError instanceof Error ? pushError.message : "请稍后重试",
+      });
+    }
+  };
+
+  const gitBranch =
+    environment?.branch ??
+    worktrees.find((worktree) => worktree.branch)?.branch ??
+    (project.is_git_repo ? "main" : "未连接");
+  const totalAdditions =
+    environment?.additions ??
+    diff?.files.reduce((sum, file) => sum + file.additions, 0) ??
+    0;
+  const totalDeletions =
+    environment?.deletions ??
+    diff?.files.reduce((sum, file) => sum + file.deletions, 0) ??
+    0;
 
   return (
     <ArtifactsProvider>
@@ -244,7 +368,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
             data-testid="coding-workbench-toolbar"
           >
             <div
-              className="bg-muted text-muted-foreground ml-auto inline-flex h-8 w-fit shrink-0 items-center justify-center rounded-md p-1"
+              className="bg-muted text-muted-foreground mr-auto inline-flex h-8 w-fit shrink-0 items-center justify-center rounded-md p-1"
               role="tablist"
               aria-label="代码区视图"
             >
@@ -252,33 +376,68 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                 active={activeCodeTab === "code"}
                 icon={<FileTextIcon className="h-3 w-3" />}
                 label="代码"
-                onClick={() => setActiveCodeTab("code")}
+                onClick={() => handleSelectWorkbenchTab("code")}
               />
               <WorkbenchToolbarButton
                 active={activeCodeTab === "task-changes"}
                 icon={<GitCompareIcon className="h-3 w-3" />}
                 label="任务变更"
-                onClick={() => setActiveCodeTab("task-changes")}
+                onClick={() => handleSelectWorkbenchTab("task-changes")}
               />
               <WorkbenchToolbarButton
                 active={activeCodeTab === "diff"}
                 icon={<GitCompareIcon className="h-3 w-3" />}
                 label="项目 Diff"
-                onClick={() => setActiveCodeTab("diff")}
+                onClick={() => handleSelectWorkbenchTab("diff")}
               />
               <WorkbenchToolbarButton
                 active={activeCodeTab === "results"}
                 icon={<PackageOpenIcon className="h-3 w-3" />}
                 label="结果"
-                onClick={() => setActiveCodeTab("results")}
+                onClick={() => handleSelectWorkbenchTab("results")}
               />
               <WorkbenchToolbarButton
                 active={activeCodeTab === "review"}
                 icon={<ClipboardCheckIcon className="h-3 w-3" />}
                 label="Code Review"
-                onClick={() => setActiveCodeTab("review")}
+                onClick={() => handleSelectWorkbenchTab("review")}
               />
             </div>
+            <Button
+              aria-label="打开本地终端"
+              className="size-8 shrink-0"
+              size="icon-sm"
+              title="打开本地终端"
+              type="button"
+              variant="ghost"
+              onClick={() => void handleOpenTerminal()}
+            >
+              <TerminalIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              aria-label="切换文件树"
+              aria-pressed={showFileExplorer}
+              className="size-8 shrink-0"
+              size="icon-sm"
+              title="切换文件树"
+              type="button"
+              variant="ghost"
+              onClick={handleToggleFileExplorer}
+            >
+              <PanelLeftOpenIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              aria-label="切换代码面板"
+              aria-pressed={showWorkbenchPane}
+              className="size-8 shrink-0"
+              size="icon-sm"
+              title="切换代码面板"
+              type="button"
+              variant="ghost"
+              onClick={handleToggleWorkbenchPane}
+            >
+              <PanelRightOpenIcon className="h-4 w-4" />
+            </Button>
           </div>
           <div className="mt-0 flex min-h-0 flex-1 overflow-hidden">
             <ResizablePanelGroup
@@ -323,15 +482,65 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                   leftCollapsed ? "pointer-events-none w-0! opacity-0" : ""
                 }
               />
-              {/* Middle: Code / Diff / Results / Review */}
+              {/* Middle: Agent Inspector */}
               <ResizablePanel defaultSize="55%" minSize="30%">
                 <div className="flex h-full min-h-0 flex-col">
-                  {activeCodeTab === "code" && (
+                  <AgentInspector
+                    onFocusFile={focusWorkbenchFile}
+                    projectRoot={project.path}
+                    projectId={projectId}
+                    threadId={codingThreadId}
+                    selectedTaskId={selectedTaskId}
+                    onThreadIdChange={setAgentThreadId}
+                    activeTab={activeInspectorTab}
+                    onActiveTabChange={setActiveInspectorTab}
+                  />
+                </div>
+              </ResizablePanel>
+              <ResizableHandle
+                disabled={rightCollapsed}
+                className={
+                  rightCollapsed ? "pointer-events-none w-0! opacity-0" : ""
+                }
+              />
+              {/* Right: Code / Diff / Results / Review */}
+              <ResizablePanel
+                panelRef={rightPanelRef}
+                defaultSize="25%"
+                minSize="15%"
+                maxSize="50%"
+                collapsible
+                collapsedSize="0%"
+                onResize={(size) => setRightCollapsed(size.asPercentage === 0)}
+              >
+                <div className="relative flex h-full min-h-0 flex-col border-l">
+                  <EnvironmentInfoFloatingCard
+                    additions={totalAdditions}
+                    deletions={totalDeletions}
+                    branch={gitBranch}
+                    githubCli={environment?.github_cli ?? null}
+                    sourceLabel={environment?.source.label ?? "仅本地"}
+                    sourceRemote={environment?.source.remote ?? null}
+                    head={environment?.head ?? null}
+                    ahead={environment?.ahead ?? 0}
+                    behind={environment?.behind ?? 0}
+                    changedFiles={environment?.changed_files ?? diff?.files.length ?? 0}
+                    commitPending={commitMutation.isPending}
+                    pushPending={pushMutation.isPending}
+                    commitDisabled={!environment?.is_git_repo || (environment?.changed_files ?? 0) === 0}
+                    pushDisabled={!environment?.is_git_repo}
+                    onCommit={() => setCommitDialogOpen(true)}
+                    onPush={() => void handlePush()}
+                    path={project.path}
+                    visible={true}
+                    docked={showWorkbenchPane}
+                  />
+                  {workbenchView === "code" && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <CodeViewer projectId={projectId} filePath={selectedFile} />
                     </div>
                   )}
-                  {activeCodeTab === "diff" && (
+                  {workbenchView === "diff" && showWorkbenchPane && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <CodingDiffPanel
                         projectId={projectId}
@@ -340,7 +549,7 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                       />
                     </div>
                   )}
-                  {activeCodeTab === "task-changes" && (
+                  {workbenchView === "task-changes" && showWorkbenchPane && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <CodingTaskChangesPanel
                         threadId={codingThreadId}
@@ -351,12 +560,12 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                       />
                     </div>
                   )}
-                  {activeCodeTab === "results" && (
+                  {workbenchView === "results" && showWorkbenchPane && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <CodingResultsPanel threadId={resultsThreadId} />
                     </div>
                   )}
-                  {activeCodeTab === "review" && (
+                  {workbenchView === "review" && showWorkbenchPane && (
                     <div className="min-h-0 flex-1 overflow-hidden">
                       <ReviewPanel
                         projectId={projectId}
@@ -368,53 +577,66 @@ export function CodingWorkbench({ projectId }: CodingWorkbenchProps) {
                   )}
                 </div>
               </ResizablePanel>
-              <ResizableHandle
-                disabled={rightCollapsed}
-                className={
-                  rightCollapsed ? "pointer-events-none w-0! opacity-0" : ""
-                }
-              />
-              {rightCollapsed && (
-                <CollapsedPanelRestore
-                  id="right-panel-toggle"
-                  side="right"
-                  label="展开 Agent Inspector"
-                  onClick={toggleRight}
-                />
-              )}
-              {/* Right: Agent Chat / Activity Panel */}
-              <ResizablePanel
-                panelRef={rightPanelRef}
-                defaultSize="25%"
-                minSize="15%"
-                maxSize="50%"
-                collapsible
-                collapsedSize="0%"
-                onResize={(size) => setRightCollapsed(size.asPercentage === 0)}
-              >
-                <AgentInspector
-                  headerAction={
-                    <PanelHeaderToggle
-                      id="right-panel-toggle-expanded"
-                      label="收起 Agent Inspector"
-                      side="right"
-                      onClick={toggleRight}
-                    />
-                  }
-                  onFocusFile={focusWorkbenchFile}
-                  projectRoot={project.path}
-                  projectId={projectId}
-                  threadId={codingThreadId}
-                  selectedTaskId={selectedTaskId}
-                  onThreadIdChange={setAgentThreadId}
-                  activeTab={activeInspectorTab}
-                  onActiveTabChange={setActiveInspectorTab}
-                />
-              </ResizablePanel>
             </ResizablePanelGroup>
           </div>
         </div>
       </div>
+      <Dialog open={isCommitDialogOpen} onOpenChange={setCommitDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>提交更改</DialogTitle>
+            <DialogDescription>
+              这会基于当前项目的真实 Git 状态执行一次提交。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="coding-commit-message">
+                提交说明
+              </label>
+              <Input
+                id="coding-commit-message"
+                value={commitMessage}
+                placeholder="例如：refine coding workbench environment card"
+                onChange={(event) => setCommitMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !commitMutation.isPending) {
+                    event.preventDefault();
+                    void handleCommit();
+                  }
+                }}
+              />
+            </div>
+            <div className="bg-muted/50 rounded-md border px-3 py-2 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">当前分支</span>
+                <span className="font-mono">{gitBranch}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCommitDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={commitMutation.isPending || !commitMessage.trim()}
+              onClick={() => void handleCommit()}
+            >
+              {commitMutation.isPending ? (
+                <LoaderCircleIcon className="h-4 w-4 animate-spin" />
+              ) : (
+                <GitCommitHorizontalIcon className="h-4 w-4" />
+              )}
+              提交更改
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ArtifactsProvider>
   );
 }
@@ -512,7 +734,6 @@ function CollapsedPanelRestore({
 
 function AgentInspector({
   activeTab,
-  headerAction,
   onActiveTabChange,
   onFocusFile,
   onThreadIdChange,
@@ -522,7 +743,6 @@ function AgentInspector({
   selectedTaskId,
 }: {
   activeTab: "agent" | "events" | "session" | "roi" | "workflow" | "skills";
-  headerAction?: React.ReactNode;
   onActiveTabChange: (tab: "agent" | "events" | "session" | "roi" | "workflow" | "skills") => void;
   onFocusFile?: WorkbenchFocusHandler;
   projectId: string;
@@ -539,7 +759,6 @@ function AgentInspector({
             Agent Inspector
           </p>
         </div>
-        {headerAction}
       </div>
       <Tabs
         value={activeTab}
@@ -602,6 +821,202 @@ function AgentInspector({
           </PersistentInspectorPanel>
         </div>
       </Tabs>
+    </div>
+  );
+}
+
+function EnvironmentInfoFloatingCard({
+  additions,
+  ahead,
+  branch,
+  changedFiles,
+  commitDisabled,
+  commitPending,
+  deletions,
+  docked,
+  githubCli,
+  head,
+  onCommit,
+  onPush,
+  path,
+  pushDisabled,
+  pushPending,
+  sourceLabel,
+  sourceRemote,
+  behind,
+  visible,
+}: {
+  additions: number;
+  ahead: number;
+  branch: string;
+  changedFiles: number;
+  commitDisabled: boolean;
+  commitPending: boolean;
+  deletions: number;
+  docked: boolean;
+  githubCli: {
+    available: boolean;
+    authenticated: boolean;
+    username: string | null;
+    host: string | null;
+    detail: string | null;
+  } | null;
+  head: string | null;
+  onCommit: () => void;
+  onPush: () => void;
+  path: string;
+  pushDisabled: boolean;
+  pushPending: boolean;
+  sourceLabel: string;
+  sourceRemote: string | null;
+  behind: number;
+  visible: boolean;
+}) {
+  const githubConnected = githubCli?.available && githubCli?.authenticated;
+  const githubLabel = githubConnected
+    ? `${githubCli?.username ?? "已登录"} @ ${githubCli?.host ?? "github.com"}`
+    : githubCli?.detail ?? "GitHub CLI 未连接";
+
+  return (
+    <div
+      className={cn(
+        "absolute right-3 top-3 z-20 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border bg-background/96 p-3 shadow-xl backdrop-blur transition-all",
+        docked && "right-4 top-4",
+        visible ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-[11px] font-semibold tracking-[0.08em] uppercase">
+            环境信息
+          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold">{branch}</p>
+            <Badge variant="secondary" className="h-5 rounded-sm px-1.5 font-mono text-[10px]">
+              {changedFiles} files
+            </Badge>
+          </div>
+        </div>
+        <div className="bg-muted/70 flex size-8 items-center justify-center rounded-xl border">
+          <MonitorCogIcon className="text-muted-foreground h-4 w-4" />
+        </div>
+      </div>
+      <div className="space-y-3 text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <InfoMetricTile
+            label="变更"
+            value={
+              <span className="font-mono text-xs">
+                <span className="text-emerald-600 dark:text-emerald-400">+{additions}</span>{" "}
+                <span className="text-red-600 dark:text-red-400">-{deletions}</span>
+              </span>
+            }
+          />
+          <InfoMetricTile
+            label="同步"
+            value={
+              <span className="font-mono text-xs text-muted-foreground">
+                ↑{ahead} ↓{behind}
+              </span>
+            }
+          />
+        </div>
+
+        <div className="rounded-xl border bg-muted/40 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-muted-foreground text-[11px] font-medium uppercase tracking-[0.08em]">
+              GitHub CLI
+            </span>
+            <Badge
+              variant={githubConnected ? "default" : "secondary"}
+              className="rounded-sm px-1.5 text-[10px]"
+            >
+              {githubConnected ? "已连接" : "未连接"}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              className={cn(
+                "flex size-7 items-center justify-center rounded-lg border",
+                githubConnected ? "bg-emerald-500/10 text-emerald-600" : "bg-muted text-muted-foreground",
+              )}
+            >
+              <GithubIcon className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium">{githubLabel}</p>
+              <p className="text-muted-foreground truncate text-[11px]">
+                {head ? `HEAD ${head.slice(0, 8)}` : "未检测到 HEAD"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-muted/40 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-muted-foreground text-[11px] font-medium uppercase tracking-[0.08em]">
+              来源
+            </span>
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <CloudIcon className="h-3 w-3" />
+              {sourceLabel}
+            </div>
+          </div>
+          <p className="truncate text-xs font-medium">{path}</p>
+          <p className="text-muted-foreground mt-1 truncate font-mono text-[11px]">
+            {sourceRemote ?? "当前项目未配置远程仓库"}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="justify-start gap-2 rounded-xl"
+            disabled={commitDisabled || commitPending}
+            onClick={onCommit}
+          >
+            {commitPending ? (
+              <LoaderCircleIcon className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <GitCommitHorizontalIcon className="h-3.5 w-3.5" />
+            )}
+            提交更改
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="justify-start gap-2 rounded-xl"
+            disabled={pushDisabled || pushPending}
+            onClick={onPush}
+          >
+            {pushPending ? (
+              <LoaderCircleIcon className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <SendIcon className="h-3.5 w-3.5" />
+            )}
+            推送分支
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoMetricTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border bg-muted/40 px-3 py-2">
+      <p className="text-muted-foreground text-[11px] uppercase tracking-[0.08em]">
+        {label}
+      </p>
+      <div className="mt-1">{value}</div>
     </div>
   );
 }
@@ -999,11 +1414,11 @@ function CodingSessionInspector({ threadId }: { threadId: string }) {
                 <div className="flex flex-wrap gap-1">
                   {session.active_coding_skills.map((skill, index) => (
                     <Badge
-                      key={`${String(skill.id ?? index)}-${index}`}
+                      key={`${formatInspectorValue(skill.id ?? index)}-${index}`}
                       variant="secondary"
                       className="rounded px-1.5 text-[10px]"
                     >
-                      {String(skill.name ?? skill.id ?? "skill")}
+                      {formatInspectorValue(skill.name ?? skill.id ?? "skill")}
                     </Badge>
                   ))}
                 </div>
@@ -1020,11 +1435,11 @@ function CodingSessionInspector({ threadId }: { threadId: string }) {
                 <div className="space-y-1">
                   {session.tool_policy.slice(0, 5).map((policy, index) => (
                     <div
-                      key={`${String(policy.id ?? index)}-${index}`}
+                      key={`${formatInspectorValue(policy.id ?? index)}-${index}`}
                       className="bg-muted/40 rounded px-2 py-1"
                     >
                       <p className="truncate text-xs font-medium">
-                        {String(policy.id ?? policy.name ?? `policy-${index + 1}`)}
+                        {formatInspectorValue(policy.id ?? policy.name ?? `policy-${index + 1}`)}
                       </p>
                       <p className="text-muted-foreground mt-0.5 truncate text-[10px]">
                         {formatToolPolicySummary(policy)}
@@ -1219,8 +1634,6 @@ function CodingRoiInspector({ threadId }: { threadId: string }) {
 function RoiTrendSparkline({ reports }: { reports: QiongqiRoiReport[] }) {
   const sorted = reports.slice().sort((a, b) => a.seq - b.seq);
   const maxTokens = Math.max(...sorted.map((r) => r.provider_usage?.input_tokens ?? 0), 1);
-  const barWidth = Math.max(4, Math.min(14, 100 / sorted.length - 2));
-
   return (
     <div className="rounded-md border p-2">
       <p className="text-muted-foreground mb-1.5 text-[10px]">
@@ -2209,7 +2622,7 @@ function formatInspectorValue(value: unknown): string {
   }
   if (Array.isArray(value)) return `${value.length} 项`;
   if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  return "";
 }
 
 function formatToolPolicySummary(policy: Record<string, unknown>): string {

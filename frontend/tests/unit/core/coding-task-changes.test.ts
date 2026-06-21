@@ -33,6 +33,8 @@ describe("coding task changes panel", () => {
     expect(workbench).toContain("selectedFilePath={selectedFile}");
     expect(workbench).toContain("setActiveInspectorTab");
     expect(workbench).toContain('setActiveInspectorTab("events")');
+    expect(workbench).toContain('setWorkbenchView(target)');
+    expect(workbench).toContain("openWorkbenchPane()");
     expect(workbench).toContain("onFocusFile={focusWorkbenchFile}");
   });
 });

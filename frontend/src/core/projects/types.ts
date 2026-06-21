@@ -105,6 +105,50 @@ export interface DiscardProjectFileChangeResult {
   discarded: boolean;
 }
 
+export interface GitHubCliStatus {
+  available: boolean;
+  authenticated: boolean;
+  username: string | null;
+  host: string | null;
+  detail: string | null;
+}
+
+export interface ProjectSource {
+  label: string;
+  remote: string | null;
+  provider: string;
+}
+
+export interface ProjectEnvironment {
+  is_git_repo: boolean;
+  branch: string | null;
+  head: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  github_cli: GitHubCliStatus;
+  source: ProjectSource;
+}
+
+export interface ProjectGitCommitRequest {
+  message: string;
+}
+
+export interface ProjectGitCommitResult {
+  head: string;
+  summary: string;
+  message: string;
+}
+
+export interface ProjectGitPushResult {
+  branch: string;
+  upstream: string | null;
+  summary: string;
+}
+
 // ---------------------------------------------------------------------------
 // Coding Agent inspector
 // ---------------------------------------------------------------------------
