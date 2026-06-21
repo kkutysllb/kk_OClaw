@@ -121,6 +121,34 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
     });
   }, [queryClient]);
 
+  // Silent refresh: invalidates stage + files + sessions queries WITHOUT
+  // touching agentStatus.  Used by the polling mechanism below so the UI
+  // doesn't flicker between "syncing_files" and "running_tool" every poll.
+  //
+  // This exists because the gateway does not support the ``events`` stream
+  // mode, so ``onToolEnd`` never fires, and the backend does not push
+  // ``adispatch_custom_event`` so ``onCustomEvent`` never fires either.
+  // The ONLY reliable signal during a run is ``thread.isLoading``.
+  const silentRefreshAll = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "files"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "file"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["projects", projectId, "diff"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["coding", "projects"],
+      exact: false,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["coding", "sessions"],
+      exact: false,
+    });
+  }, [projectId, queryClient]);
+
   const {
     thread,
     sendMessage,
@@ -201,6 +229,37 @@ function AgentPanelInner({ projectId, onThreadIdChange }: AgentPanelProps) {
       onThreadIdChange?.(streamThreadId);
     }
   }, [streamThreadId, onThreadIdChange]);
+
+  // ── Active-run polling refresh ────────────────────────────────────
+  // The gateway does NOT support the ``events`` stream mode, so
+  // ``onToolEnd`` (which relies on LangChain ``on_tool_end`` events) NEVER
+  // fires.  The backend also does not push ``adispatch_custom_event``, so
+  // ``onCustomEvent`` / ``onQiongqiEvent`` never fire either.
+  //
+  // This means the ONLY reliable indicator that the agent is actively
+  // working is ``thread.isLoading``.  While it is true, we poll-silently-
+  // refresh all derived UI state (stage transitions, file explorer, coding
+  // session events) every 2 seconds so the Workflow panel and file tree
+  // update in real time during the run.
+  //
+  // When the run finishes (isLoading→false), one final refresh ensures the
+  // final state is reflected.
+  const isLoading = thread.isLoading;
+  useEffect(() => {
+    if (!isLoading) return;
+    // Immediate refresh when the run starts.
+    silentRefreshAll();
+    const interval = window.setInterval(silentRefreshAll, 2000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isLoading, silentRefreshAll]);
+  // Final refresh when the run completes (isLoading transitions to false).
+  useEffect(() => {
+    if (!isLoading) {
+      silentRefreshAll();
+    }
+  }, [isLoading, silentRefreshAll]);
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
