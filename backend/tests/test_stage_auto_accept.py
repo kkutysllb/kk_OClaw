@@ -25,10 +25,14 @@ PROJECT_ROOT = "/tmp/demo-project"
 def _runtime(
     project_root: str = PROJECT_ROOT,
     thread_id: str = "thread-1",
+    test_results: list | None = None,
 ) -> SimpleNamespace:
-    return SimpleNamespace(
-        state={"thread_data": {"project_root": project_root, "thread_id": thread_id}},
-    )
+    state: dict = {
+        "thread_data": {"project_root": project_root, "thread_id": thread_id},
+    }
+    if test_results is not None:
+        state["test_results"] = test_results
+    return SimpleNamespace(state=state)
 
 
 def _make_config(auto_accept: bool) -> SimpleNamespace:
@@ -235,3 +239,151 @@ def test_auto_accept_from_none_to_requirements(
     state = temp_store.get_state(PROJECT_ROOT)
     assert state.current_stage == "requirements"
     assert state.pending_suggestion is None
+
+
+# ------------------------------------------------------------------ #
+# G4: run_outcome auto-fill on auto-accept path
+# ------------------------------------------------------------------ #
+
+
+def test_summarize_run_outcome_empty_state() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    assert _summarize_run_outcome(None) is None
+    assert _summarize_run_outcome(SimpleNamespace(state=None)) is None
+
+
+def test_summarize_run_outcome_no_results() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    rt = SimpleNamespace(state={"thread_data": {}})
+    assert _summarize_run_outcome(rt) is None
+
+
+def test_summarize_run_outcome_lint_clean() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    rt = SimpleNamespace(state={
+        "test_results": [
+            {"command": "ruff check .", "passed": True},
+        ],
+    })
+    assert _summarize_run_outcome(rt) == "lint_clean"
+
+
+def test_summarize_run_outcome_tests_passed_with_count() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    rt = SimpleNamespace(state={
+        "test_results": [
+            {
+                "command": "pytest",
+                "passed": True,
+                "summary": {"passed": 5, "total": 5},
+            },
+        ],
+    })
+    outcome = _summarize_run_outcome(rt)
+    assert outcome is not None
+    assert "tests_passed:5" in outcome
+
+
+def test_summarize_run_outcome_tests_failed() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    rt = SimpleNamespace(state={
+        "test_results": [
+            {
+                "command": "jest",
+                "passed": False,
+                "summary": {"passed": 2, "failed": 1, "total": 3},
+            },
+        ],
+    })
+    assert _summarize_run_outcome(rt) == "tests_failed"
+
+
+def test_summarize_run_outcome_combined() -> None:
+    from kkoclaw.tools.coding.stage_tools import _summarize_run_outcome
+
+    rt = SimpleNamespace(state={
+        "test_results": [
+            {"command": "ruff check .", "passed": True},
+            {"command": "pytest", "passed": True, "summary": {"passed": 3}},
+        ],
+    })
+    outcome = _summarize_run_outcome(rt)
+    assert outcome == "lint_clean, tests_passed:3"
+
+
+def test_auto_accept_records_run_outcome(
+    temp_store: ProjectStageStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G4: auto-accept path captures test_results into history run_outcome."""
+    from kkoclaw.tools.coding import stage_tools
+
+    _patch_tool_deps(monkeypatch, auto_accept=True)
+    temp_store.set_current_stage(PROJECT_ROOT, "requirements", reason="", source="user")
+
+    test_results = [
+        {"command": "ruff check .", "passed": True},
+        {"command": "pytest", "passed": True, "summary": {"passed": 4}},
+    ]
+    rt = _runtime(test_results=test_results)
+
+    result = stage_tools.suggest_delivery_stage_tool.func(
+        rt, stage_id="design", reason="requirements done",
+    )
+
+    assert "Automatically transitioned" in result
+    assert "Run outcome:" in result
+    state = temp_store.get_state(PROJECT_ROOT)
+    entry = state.stage_history[-1]
+    assert entry.run_outcome is not None
+    assert "lint_clean" in entry.run_outcome
+    assert "tests_passed:4" in entry.run_outcome
+
+
+def test_auto_accept_without_test_results_has_no_outcome(
+    temp_store: ProjectStageStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When no verification data exists, run_outcome stays None."""
+    from kkoclaw.tools.coding import stage_tools
+
+    _patch_tool_deps(monkeypatch, auto_accept=True)
+    temp_store.set_current_stage(PROJECT_ROOT, "requirements", reason="", source="user")
+
+    result = stage_tools.suggest_delivery_stage_tool.func(
+        _runtime(), stage_id="design", reason="requirements done",
+    )
+
+    assert "Automatically transitioned" in result
+    assert "Run outcome:" not in result
+    state = temp_store.get_state(PROJECT_ROOT)
+    assert state.stage_history[-1].run_outcome is None
+
+
+def test_manual_suggestion_path_does_not_capture_outcome(
+    temp_store: ProjectStageStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G4 only fills outcome on the auto-accept path, not on manual suggestion."""
+    from kkoclaw.tools.coding import stage_tools
+
+    _patch_tool_deps(monkeypatch, auto_accept=False)
+    temp_store.set_current_stage(PROJECT_ROOT, "requirements", reason="", source="user")
+
+    test_results = [{"command": "pytest", "passed": True, "summary": {"passed": 5}}]
+    rt = _runtime(test_results=test_results)
+
+    result = stage_tools.suggest_delivery_stage_tool.func(
+        rt, stage_id="design", reason="requirements done",
+    )
+
+    assert "Suggested transitioning" in result
+    # No history entry is created on the suggestion path (only pending_suggestion).
+    state = temp_store.get_state(PROJECT_ROOT)
+    assert state.pending_suggestion is not None
+    assert len(state.stage_history) == 1  # only the initial 'requirements' set

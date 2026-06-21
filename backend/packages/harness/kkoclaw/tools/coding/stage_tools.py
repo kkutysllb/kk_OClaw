@@ -103,19 +103,25 @@ def suggest_delivery_stage_tool(
     forward = _is_forward_transition(current_state.current_stage, stage_id)
 
     if auto_accept and forward:
+        # G4: auto-capture the run's verification outcome (lint/test status)
+        # so the history entry records *why* the transition was safe.
+        run_outcome = _summarize_run_outcome(runtime)
         store.set_current_stage(
             project_root,
             stage_id,
             reason=reason.strip(),
             source="agent_accepted",
             thread_id=thread_id,
+            run_outcome=run_outcome,
         )
         stage = get_stage(stage_id)
         title = stage.title if stage else stage_id
+        outcome_suffix = f"\nRun outcome: {run_outcome}" if run_outcome else ""
         return (
             f"✅ Automatically transitioned the project to the **{title}** "
             f"stage (auto-accept enabled, forward transition).\n"
             f"Reason: {reason.strip()}"
+            f"{outcome_suffix}"
         )
     # ------------------------------------------------------------------
 
@@ -134,6 +140,72 @@ def suggest_delivery_stage_tool(
         f"Reason: {reason.strip()}\n"
         f"The user will see this suggestion and can accept or dismiss it."
     )
+
+
+def _summarize_run_outcome(runtime: Runtime) -> str | None:
+    """Build a concise outcome tag from the thread's last verification results.
+
+    Reads ``state["test_results"]`` (populated by run_tests / run_linter
+    tools) and returns a short string like ``"tests_passed:3"`` or
+    ``"lint_clean"`` or ``"tests_failed"``. Returns ``None`` when no
+    verification data is available so the history entry simply omits
+    the field.
+
+    The outcome is intentionally short so it fits cleanly in a badge
+    in the frontend timeline.
+    """
+    try:
+        state = runtime.state if runtime else None
+        if not state:
+            return None
+        results = state.get("test_results")
+        if not results or not isinstance(results, list):
+            return None
+
+        lint_ok: bool | None = None
+        lint_total = 0
+        tests_ok: bool | None = None
+        tests_passed = 0
+        tests_total = 0
+
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            command = (r.get("command") or "").lower()
+            passed = bool(r.get("passed", False))
+            summary = r.get("summary")
+
+            # Heuristic: linter/type-checker commands contain these keywords.
+            is_lint = any(
+                kw in command
+                for kw in ("ruff", "mypy", "eslint", "tsc", "flake8", "pyright")
+            )
+            if is_lint:
+                lint_total += 1
+                lint_ok = passed if lint_ok is None else (lint_ok and passed)
+            else:
+                tests_total += 1
+                tests_ok = passed if tests_ok is None else (tests_ok and passed)
+                if isinstance(summary, dict):
+                    tests_passed += int(summary.get("passed", 0) or 0)
+                    tests_total = max(
+                        tests_total,
+                        int(summary.get("total", 0) or 0),
+                    )
+
+        parts: list[str] = []
+        if lint_ok is True:
+            parts.append("lint_clean")
+        elif lint_ok is False:
+            parts.append("lint_failed")
+        if tests_ok is True:
+            parts.append(f"tests_passed:{tests_passed}" if tests_passed else "tests_passed")
+        elif tests_ok is False:
+            parts.append("tests_failed")
+
+        return ", ".join(parts) if parts else None
+    except Exception:  # noqa: BLE001 — never crash the tool on state access
+        return None
 
 
 def _is_auto_accept_enabled() -> bool:

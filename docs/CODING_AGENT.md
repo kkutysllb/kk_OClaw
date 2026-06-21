@@ -391,13 +391,12 @@ pnpm --dir frontend run typecheck
 - 基于 diff/task/events/PR context 的 Code Review。
 - Python secret 场景的一键安全修复。
 - 前端三栏 workbench、持久 AgentPanel、Workflow/Skills 分离。
-- **项目交付阶段状态机**（7 阶段 `ProjectStageStore` 持久化 + `completion_signals` 驱动的 `suggest_delivery_stage` 主动提议 + 冷启动自动进入「需求」阶段 + `StageSuggestionBanner` 人工确认 / 可选 `auto_accept_forward_stage` 顺向自动确认 + `StageHistoryEntry` 携带 `thread_id`/`run_outcome` 可追溯 + 前端「阶段流转历史」Timeline 可视化）。
+- **项目交付阶段状态机**（7 阶段 `ProjectStageStore` 持久化 + `completion_signals` 驱动的 `suggest_delivery_stage` 主动提议 + 冷启动自动进入「需求」阶段 + `StageSuggestionBanner` 人工确认 / 可选 `auto_accept_forward_stage` 顺向自动确认 + `StageHistoryEntry` 携带 `thread_id`/`run_outcome` 可追溯 + auto-accept 路径自动从 `test_results` 提取 lint/test outcome 填充 + 前端「阶段流转历史」Timeline 可视化）。
 
 后续可继续增强：
 
 - 更丰富的自动修复类型，例如测试缺口、简单 lint、配置风险。
 - 跨提交/跨分支的更复杂 PR 审查策略。
 - Review finding 的精确行号映射和更细粒度 evidence。
-- `run_outcome` 自动填充：当 Agent 通过 auto-accept 路径触发阶段转移时，自动捕获该 run 的 lint/test 结果作为 outcome 写入 `StageHistoryEntry`（当前需手动传入）。
 - 项目私有 skills 的治理策略和导入/导出能力。
 - rename_symbol 扩展为跨文件跨项目重命名（当前仅单文件）。
