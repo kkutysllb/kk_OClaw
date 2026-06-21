@@ -15,6 +15,7 @@ from kkoclaw.agents.memory.prompt import format_memory_for_injection
 from kkoclaw.agents.memory.queue import get_memory_queue
 from kkoclaw.agents.memory.retrieval import (
     extract_current_context,
+    filter_memory_facts_for_scope,
     get_retrieval_stats,
     rank_memory_facts,
     record_retrieval_injection_stats,
@@ -82,7 +83,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
                 count += 1
         return count
 
-    def _build_retrieval_injection(self, messages: list, config: "MemoryConfig") -> dict | None:
+    def _build_retrieval_injection(self, messages: list, config: "MemoryConfig", runtime_context: dict | None = None) -> dict | None:
         retrieval_config = getattr(config, "retrieval", None)
         if not (config.enabled and config.injection_enabled and retrieval_config and retrieval_config.enabled):
             return None
@@ -94,15 +95,20 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             max_chars=retrieval_config.context_max_chars,
         )
         memory_data = get_memory_data(self._agent_name, user_id=get_effective_user_id())
-        ranked_facts = rank_memory_facts(
+        active_scope = self._resolve_active_scope(runtime_context)
+        scoped_facts = filter_memory_facts_for_scope(
             memory_data.get("facts", []),
+            active_scope=active_scope,
+        )
+        ranked_facts = rank_memory_facts(
+            scoped_facts,
             current_context=current_context,
             similarity_weight=retrieval_config.similarity_weight,
             confidence_weight=retrieval_config.confidence_weight,
             min_similarity=retrieval_config.min_similarity,
         )
         memory_content = format_memory_for_injection(
-            {"facts": memory_data.get("facts", [])},
+            {"facts": scoped_facts},
             max_tokens=config.max_injection_tokens,
             ranked_facts=ranked_facts,
         )
@@ -139,17 +145,50 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         )
         return {"messages": [reminder]}
 
+    @staticmethod
+    def _resolve_active_scope(runtime_context: dict | None = None) -> dict | None:
+        try:
+            config_data = get_config()
+        except RuntimeError:
+            config_data = {}
+        config_context = config_data.get("context") or {}
+        configurable = config_data.get("configurable") or {}
+
+        for container in (runtime_context, config_context, configurable):
+            if not isinstance(container, dict):
+                continue
+            memory_scope = container.get("memory_scope")
+            if isinstance(memory_scope, dict):
+                return memory_scope
+
+            project_id = container.get("project_id")
+            project_root = container.get("project_root")
+            if isinstance(project_id, str) and project_id.strip():
+                scope = {
+                    "type": "coding_project",
+                    "id": project_id.strip(),
+                }
+                if isinstance(project_root, str) and project_root.strip():
+                    scope["workspaceRoot"] = project_root.strip()
+                return scope
+            if isinstance(project_root, str) and project_root.strip():
+                return {
+                    "type": "coding_project",
+                    "workspaceRoot": project_root.strip(),
+                }
+
+        return None
+
     @override
     def before_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
         """Inject context-aware memory facts before each agent execution."""
-        del runtime
         config = self._memory_config or get_memory_config()
         messages = list(state.get("messages", []))
         if not messages:
             return None
 
         try:
-            return self._build_retrieval_injection(messages, config)
+            return self._build_retrieval_injection(messages, config, runtime.context if runtime.context else None)
         except Exception:
             logger.exception("Failed to inject context-aware memory facts")
             return None
@@ -207,12 +246,14 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # threading.Timer fires on a different thread where ContextVar values are not
         # propagated, so we must store user_id explicitly in ConversationContext.
         user_id = get_effective_user_id()
+        active_scope = self._resolve_active_scope(runtime.context if runtime.context else None)
         queue = get_memory_queue()
         queue.add(
             thread_id=thread_id,
             messages=filtered_messages,
             agent_name=self._agent_name,
             user_id=user_id,
+            active_scope=active_scope,
             correction_detected=correction_detected,
             reinforcement_detected=reinforcement_detected,
         )

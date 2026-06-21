@@ -1,5 +1,6 @@
 from kkoclaw.agents.memory import retrieval as retrieval_module
 from kkoclaw.agents.memory.retrieval import (
+    filter_memory_facts_for_scope,
     get_retrieval_stats,
     rank_memory_facts,
     reset_retrieval_stats,
@@ -50,6 +51,37 @@ def test_rank_memory_facts_falls_back_to_confidence_without_context() -> None:
     )
 
     assert [fact["content"] for fact in ranked] == ["High", "Low"]
+
+
+def test_filter_memory_facts_for_coding_project_scope_keeps_global_and_matching_project() -> None:
+    facts = [
+        {"content": "Global preference", "scope": {"type": "global"}},
+        {"content": "OClaw project fact", "scope": {"type": "coding_project", "id": "kk_OClaw"}},
+        {"content": "Aoshu project fact", "scope": {"type": "coding_project", "id": "kk_aoshu"}},
+        {"content": "Legacy fact without scope"},
+    ]
+
+    filtered = filter_memory_facts_for_scope(
+        facts,
+        active_scope={"type": "coding_project", "id": "kk_OClaw"},
+    )
+
+    assert [fact["content"] for fact in filtered] == [
+        "Global preference",
+        "OClaw project fact",
+        "Legacy fact without scope",
+    ]
+
+
+def test_filter_memory_facts_without_active_scope_preserves_legacy_behavior() -> None:
+    facts = [
+        {"content": "Global preference", "scope": {"type": "global"}},
+        {"content": "Project fact", "scope": {"type": "coding_project", "id": "kk_OClaw"}},
+    ]
+
+    filtered = filter_memory_facts_for_scope(facts, active_scope=None)
+
+    assert filtered == facts
 
 
 def test_rank_memory_facts_records_cache_hit_and_miss() -> None:

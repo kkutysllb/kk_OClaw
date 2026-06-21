@@ -17,6 +17,7 @@
 - [x] 为 memory retrieval 引入 facts 侧文档集签名缓存
 - [x] 增强 `tokenize_text()` 的中文/技术词切分能力
 - [x] 为 memory retrieval 增加可查询统计与调试日志
+- [x] 为 memory facts 增加 scope-aware 隔离，coding agent 仅注入 `global` + 当前 `coding_project` facts，普通对话保持 user-level 行为
 - [x] 支持将 `.kkoclaw/agents/<name>` 自定义 agent 桥接为可由 `task` 调度的 subagent
 - [x] 支持通过 `GATEWAY_WORKERS` 配置生产部署的 Gateway 并发数
 - [x] subagent recursion_limit 公式可配置化（`recursion_limit_multiplier` × max_turns + `recursion_limit_base`，默认 `3*max_turns+20`）
@@ -39,6 +40,7 @@
 - [ ] 支持更多上传文档格式
 - [ ] 技能市场/远程技能安装
 - [ ] 优化 IM 渠道多任务场景下 agent 热路径的异步并发
+- [ ] 将 `user/history` 摘要升级为 scope-aware 结构，避免项目级摘要继续写入全局用户背景
 - [ ] 将 `packages/harness/kkoclaw/sandbox/local/local_sandbox.py` 中的 `subprocess.run()` 替换为 `asyncio.create_subprocess_shell()`
   - 将社区工具（tavily、jina_ai、firecrawl、infoquest、image_search）中的同步 `requests` 替换为 `httpx.AsyncClient`
   - [x] 将 title_middleware 和 memory updater 中的同步 `model.invoke()` 替换为异步 `model.ainvoke()`

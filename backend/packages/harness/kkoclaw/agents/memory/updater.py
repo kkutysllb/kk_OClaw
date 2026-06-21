@@ -351,6 +351,7 @@ class MemoryUpdater:
         thread_id: str | None,
         agent_name: str | None,
         user_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> bool:
         """Parse the model response, apply updates, and persist memory."""
         response_text = _extract_text(response_content).strip()
@@ -362,7 +363,7 @@ class MemoryUpdater:
         update_data = json.loads(response_text)
         # Deep-copy before in-place mutation so a subsequent save() failure
         # cannot corrupt the still-cached original object reference.
-        updated_memory = self._apply_updates(copy.deepcopy(current_memory), update_data, thread_id)
+        updated_memory = self._apply_updates(copy.deepcopy(current_memory), update_data, thread_id, active_scope=active_scope)
         updated_memory = _strip_upload_mentions_from_memory(updated_memory)
         return get_memory_storage().save(updated_memory, agent_name, user_id=user_id)
 
@@ -374,6 +375,7 @@ class MemoryUpdater:
         correction_detected: bool = False,
         reinforcement_detected: bool = False,
         user_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> bool:
         """Update memory asynchronously by delegating to the sync path.
 
@@ -391,6 +393,7 @@ class MemoryUpdater:
             correction_detected=correction_detected,
             reinforcement_detected=reinforcement_detected,
             user_id=user_id,
+            active_scope=active_scope,
         )
 
     def _do_update_memory_sync(
@@ -401,6 +404,7 @@ class MemoryUpdater:
         correction_detected: bool = False,
         reinforcement_detected: bool = False,
         user_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> bool:
         """Pure-sync memory update using ``model.invoke()``.
 
@@ -430,6 +434,7 @@ class MemoryUpdater:
                 thread_id=thread_id,
                 agent_name=agent_name,
                 user_id=user_id,
+                active_scope=active_scope,
             )
         except json.JSONDecodeError as e:
             logger.warning("Failed to parse LLM response for memory update: %s", e)
@@ -446,6 +451,7 @@ class MemoryUpdater:
         correction_detected: bool = False,
         reinforcement_detected: bool = False,
         user_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> bool:
         """Synchronously update memory using the sync LLM path.
 
@@ -484,6 +490,7 @@ class MemoryUpdater:
                     correction_detected=correction_detected,
                     reinforcement_detected=reinforcement_detected,
                     user_id=user_id,
+                    active_scope=active_scope,
                 )
                 return future.result()
             except Exception:
@@ -497,6 +504,7 @@ class MemoryUpdater:
             correction_detected=correction_detected,
             reinforcement_detected=reinforcement_detected,
             user_id=user_id,
+            active_scope=active_scope,
         )
 
     def _apply_updates(
@@ -504,6 +512,7 @@ class MemoryUpdater:
         current_memory: dict[str, Any],
         update_data: dict[str, Any],
         thread_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Apply LLM-generated updates to memory.
 
@@ -570,6 +579,8 @@ class MemoryUpdater:
                     normalized_source_error = source_error.strip()
                     if normalized_source_error:
                         fact_entry["sourceError"] = normalized_source_error
+                if active_scope:
+                    fact_entry["scope"] = dict(active_scope)
                 current_memory["facts"].append(fact_entry)
                 if fact_key is not None:
                     existing_fact_keys.add(fact_key)
@@ -593,6 +604,7 @@ def update_memory_from_conversation(
     correction_detected: bool = False,
     reinforcement_detected: bool = False,
     user_id: str | None = None,
+    active_scope: dict[str, Any] | None = None,
 ) -> bool:
     """Convenience function to update memory from a conversation.
 
@@ -608,4 +620,4 @@ def update_memory_from_conversation(
         True if successful, False otherwise.
     """
     updater = MemoryUpdater()
-    return updater.update_memory(messages, thread_id, agent_name, correction_detected, reinforcement_detected, user_id=user_id)
+    return updater.update_memory(messages, thread_id, agent_name, correction_detected, reinforcement_detected, user_id=user_id, active_scope=active_scope)

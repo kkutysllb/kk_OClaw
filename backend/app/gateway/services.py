@@ -136,6 +136,8 @@ _CONTEXT_CONFIGURABLE_KEYS: frozenset[str] = frozenset(
         # ``make_coding_agent`` (cfg["project_root"]) to scope file operations
         # and inject the "## Current Project" section into the system prompt.
         "project_root",
+        "project_id",
+        "memory_scope",
     }
 )
 

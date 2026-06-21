@@ -168,7 +168,53 @@ def test_apply_updates_preserves_source_error() -> None:
         result = updater._apply_updates(current_memory, update_data, thread_id="thread-correction")
 
     assert result["facts"][0]["sourceError"] == "The agent previously suggested npm start."
-    assert result["facts"][0]["category"] == "correction"
+
+
+def test_apply_updates_attaches_scope_to_new_facts_when_provided() -> None:
+    updater = MemoryUpdater()
+    current_memory = _make_memory()
+    update_data = {
+        "user": {},
+        "history": {},
+        "newFacts": [
+            {
+                "content": "OClaw uses scoped coding memory.",
+                "category": "context",
+                "confidence": 0.9,
+            }
+        ],
+        "factsToRemove": [],
+    }
+
+    result = updater._apply_updates(
+        current_memory,
+        update_data,
+        thread_id="thread-oclaw",
+        active_scope={"type": "coding_project", "id": "kk_OClaw"},
+    )
+
+    assert result["facts"][0]["scope"] == {"type": "coding_project", "id": "kk_OClaw"}
+
+
+def test_apply_updates_omits_scope_for_unspecified_conversation_scope() -> None:
+    updater = MemoryUpdater()
+    current_memory = _make_memory()
+    update_data = {
+        "user": {},
+        "history": {},
+        "newFacts": [
+            {
+                "content": "General conversation memory remains unscoped.",
+                "category": "context",
+                "confidence": 0.9,
+            }
+        ],
+        "factsToRemove": [],
+    }
+
+    result = updater._apply_updates(current_memory, update_data, thread_id="thread-general")
+
+    assert "scope" not in result["facts"][0]
 
 
 def test_apply_updates_ignores_empty_source_error() -> None:

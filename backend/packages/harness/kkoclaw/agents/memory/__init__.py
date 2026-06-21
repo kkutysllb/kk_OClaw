@@ -12,15 +12,16 @@ from kkoclaw.agents.memory.prompt import (
     format_conversation_for_update,
     format_memory_for_injection,
 )
-from kkoclaw.agents.memory.retrieval import (
-    extract_current_context,
-    rank_memory_facts,
-)
 from kkoclaw.agents.memory.queue import (
     ConversationContext,
     MemoryUpdateQueue,
     get_memory_queue,
     reset_memory_queue,
+)
+from kkoclaw.agents.memory.retrieval import (
+    extract_current_context,
+    filter_memory_facts_for_scope,
+    rank_memory_facts,
 )
 from kkoclaw.agents.memory.storage import (
     FileMemoryStorage,
@@ -46,6 +47,7 @@ __all__ = [
     "format_memory_for_injection",
     "format_conversation_for_update",
     "extract_current_context",
+    "filter_memory_facts_for_scope",
     "rank_memory_facts",
     # Queue
     "ConversationContext",

@@ -4,14 +4,23 @@ from unittest.mock import MagicMock
 
 from langchain_core.messages import HumanMessage
 
+from kkoclaw.agents.memory.retrieval import get_retrieval_stats, reset_retrieval_stats
 from kkoclaw.agents.middlewares import memory_middleware as memory_middleware_module
 from kkoclaw.agents.middlewares.memory_middleware import MemoryMiddleware
-from kkoclaw.agents.memory.retrieval import get_retrieval_stats, reset_retrieval_stats
 from kkoclaw.config.memory_config import MemoryConfig, MemoryRetrievalConfig
 
 
 def _runtime() -> MagicMock:
     return MagicMock(context={"thread_id": "thread-1"})
+
+
+def _runtime_with_scope() -> MagicMock:
+    return MagicMock(
+        context={
+            "thread_id": "thread-1",
+            "memory_scope": {"type": "coding_project", "id": "kk_OClaw"},
+        }
+    )
 
 
 def test_before_agent_injects_ranked_memory_when_retrieval_enabled(monkeypatch) -> None:
@@ -116,6 +125,41 @@ def test_before_agent_records_injection_stats(monkeypatch) -> None:
     stats = get_retrieval_stats()
     assert stats["last_injection_tokens_budget"] == 2000
     assert stats["last_injected_facts_count"] == 2
+
+
+def test_before_agent_filters_facts_by_runtime_coding_scope(monkeypatch) -> None:
+    config = MemoryConfig(
+        enabled=True,
+        injection_enabled=True,
+        retrieval=MemoryRetrievalConfig(enabled=True),
+    )
+    middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
+    captured: dict[str, object] = {}
+    facts = [
+        {"content": "Global preference", "category": "preference", "confidence": 0.9, "scope": {"type": "global"}},
+        {"content": "OClaw project fact", "category": "context", "confidence": 0.8, "scope": {"type": "coding_project", "id": "kk_OClaw"}},
+        {"content": "Aoshu project fact", "category": "context", "confidence": 0.8, "scope": {"type": "coding_project", "id": "kk_aoshu"}},
+    ]
+
+    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "get_memory_data", lambda agent_name=None, *, user_id=None: {"facts": facts})
+    monkeypatch.setattr(memory_middleware_module, "extract_current_context", lambda messages, *, max_turns, max_chars: "current context")
+
+    def fake_rank_memory_facts(scoped_facts, **kwargs):
+        captured["ranked_input"] = scoped_facts
+        return scoped_facts
+
+    monkeypatch.setattr(memory_middleware_module, "rank_memory_facts", fake_rank_memory_facts)
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "format_memory_for_injection",
+        lambda memory_data, *, max_tokens, ranked_facts=None: "Facts:\n- [context | 0.80] scoped fact",
+    )
+
+    result = middleware.before_agent({"messages": [HumanMessage(content="继续做 kk_OClaw")]}, _runtime_with_scope())
+
+    assert result is not None
+    assert [fact["content"] for fact in captured["ranked_input"]] == ["Global preference", "OClaw project fact"]
 
 
 def test_before_agent_emits_debug_log_for_retrieval_injection(monkeypatch, caplog) -> None:

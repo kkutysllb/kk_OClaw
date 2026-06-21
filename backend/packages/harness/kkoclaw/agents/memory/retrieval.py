@@ -17,6 +17,7 @@ _TECH_SPLIT_RE = re.compile(r"[-_./:+]+")
 _CAMEL_SEGMENT_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+")
 
 FactSignature = tuple[str, float, str, str | None]
+MemoryScope = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,63 @@ def _sort_facts_by_confidence(facts: list[dict[str, Any]]) -> list[dict[str, Any
         key=lambda fact: _coerce_confidence(fact.get("confidence"), default=0.0),
         reverse=True,
     )
+
+
+def _scope_value(scope: MemoryScope | None, key: str) -> str:
+    if not isinstance(scope, dict):
+        return ""
+    value = scope.get(key)
+    return str(value).strip() if value is not None else ""
+
+
+def _same_memory_scope(fact_scope: MemoryScope, active_scope: MemoryScope) -> bool:
+    if _scope_value(fact_scope, "type") != _scope_value(active_scope, "type"):
+        return False
+
+    for key in ("id", "workspaceRoot"):
+        active_value = _scope_value(active_scope, key)
+        if active_value and _scope_value(fact_scope, key) == active_value:
+            return True
+
+    return False
+
+
+def filter_memory_facts_for_scope(
+    facts: list[dict[str, Any]],
+    *,
+    active_scope: MemoryScope | None,
+) -> list[dict[str, Any]]:
+    """Filter memory facts for the active task scope.
+
+    Scope is intentionally opt-in. Non-coding conversations usually have no
+    project identity, so they keep the legacy user-level memory behavior.
+    Coding project scope keeps global facts, matching project facts, and legacy
+    facts that have not been migrated yet, while excluding facts from other
+    coding projects.
+    """
+    if not active_scope:
+        return facts
+
+    active_type = _scope_value(active_scope, "type")
+    if not active_type:
+        return facts
+
+    filtered: list[dict[str, Any]] = []
+    for fact in facts:
+        fact_scope = fact.get("scope")
+        if not isinstance(fact_scope, dict):
+            filtered.append(fact)
+            continue
+
+        fact_scope_type = _scope_value(fact_scope, "type")
+        if fact_scope_type in {"", "global"}:
+            filtered.append(fact)
+            continue
+
+        if _same_memory_scope(fact_scope, active_scope):
+            filtered.append(fact)
+
+    return filtered
 
 
 def _cosine_similarity(vec_a: dict[str, float], vec_b: dict[str, float]) -> float:

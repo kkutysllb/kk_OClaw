@@ -19,6 +19,7 @@
 - retrieval 已增加进程内运行时统计，可查询 cache hit/miss、fallback 次数、最近一次排序摘要和注入摘要。
 - gateway 已暴露只读调试接口 `/api/memory/retrieval/stats`。
 - `MemoryMiddleware` 会输出 debug 级别 retrieval 日志，仅包含 cache、fallback、注入预算和 top score 数值摘要，不包含原始上下文或事实原文。
+- memory facts 已支持 scope-aware 隔离：普通对话默认保持 user-level 行为；coding agent 可通过 `memory_scope` 或 `project_id`/`project_root` 推导 `coding_project` scope，注入时仅保留 `global`、当前项目和未迁移 legacy facts。
 
 ## 当前行为
 
@@ -39,6 +40,7 @@ def format_memory_for_injection(
 - `Facts` 部分来自 `facts[]`
   - retrieval 关闭时：按置信度排序
   - retrieval 开启时：按 `current_context` TF-IDF 相似度与 `confidence` 的加权分数排序
+  - 若当前运行存在 active scope（例如 coding agent 的 `coding_project`），会先过滤 facts，再进行排序和注入
   - facts 仍会在 token 预算内追加到上限
 
 Token 计数：
@@ -50,6 +52,7 @@ Token 计数：
 
 - 检索目标仅覆盖 `facts[]`
 - `user.*` 与 `history.*` 仍作为摘要背景注入，不参与 retrieval 排序
+- `user.*` 与 `history.*` 仍是 user-level 摘要，尚未按 `global` / `coding_project` / `conversation` 拆分，因此跨项目污染的彻底修复还需要后续 schema 升级
 - 第一版缓存为进程内 `lru_cache`，未做跨进程共享
 - tokenizer 仍为轻量规则方案，未引入自定义技术词表或外部分词依赖
 - 第一版未引入 BM25 或 embedding 检索
