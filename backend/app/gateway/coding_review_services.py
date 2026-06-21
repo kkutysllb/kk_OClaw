@@ -720,7 +720,8 @@ def _get_pr_diff(project_root: str, base_ref: str) -> dict[str, Any]:
 
 def _resolve_pr_base_ref(repo_root: str, requested_base_ref: str | None) -> str:
     candidates = []
-    if requested_base_ref:
+    normalized_requested = (requested_base_ref or "").strip()
+    if normalized_requested and normalized_requested.lower() != "auto":
         candidates.append(requested_base_ref)
     candidates.extend(
         [
@@ -737,6 +738,13 @@ def _resolve_pr_base_ref(repo_root: str, requested_base_ref: str | None) -> str:
             continue
         if _git_ref_exists(repo_root, candidate) and _git_merge_base_exists(repo_root, candidate):
             return candidate
+
+    if (
+        current_branch != "HEAD"
+        and _git_ref_exists(repo_root, current_branch)
+        and _git_merge_base_exists(repo_root, current_branch)
+    ):
+        return current_branch
 
     available = _git_output(repo_root, ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"])
     raise RuntimeError(

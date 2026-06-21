@@ -282,6 +282,68 @@ def test_coding_review_pr_scope_auto_detects_base_branch(tmp_path, monkeypatch):
     assert review["summary"]["commits"] == 1
 
 
+def test_coding_review_pr_scope_treats_auto_base_ref_as_auto(tmp_path, monkeypatch):
+    from app.gateway.coding_review_services import CodingReviewService
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "checkout", "-b", "master")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test User")
+    (repo / "app.py").write_text("print('base')\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "checkout", "-b", "feature")
+    (repo / "app.py").write_text("print('feature')\n", encoding="utf-8")
+    _git(repo, "commit", "-am", "feature")
+
+    review = CodingReviewService.run_review(
+        project_id="project-1",
+        project_root=str(repo),
+        thread_id="thread-review",
+        scope="pr",
+        base_ref="auto",
+    )
+
+    assert review["scope"] == "pr"
+    assert review["source"]["pr_context"]["base_ref"] == "master"
+    assert review["source"]["pr_context"]["requested_base_ref"] == "auto"
+    assert review["summary"]["commits"] == 1
+
+
+def test_coding_review_pr_scope_auto_handles_single_main_branch(tmp_path, monkeypatch):
+    from app.gateway.coding_review_services import CodingReviewService
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "checkout", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test User")
+    (repo / "app.py").write_text("print('base')\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "base")
+
+    review = CodingReviewService.run_review(
+        project_id="project-1",
+        project_root=str(repo),
+        thread_id="thread-review",
+        scope="pr",
+        base_ref="auto",
+    )
+
+    assert review["scope"] == "pr"
+    assert review["source"]["pr_context"]["base_ref"] == "main"
+    assert review["source"]["pr_context"]["requested_base_ref"] == "auto"
+    assert review["summary"]["commits"] == 0
+    assert review["summary"]["project_files"] == 0
+
+
 # ------------------------------------------------------------------ #
 # Auto-fix: simple lint / config risk / test-gap                    #
 # ------------------------------------------------------------------ #
