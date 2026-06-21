@@ -200,6 +200,17 @@ export interface QiongqiRoiReport {
   created_at: string;
 }
 
+export interface QiongqiRoiDerived {
+  actual_tokens: number;
+  estimated_saved_tokens: number;
+  estimated_baseline_tokens: number;
+  saving_ratio: number;
+  tool_hidden_ratio: number;
+  tool_catalog_saved_tokens: number;
+  tool_output_saved_tokens: number;
+  token_economy_saved_tokens: number;
+}
+
 export interface QiongqiRoiSummaryPayload {
   thread_id: string;
   report_count: number;
@@ -207,6 +218,7 @@ export interface QiongqiRoiSummaryPayload {
   provider_usage: Record<string, number>;
   tool_output: Record<string, number>;
   token_economy: Record<string, number>;
+  derived: QiongqiRoiDerived;
 }
 
 export interface QiongqiRoiSummary {

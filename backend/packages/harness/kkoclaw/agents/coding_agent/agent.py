@@ -1,6 +1,7 @@
 """Coding Agent factory — builds a LangGraph agent specialised for code engineering tasks."""
 
 import logging
+from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.runnables import RunnableConfig
@@ -168,6 +169,7 @@ def _make_coding_agent(config: RunnableConfig, *, app_config: AppConfig):
     roi_report = qiongqi_engine.build_roi_report(
         stable_prompt=stable_prompt,
         tools=tools,
+        visible_tools=_visible_tools_for_roi(tools, resolved_app_config),
     )
     config["metadata"]["qiongqi_roi"] = qiongqi_engine.roi_metadata(roi_report)
 
@@ -213,3 +215,17 @@ def _make_coding_agent(config: RunnableConfig, *, app_config: AppConfig):
         state_schema=CodingThreadState,
         context_schema=RuntimeContext,
     )
+
+
+def _visible_tools_for_roi(tools: list[Any], app_config: Any) -> list[Any]:
+    if not getattr(getattr(app_config, "tool_search", None), "enabled", False):
+        return tools
+    try:
+        from kkoclaw.tools.builtins.tool_search import get_deferred_registry
+    except Exception:
+        return tools
+    registry = get_deferred_registry()
+    if registry is None:
+        return tools
+    deferred_names = registry.deferred_names
+    return [tool for tool in tools if getattr(tool, "name", None) not in deferred_names]

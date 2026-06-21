@@ -10,6 +10,9 @@ from typing import Any
 from kkoclaw.coding_core.qiongqi import QiongqiRoiReport
 from kkoclaw.coding_core.session_store import QiongqiSessionStore
 
+CHARS_PER_TOKEN_ESTIMATE = 4
+TOOL_SCHEMA_TOKEN_ESTIMATE = 250
+
 
 class QiongqiRoiTelemetryStore:
     def __init__(self, store: QiongqiSessionStore | None = None):
@@ -82,13 +85,22 @@ class QiongqiRoiTelemetryStore:
 
     def summary(self, thread_id: str) -> dict[str, Any]:
         records = self.list_reports(thread_id)
+        provider_usage = _sum_counter_maps(record.get("provider_usage") for record in records)
+        tool_output = _sum_counter_maps(record.get("tool_output") for record in records)
+        token_economy = _sum_counter_maps(record.get("token_economy") for record in records)
         return {
             "thread_id": thread_id,
             "report_count": len(records),
             "latest": records[-1] if records else None,
-            "provider_usage": _sum_counter_maps(record.get("provider_usage") for record in records),
-            "tool_output": _sum_counter_maps(record.get("tool_output") for record in records),
-            "token_economy": _sum_counter_maps(record.get("token_economy") for record in records),
+            "provider_usage": provider_usage,
+            "tool_output": tool_output,
+            "token_economy": token_economy,
+            "derived": _derive_roi_metrics(
+                records,
+                provider_usage=provider_usage,
+                tool_output=tool_output,
+                token_economy=token_economy,
+            ),
         }
 
 
@@ -131,6 +143,54 @@ def _sum_counter_maps(values: Any) -> dict[str, int]:
             if isinstance(key, str) and isinstance(value, int | float):
                 total[key] = total.get(key, 0) + int(value)
     return total
+
+
+def _derive_roi_metrics(
+    records: list[dict[str, Any]],
+    *,
+    provider_usage: dict[str, int],
+    tool_output: dict[str, int],
+    token_economy: dict[str, int],
+) -> dict[str, int | float]:
+    actual_tokens = int(provider_usage.get("total_tokens", 0) or 0)
+    full_tool_count = sum(_positive_int(record.get("full_tool_count")) for record in records)
+    hidden_tool_count = sum(_positive_int(record.get("hidden_tool_count")) for record in records)
+    tool_catalog_saved_tokens = hidden_tool_count * TOOL_SCHEMA_TOKEN_ESTIMATE
+    tool_output_saved_tokens = _chars_to_tokens(tool_output.get("externalized_chars", 0))
+    token_economy_saved_tokens = _chars_to_tokens(token_economy.get("compressed_chars_saved", 0))
+    estimated_saved_tokens = (
+        tool_catalog_saved_tokens
+        + tool_output_saved_tokens
+        + token_economy_saved_tokens
+    )
+    estimated_baseline_tokens = actual_tokens + estimated_saved_tokens
+    saving_ratio = (
+        estimated_saved_tokens / estimated_baseline_tokens
+        if estimated_baseline_tokens > 0
+        else 0.0
+    )
+    tool_hidden_ratio = (
+        hidden_tool_count / full_tool_count if full_tool_count > 0 else 0.0
+    )
+    return {
+        "actual_tokens": actual_tokens,
+        "estimated_saved_tokens": estimated_saved_tokens,
+        "estimated_baseline_tokens": estimated_baseline_tokens,
+        "saving_ratio": saving_ratio,
+        "tool_hidden_ratio": tool_hidden_ratio,
+        "tool_catalog_saved_tokens": tool_catalog_saved_tokens,
+        "tool_output_saved_tokens": tool_output_saved_tokens,
+        "token_economy_saved_tokens": token_economy_saved_tokens,
+    }
+
+
+def _positive_int(value: Any) -> int:
+    return int(value) if isinstance(value, int | float) and value > 0 else 0
+
+
+def _chars_to_tokens(value: Any) -> int:
+    chars = _positive_int(value)
+    return chars // CHARS_PER_TOKEN_ESTIMATE
 
 
 def _next_seq(path: Path) -> int:

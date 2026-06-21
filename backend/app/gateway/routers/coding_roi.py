@@ -39,6 +39,7 @@ class QiongqiRoiSummaryPayload(BaseModel):
     provider_usage: dict[str, int]
     tool_output: dict[str, int]
     token_economy: dict[str, int]
+    derived: dict[str, int | float]
 
 
 class QiongqiRoiSummaryResponse(BaseModel):

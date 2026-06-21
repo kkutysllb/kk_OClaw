@@ -75,6 +75,7 @@ import type {
   CodingSkill,
   DeliveryStage,
   ProjectStageState,
+  QiongqiChange,
   QiongqiEvent,
   QiongqiRoiReport,
   StageHistoryEntry,
@@ -1325,12 +1326,24 @@ function EventRow({
 function CodingSessionInspector({ threadId }: { threadId: string }) {
   const { session, isLoading, isFetching, error, refetch } =
     useCodingSession(threadId);
+  const { changes } = useCodingSessionChanges(threadId);
   const [expandedRawSession, setExpandedRawSession] = useState(false);
-  const changeSummary = session?.change_summary ?? {};
-  const changedFiles = getNumberValue(changeSummary, "changed_files");
-  const additions = getNumberValue(changeSummary, "additions");
-  const deletions = getNumberValue(changeSummary, "deletions");
-  const currentTask = getCurrentTaskLabel(session?.change_summary);
+  const changeSummary = useMemo(
+    () => session?.change_summary ?? {},
+    [session?.change_summary],
+  );
+  const changeSummaryFromChanges = useMemo(
+    () => buildChangeSummaryFromChanges(changes),
+    [changes],
+  );
+  const effectiveChangeSummary = useMemo(
+    () => mergeChangeSummary(changeSummary, changeSummaryFromChanges),
+    [changeSummary, changeSummaryFromChanges],
+  );
+  const changedFiles = getNumberValue(effectiveChangeSummary, "changed_files");
+  const additions = getNumberValue(effectiveChangeSummary, "additions");
+  const deletions = getNumberValue(effectiveChangeSummary, "deletions");
+  const currentTask = getCurrentTaskLabel(effectiveChangeSummary);
   const roi = session?.roi ?? {};
   const providerUsage = getRecordValue(roi, "provider_usage");
   const tokenTotal = getNumberValue(providerUsage, "total_tokens");
@@ -1403,13 +1416,13 @@ function CodingSessionInspector({ threadId }: { threadId: string }) {
 
             <div className="space-y-2 rounded-md border p-2">
               <p className="text-xs font-medium">变更摘要</p>
-              {Object.keys(changeSummary).length === 0 ? (
+              {Object.keys(effectiveChangeSummary).length === 0 ? (
                 <p className="text-muted-foreground text-xs">
                   暂无任务变更摘要。
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {Object.entries(changeSummary).slice(0, 6).map(([key, value]) => (
+                  {Object.entries(effectiveChangeSummary).slice(0, 6).map(([key, value]) => (
                     <KeyValueRow
                       key={key}
                       label={key}
@@ -1508,7 +1521,7 @@ function CodingSessionInspector({ threadId }: { threadId: string }) {
                 <pre className="text-muted-foreground max-h-44 overflow-auto font-mono text-[11px] leading-4 whitespace-pre-wrap">
                   {formatJsonPreview({
                     tool_policy: session.tool_policy,
-                    change_summary: session.change_summary,
+                    change_summary: effectiveChangeSummary,
                     roi: session.roi,
                   })}
                 </pre>
@@ -1537,6 +1550,7 @@ function CodingRoiInspector({ threadId }: { threadId: string }) {
     useCodingRoiSummary(threadId);
   const { reports } = useCodingRoiReports(threadId);
   const [expandedReport, setExpandedReport] = useState<number | null>(null);
+  const derived = summary?.derived;
 
   return (
     <InspectorSection
@@ -1563,18 +1577,66 @@ function CodingRoiInspector({ threadId }: { threadId: string }) {
             )}
             <MetricGrid
               items={[
-                ["Total tokens", summary.provider_usage.total_tokens ?? 0, "累计令牌消耗"],
-                ["Input", summary.provider_usage.input_tokens ?? 0, "提示词输入令牌"],
-                ["Output", summary.provider_usage.output_tokens ?? 0, "模型输出令牌"],
-                ["Hidden tools", summary.latest?.hidden_tool_count ?? 0, "隐蔽工具数量"],
-                ["Externalized", summary.tool_output.externalized_count ?? 0, "外部化输出次数"],
                 [
-                  "Saved chars",
-                  summary.token_economy.compressed_chars_saved ?? 0,
-                  "压缩节省字符数",
+                  "节省率",
+                  formatPercent(derived?.saving_ratio ?? 0),
+                  "估算节省 token / 估算基线 token",
+                ],
+                [
+                  "估算节省",
+                  derived?.estimated_saved_tokens ?? 0,
+                  "工具裁剪、输出外部化和上下文压缩带来的估算 token 收益",
+                ],
+                [
+                  "工具裁剪",
+                  derived?.tool_catalog_saved_tokens ?? 0,
+                  "隐藏工具 schema 带来的估算 token 收益",
+                ],
+                [
+                  "压缩收益",
+                  derived?.token_economy_saved_tokens ?? 0,
+                  "历史工具结果压缩带来的估算 token 收益",
                 ],
               ]}
             />
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">收益构成</p>
+              <MetricGrid
+                items={[
+                  [
+                    "基线",
+                    derived?.estimated_baseline_tokens ?? 0,
+                    "如果不启用 Qiongqi ROI 优化的估算 token 基线",
+                  ],
+                  [
+                    "实际",
+                    derived?.actual_tokens ?? 0,
+                    "模型实际 provider usage total tokens",
+                  ],
+                  [
+                    "外部化",
+                    derived?.tool_output_saved_tokens ?? 0,
+                    "工具输出外部化带来的估算 token 收益",
+                  ],
+                  [
+                    "隐藏率",
+                    formatPercent(derived?.tool_hidden_ratio ?? 0),
+                    "隐藏工具数 / 全量工具数",
+                  ],
+                ]}
+              />
+            </div>
+            <div className="space-y-2 rounded-md border p-2">
+              <p className="text-xs font-medium">成本明细</p>
+              <MetricGrid
+                items={[
+                  ["Total tokens", summary.provider_usage.total_tokens ?? 0, "累计令牌消耗"],
+                  ["Input", summary.provider_usage.input_tokens ?? 0, "提示词输入令牌"],
+                  ["Output", summary.provider_usage.output_tokens ?? 0, "模型输出令牌"],
+                  ["Hidden tools", summary.latest?.hidden_tool_count ?? 0, "当前最新报告的隐藏工具数量"],
+                ]}
+              />
+            </div>
             {/* Report history */}
             {reports.length > 0 && (
               <div className="space-y-1 rounded-md border p-2">
@@ -2528,7 +2590,7 @@ function InspectorEmpty({
   );
 }
 
-function MetricGrid({ items }: { items: Array<[string, number] | [string, number, string]> }) {
+function MetricGrid({ items }: { items: Array<[string, number | string] | [string, number | string, string]> }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {items.map((item) => {
@@ -2537,7 +2599,7 @@ function MetricGrid({ items }: { items: Array<[string, number] | [string, number
           <div key={label} className="rounded-md border p-2" title={tip}>
             <p className="text-muted-foreground text-[11px]">{label}</p>
             <p className="mt-1 font-mono text-sm font-semibold">
-              {formatNumber(value)}
+              {typeof value === "number" ? formatNumber(value) : value}
             </p>
           </div>
         );
@@ -2614,6 +2676,51 @@ function getRecordValue(value: Record<string, unknown>, key: string): Record<str
     : {};
 }
 
+function buildChangeSummaryFromChanges(
+  changes: QiongqiChange[],
+): Record<string, unknown> {
+  if (changes.length === 0) return {};
+  const latestChange = changes.reduce((latest, change) =>
+    change.created_at > latest.created_at ? change : latest,
+  );
+  const paths = Array.from(new Set(changes.map((change) => change.path))).sort();
+  const additions = changes.reduce((sum, change) => sum + change.additions, 0);
+  const deletions = changes.reduce((sum, change) => sum + change.deletions, 0);
+  return {
+    thread_id: latestChange.thread_id,
+    task_id: latestChange.task_id,
+    changed_files: paths.length,
+    additions,
+    deletions,
+    paths,
+    summary: `${paths.length} 个文件变更，+${additions} -${deletions}`,
+  };
+}
+
+function mergeChangeSummary(
+  sessionSummary: Record<string, unknown>,
+  changesSummary: Record<string, unknown>,
+): Record<string, unknown> {
+  if (Object.keys(changesSummary).length === 0) return sessionSummary;
+  if (Object.keys(sessionSummary).length === 0) return changesSummary;
+  const merged = { ...changesSummary, ...sessionSummary };
+  for (const key of ["changed_files", "additions", "deletions"]) {
+    if (getNumberValue(sessionSummary, key) === 0) {
+      merged[key] = getNumberValue(changesSummary, key);
+    }
+  }
+  if (!Array.isArray(sessionSummary.paths)) {
+    merged.paths = changesSummary.paths;
+  }
+  if (typeof sessionSummary.task_id !== "string") {
+    merged.task_id = changesSummary.task_id;
+  }
+  if (typeof sessionSummary.summary !== "string") {
+    merged.summary = changesSummary.summary;
+  }
+  return merged;
+}
+
 function getCurrentTaskLabel(
   changeSummary: Record<string, unknown> | undefined,
 ): string {
@@ -2669,4 +2776,8 @@ function formatCompactDate(value: string): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value);
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }

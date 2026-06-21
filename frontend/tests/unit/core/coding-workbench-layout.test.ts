@@ -68,7 +68,15 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain('TabsTrigger value="skills"');
     expect(workbench).toContain("CodingEventsInspector");
     expect(workbench).toContain("CodingSessionInspector");
+    expect(workbench).toContain("useCodingSessionChanges(threadId)");
+    expect(workbench).toContain("effectiveChangeSummary");
+    expect(workbench).toContain("buildChangeSummaryFromChanges");
     expect(workbench).toContain("CodingRoiInspector");
+    expect(workbench).toContain("derived");
+    expect(workbench).toContain("节省率");
+    expect(workbench).toContain("估算节省");
+    expect(workbench).toContain("工具裁剪");
+    expect(workbench).toContain("成本明细");
     expect(workbench).toContain("CodingWorkflowInspector");
     expect(workbench).toContain("CodingSkillsInspector");
     expect(workbench).toContain("useCodingSessionEvents");

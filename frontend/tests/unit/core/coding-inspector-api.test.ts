@@ -28,6 +28,9 @@ describe("coding inspector API", () => {
     expect(types).toContain("export interface CodingReviewApplyFixRequest");
     expect(types).toContain('"project_diff" | "task_changes" | "all" | "pr"');
     expect(types).toContain("export interface QiongqiRoiSummary");
+    expect(types).toContain("export interface QiongqiRoiDerived");
+    expect(types).toContain("estimated_saved_tokens");
+    expect(types).toContain("saving_ratio");
     expect(types).toContain("export interface CodingSkill");
     expect(types).toContain("export interface SetCodingSkillEnabledRequest");
     expect(types).toContain("export interface CodingSkillWriteRequest");
@@ -47,6 +50,7 @@ describe("coding inspector API", () => {
     expect(api).toContain("/api/coding/reviews/fixes/apply");
     expect(api).toContain("export async function getCodingRoiSummary");
     expect(api).toContain("/roi/summary");
+    expect(api).toContain("Promise<QiongqiRoiSummary>");
     expect(api).toContain("export async function listCodingSkills");
     expect(api).toContain("/api/coding/skills");
     expect(api).toContain("encodeURIComponent(projectRoot)");

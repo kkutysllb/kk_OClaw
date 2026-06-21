@@ -98,6 +98,16 @@ def test_qiongqi_roi_telemetry_lists_latest_and_summarizes_totals(tmp_path, monk
         "provider_usage": {"input_tokens": 130, "output_tokens": 70, "total_tokens": 200},
         "tool_output": {"externalized_count": 1, "truncated_count": 1, "externalized_chars": 2000},
         "token_economy": {"compressed_messages": 3, "compressed_chars_saved": 1000},
+        "derived": {
+            "actual_tokens": 200,
+            "estimated_saved_tokens": 1000,
+            "estimated_baseline_tokens": 1200,
+            "saving_ratio": 0.8333333333333334,
+            "tool_hidden_ratio": 0.14285714285714285,
+            "tool_catalog_saved_tokens": 250,
+            "tool_output_saved_tokens": 500,
+            "token_economy_saved_tokens": 250,
+        },
     }
 
 
