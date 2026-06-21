@@ -233,6 +233,24 @@ def _run_git(cwd: str, args: list[str]) -> tuple[int, str, str]:
         return -2, "", "git command timed out"
 
 
+def _run_command(cwd: str, args: list[str], timeout: int = 30) -> tuple[int, str, str]:
+    """Run a generic command and return (returncode, stdout, stderr)."""
+    try:
+        proc = subprocess.run(
+            args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+    except FileNotFoundError:
+        executable = args[0] if args else "command"
+        return -1, "", f"{executable} executable not found"
+    except subprocess.TimeoutExpired:
+        return -2, "", "command timed out"
+
+
 def _is_git_repo(path: Path) -> bool:
     """Return True if *path* is inside a git working tree."""
     rc, _, _ = _run_git(str(path), ["rev-parse", "--is-inside-work-tree"])
@@ -245,6 +263,103 @@ def _get_repo_root(path: str) -> str:
     if rc != 0:
         raise ValueError(f"Not a git repository: {path}")
     return out.strip()
+
+
+def _git_current_branch(repo_root: str) -> str:
+    """Return the current branch name for *repo_root*."""
+    rc, out, err = _run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"])
+    if rc != 0:
+        raise RuntimeError(f"git rev-parse failed: {err.strip()}")
+    return out.strip()
+
+
+def _git_head_sha(repo_root: str) -> str:
+    """Return the current HEAD SHA."""
+    rc, out, err = _run_git(repo_root, ["rev-parse", "HEAD"])
+    if rc != 0:
+        raise RuntimeError(f"git rev-parse HEAD failed: {err.strip()}")
+    return out.strip()
+
+
+def _git_upstream_branch(repo_root: str) -> str | None:
+    """Return the upstream ref for the current branch if configured."""
+    rc, out, _err = _run_git(repo_root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+    if rc != 0:
+        return None
+    value = out.strip()
+    return value or None
+
+
+def _git_ahead_behind(repo_root: str, upstream: str | None) -> tuple[int, int]:
+    """Return (ahead, behind) relative to upstream."""
+    if not upstream:
+        return (0, 0)
+    rc, out, err = _run_git(repo_root, ["rev-list", "--left-right", "--count", f"{upstream}...HEAD"])
+    if rc != 0:
+        raise RuntimeError(f"git rev-list failed: {err.strip()}")
+    parts = out.strip().split()
+    if len(parts) != 2:
+        return (0, 0)
+    behind = int(parts[0] or 0)
+    ahead = int(parts[1] or 0)
+    return (ahead, behind)
+
+
+def _git_remote_url(repo_root: str, remote_name: str) -> str | None:
+    """Return the URL for a git remote."""
+    rc, out, _err = _run_git(repo_root, ["remote", "get-url", remote_name])
+    if rc != 0:
+        return None
+    value = out.strip()
+    return value or None
+
+
+def _infer_source_label(remote_url: str | None) -> str:
+    """Infer a human-facing source label from a remote URL."""
+    if not remote_url:
+        return "仅本地"
+    lowered = remote_url.lower()
+    if "github.com" in lowered:
+        return "GitHub"
+    if "gitlab" in lowered:
+        return "GitLab"
+    if "bitbucket" in lowered:
+        return "Bitbucket"
+    return "远程仓库"
+
+
+def _gh_auth_status(repo_root: str) -> dict[str, Any]:
+    """Return GitHub CLI availability and auth state."""
+    rc, out, err = _run_command(
+        repo_root,
+        ["gh", "auth", "status", "--hostname", "github.com"],
+    )
+    combined = "\n".join(part.strip() for part in (out, err) if part.strip()).strip()
+    if rc == -1:
+        return {
+            "available": False,
+            "authenticated": False,
+            "username": None,
+            "host": None,
+            "detail": "GitHub CLI 未安装",
+        }
+
+    username_match = re.search(r"account\s+([^\s]+)", combined, re.IGNORECASE)
+    host_match = re.search(r"github\.com", combined, re.IGNORECASE)
+    authenticated = rc == 0
+    if not authenticated and "not logged into any accounts" in combined.lower():
+        detail = "未登录 GitHub CLI"
+    elif authenticated:
+        detail = "已连接 GitHub CLI"
+    else:
+        detail = combined.splitlines()[0] if combined else "GitHub CLI 状态未知"
+    return {
+        "available": True,
+        "authenticated": authenticated,
+        "username": username_match.group(1) if username_match else None,
+        "host": "github.com" if host_match else None,
+        "detail": detail,
+    }
 
 
 def _git_changed_files(repo_root: str) -> list[dict[str, Any]]:
@@ -717,6 +832,110 @@ class GitDiffService:
                 raise RuntimeError(f"git restore failed: {err.strip()}")
 
         return {"path": relative_path, "discarded": True}
+
+
+class ProjectEnvironmentService:
+    """Project-scoped git and GitHub CLI environment data."""
+
+    @staticmethod
+    def get_environment(project_path: str) -> dict[str, Any]:
+        """Return git environment summary for a project."""
+        try:
+            repo_root = _get_repo_root(project_path)
+        except ValueError:
+            return {
+                "is_git_repo": False,
+                "branch": None,
+                "head": None,
+                "upstream": None,
+                "ahead": 0,
+                "behind": 0,
+                "changed_files": 0,
+                "additions": 0,
+                "deletions": 0,
+                "github_cli": _gh_auth_status(project_path),
+                "source": {
+                    "label": "仅本地",
+                    "remote": None,
+                    "provider": "local",
+                },
+            }
+
+        files = _git_changed_files(repo_root)
+        upstream = _git_upstream_branch(repo_root)
+        ahead, behind = _git_ahead_behind(repo_root, upstream)
+        remote_name = upstream.split("/", 1)[0] if upstream and "/" in upstream else "origin"
+        remote_url = _git_remote_url(repo_root, remote_name)
+        provider_label = _infer_source_label(remote_url)
+        provider_key = "github" if provider_label == "GitHub" else "local" if remote_url is None else "remote"
+        return {
+            "is_git_repo": True,
+            "branch": _git_current_branch(repo_root),
+            "head": _git_head_sha(repo_root),
+            "upstream": upstream,
+            "ahead": ahead,
+            "behind": behind,
+            "changed_files": len(files),
+            "additions": sum(int(file.get("additions", 0)) for file in files),
+            "deletions": sum(int(file.get("deletions", 0)) for file in files),
+            "github_cli": _gh_auth_status(repo_root),
+            "source": {
+                "label": provider_label,
+                "remote": remote_url,
+                "provider": provider_key,
+            },
+        }
+
+    @staticmethod
+    def commit_changes(project_path: str, message: str) -> dict[str, Any]:
+        """Create a commit for all current tracked/untracked changes."""
+        repo_root = _get_repo_root(project_path)
+        commit_message = message.strip()
+        if not commit_message:
+            raise ValueError("Commit message is required")
+
+        files = _git_changed_files(repo_root)
+        if not files:
+            raise ValueError("No changes available to commit")
+
+        rc, _out, err = _run_git(repo_root, ["add", "-A"])
+        if rc != 0:
+            raise RuntimeError(f"git add failed: {err.strip()}")
+
+        rc, out, err = _run_git(repo_root, ["commit", "-m", commit_message])
+        if rc != 0:
+            raise RuntimeError(f"git commit failed: {err.strip()}")
+
+        head = _git_head_sha(repo_root)
+        summary = next((line.strip() for line in out.splitlines() if line.strip()), "提交完成")
+        return {
+            "head": head,
+            "summary": summary,
+            "message": commit_message,
+        }
+
+    @staticmethod
+    def push_branch(project_path: str) -> dict[str, Any]:
+        """Push the current branch to its remote."""
+        repo_root = _get_repo_root(project_path)
+        branch = _git_current_branch(repo_root)
+        upstream = _git_upstream_branch(repo_root)
+        if upstream:
+            args = ["push"]
+        else:
+            args = ["push", "--set-upstream", "origin", branch]
+
+        rc, out, err = _run_git(repo_root, args)
+        if rc != 0:
+            raise RuntimeError(f"git push failed: {err.strip()}")
+
+        upstream = _git_upstream_branch(repo_root)
+        summary = next((line.strip() for line in (out + "\n" + err).splitlines() if line.strip()), "推送完成")
+        return {
+            "branch": branch,
+            "upstream": upstream,
+            "summary": summary,
+        }
 
 
 def _validate_repo_relative_path(repo_root: str, file_path: str) -> str:

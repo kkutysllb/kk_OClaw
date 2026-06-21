@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from app.gateway.coding_services import (
     FileService,
     GitDiffService,
+    ProjectEnvironmentService,
     ProjectService,
     WorktreeService,
 )
@@ -190,6 +191,62 @@ class DiscardProjectFileChangeResponse(BaseModel):
 
     path: str = Field(..., description="Relative path that was discarded")
     discarded: bool = Field(default=True, description="Whether the discard operation completed")
+
+
+class GitHubCliStatusResponse(BaseModel):
+    """GitHub CLI availability and auth state."""
+
+    available: bool = Field(default=False, description="Whether gh CLI is available")
+    authenticated: bool = Field(default=False, description="Whether gh CLI is authenticated")
+    username: str | None = Field(default=None, description="Authenticated GitHub username")
+    host: str | None = Field(default=None, description="Authenticated host")
+    detail: str | None = Field(default=None, description="Human-facing status detail")
+
+
+class ProjectSourceResponse(BaseModel):
+    """Remote/source summary for the project."""
+
+    label: str = Field(default="仅本地", description="Human-facing source label")
+    remote: str | None = Field(default=None, description="Remote URL")
+    provider: str = Field(default="local", description="Source provider key")
+
+
+class ProjectEnvironmentResponse(BaseModel):
+    """Response model for project environment info."""
+
+    is_git_repo: bool = Field(default=False, description="Whether this is a git repo")
+    branch: str | None = Field(default=None, description="Current branch")
+    head: str | None = Field(default=None, description="Current HEAD SHA")
+    upstream: str | None = Field(default=None, description="Tracked upstream branch")
+    ahead: int = Field(default=0, description="Commits ahead of upstream")
+    behind: int = Field(default=0, description="Commits behind upstream")
+    changed_files: int = Field(default=0, description="Changed file count")
+    additions: int = Field(default=0, description="Total added lines")
+    deletions: int = Field(default=0, description="Total deleted lines")
+    github_cli: GitHubCliStatusResponse = Field(default_factory=GitHubCliStatusResponse)
+    source: ProjectSourceResponse = Field(default_factory=ProjectSourceResponse)
+
+
+class GitCommitRequest(BaseModel):
+    """Request body for creating a commit."""
+
+    message: str = Field(..., description="Commit message")
+
+
+class GitCommitResponse(BaseModel):
+    """Response model for git commit action."""
+
+    head: str = Field(..., description="New HEAD SHA")
+    summary: str = Field(..., description="Commit summary line")
+    message: str = Field(..., description="Commit message")
+
+
+class GitPushResponse(BaseModel):
+    """Response model for git push action."""
+
+    branch: str = Field(..., description="Pushed branch")
+    upstream: str | None = Field(default=None, description="Tracked upstream after push")
+    summary: str = Field(..., description="Push summary output")
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +506,63 @@ async def get_project_diff(project_id: str) -> ProjectDiffResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ProjectDiffResponse(**result)
+
+
+@router.get(
+    "/projects/{project_id}/environment",
+    response_model=ProjectEnvironmentResponse,
+    summary="Get Project Environment",
+    description="Return git branch, GitHub CLI identity, source and sync state for a coding project.",
+)
+async def get_project_environment(project_id: str) -> ProjectEnvironmentResponse:
+    """Return project git environment summary."""
+    proj = _require_project(project_id)
+    try:
+        result = ProjectEnvironmentService.get_environment(proj["path"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ProjectEnvironmentResponse(**result)
+
+
+@router.post(
+    "/projects/{project_id}/git/commit",
+    response_model=GitCommitResponse,
+    summary="Commit Project Changes",
+    description="Stage all current project changes and create a real git commit.",
+)
+async def commit_project_changes(
+    project_id: str,
+    request: GitCommitRequest,
+) -> GitCommitResponse:
+    """Create a git commit for the project."""
+    proj = _require_project(project_id)
+    try:
+        result = ProjectEnvironmentService.commit_changes(proj["path"], request.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return GitCommitResponse(**result)
+
+
+@router.post(
+    "/projects/{project_id}/git/push",
+    response_model=GitPushResponse,
+    summary="Push Project Branch",
+    description="Push the current branch to its configured upstream, creating upstream when possible.",
+)
+async def push_project_branch(project_id: str) -> GitPushResponse:
+    """Push the current branch for the project."""
+    proj = _require_project(project_id)
+    try:
+        result = ProjectEnvironmentService.push_branch(proj["path"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return GitPushResponse(**result)
 
 
 @router.post(
