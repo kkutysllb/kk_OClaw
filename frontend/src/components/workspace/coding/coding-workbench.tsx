@@ -1031,6 +1031,18 @@ function EmbeddedXtermViewport({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const { resolvedTheme } = useTheme();
 
+  // Keep callback props in refs so the terminal-creation effect only
+  // re-runs when `tab.id` changes — not on every parent re-render
+  // (which would dispose the terminal and lose all screen content).
+  const onRegisterWriterRef = useRef(onRegisterWriter);
+  onRegisterWriterRef.current = onRegisterWriter;
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
+  const onUnregisterWriterRef = useRef(onUnregisterWriter);
+  onUnregisterWriterRef.current = onUnregisterWriter;
+  const onWriteRef = useRef(onWrite);
+  onWriteRef.current = onWrite;
+
   /** Read the actual computed CSS custom-property value at runtime. */
   const readCssVar = (name: string): string => {
     if (typeof document === "undefined") return "";
@@ -1066,15 +1078,15 @@ function EmbeddedXtermViewport({
     terminal.loadAddon(fitAddon);
     terminal.open(host);
     fitAddon.fit();
-    onResize(tab.id, terminal.cols, terminal.rows);
+    onResizeRef.current(tab.id, terminal.cols, terminal.rows);
     terminal.focus();
 
-    const dataDisposable = terminal.onData((data) => onWrite(tab.id, data));
-    onRegisterWriter(tab.id, (data) => terminal.write(data));
+    const dataDisposable = terminal.onData((data) => onWriteRef.current(tab.id, data));
+    onRegisterWriterRef.current(tab.id, (data: string) => terminal.write(data));
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit();
-      onResize(tab.id, terminal.cols, terminal.rows);
+      onResizeRef.current(tab.id, terminal.cols, terminal.rows);
     });
     observer.observe(host);
 
@@ -1084,12 +1096,12 @@ function EmbeddedXtermViewport({
     return () => {
       observer.disconnect();
       dataDisposable.dispose();
-      onUnregisterWriter(tab.id);
+      onUnregisterWriterRef.current(tab.id);
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [onRegisterWriter, onResize, onUnregisterWriter, onWrite, tab.id]);
+  }, [tab.id]);
 
   useEffect(() => {
     if (!active) return;
@@ -1097,12 +1109,12 @@ function EmbeddedXtermViewport({
       fitAddonRef.current?.fit();
       const terminal = terminalRef.current;
       if (terminal) {
-        onResize(tab.id, terminal.cols, terminal.rows);
+        onResizeRef.current(tab.id, terminal.cols, terminal.rows);
         terminal.focus();
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [active, onResize, tab.id]);
+  }, [active, tab.id]);
 
   // React to theme changes so the terminal background/foreground stays in
   // sync with the app theme without requiring a terminal restart.

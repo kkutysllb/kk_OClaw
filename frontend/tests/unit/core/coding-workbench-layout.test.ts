@@ -177,7 +177,7 @@ describe("coding workbench layout", () => {
     expect(workbench).toContain('data-testid="embedded-project-terminal-viewport"');
     expect(workbench).toContain("Terminal as XTerm");
     expect(workbench).toContain("FitAddon");
-    expect(workbench).toContain("terminal.onData((data) => onWrite(tab.id, data))");
+    expect(workbench).toContain("onWriteRef.current(tab.id, data)");
     expect(workbench).toContain("void writeEmbeddedTerminal(sessionId, data)");
     expect(workbench).toContain("fitAddon.fit()");
     expect(workbench).toContain("void resizeEmbeddedTerminal(sessionId, cols, rows)");
