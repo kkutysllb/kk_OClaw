@@ -120,16 +120,16 @@ models:
 ```
 
 | Field | Description |
-    |------|-------------|
-    | `use` | LangChain class path; for generic cases always `langchain_openai:ChatOpenAI` |
-    | `model` | Model identifier from the provider's docs (case-sensitive) |
-    | `api_key` | Prefer `$ENV_VAR` placeholder read from `.env` or process env to avoid hard-coding |
-    | `base_url` | Root URL of the OpenAI-compatible endpoint, must end with `/v1` (or as specified by provider) |
-    | `max_tokens` | Max tokens per response; affects cost |
-    | `temperature` | 0–1, higher = more divergent |
-    | `supports_thinking` | Whether reasoning mode is supported (controls visibility of the reasoning-depth switcher in the UI) |
-    | `supports_vision` | Whether image input is supported (controls availability of the `view_image` tool) |
-    | `supports_reasoning_effort` | Whether the `reasoning_effort` parameter is supported. Set to `false` if not (e.g. GLM-5) |
+|------|-------------|
+| `use` | LangChain class path; for generic cases always `langchain_openai:ChatOpenAI` |
+| `model` | Model identifier from the provider's docs (case-sensitive) |
+| `api_key` | Prefer `$ENV_VAR` placeholder read from `.env` or process env to avoid hard-coding |
+| `base_url` | Root URL of the OpenAI-compatible endpoint, must end with `/v1` (or as specified by provider) |
+| `max_tokens` | Max tokens per response; affects cost |
+| `temperature` | 0–1, higher = more divergent |
+| `supports_thinking` | Whether reasoning mode is supported (controls visibility of the reasoning-depth switcher in the UI) |
+| `supports_vision` | Whether image input is supported (controls availability of the `view_image` tool) |
+| `supports_reasoning_effort` | Whether the `reasoning_effort` parameter is supported. Set to `false` if not (e.g. GLM-5) |
     | `when_thinking_enabled` / `when_thinking_disabled` | Additional parameters merged into the request when reasoning mode is toggled; typically `extra_body.thinking.type` |
 
 ##### 2. Dedicated adapters for Chinese providers (patched classes required)
@@ -137,11 +137,11 @@ models:
 Major Chinese model providers claim OpenAI compatibility but diverge from LangChain's default serialization in several ways. KKOCLAW ships dedicated patch classes for these providers — **you MUST point the `use` field at the patch class path**, otherwise you will hit various HTTP 400 errors, lost `reasoning_content`, multiple-`system`-message rejections, and so on.
 
 | Provider | Patch class | Problems solved |
-    |----------|-------------|-----------------|
-    | **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | Missing `reasoning_content` in multi-turn conversations under thinking mode → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.` Also handles model-name aliases (`deepseek_v4` → `deepseek-v4-flash`), strips unsupported `image_url`, and remaps `base_url` → `api_base` |
-    | **Zhipu GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | The `stream_options` parameter injected by LangChain by default is rejected by GLM → error code 1210 `API 调用参数有误`. Also strips non-`text` content blocks (GLM only accepts `messages.content.type = 'text'`) |
-    | **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. `reasoning_content` is lost in multi-turn conversations → `extra_body.reasoning_split=true` is required to return it; 2. MiniMax accepts only one `role: system` message, but skill loading injects several → error code 2013 `invalid chat setting`; 3. Inconsistent `name` across same-role messages is rejected — the patch cleans synthetic message `name` fields automatically |
-    | **Gemini (via OpenAI gateway)** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | When calling Gemini thinking models via an OpenAI-compatible gateway, `thought_signature` is dropped by the default serializer → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`. The patch restores it from `additional_kwargs.tool_calls` |
+|----------|-------------|-----------------|
+| **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | Missing `reasoning_content` in multi-turn conversations under thinking mode → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.` Also handles model-name aliases (`deepseek_v4` → `deepseek-v4-flash`), strips unsupported `image_url`, and remaps `base_url` → `api_base` |
+| **Zhipu GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | The `stream_options` parameter injected by LangChain by default is rejected by GLM → error code 1210 `API 调用参数有误`. Also strips non-`text` content blocks (GLM only accepts `messages.content.type = 'text'`) |
+| **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. `reasoning_content` is lost in multi-turn conversations → `extra_body.reasoning_split=true` is required to return it; 2. MiniMax accepts only one `role: system` message, but skill loading injects several → error code 2013 `invalid chat setting`; 3. Inconsistent `name` across same-role messages is rejected — the patch cleans synthetic message `name` fields automatically |
+| **Gemini (via OpenAI gateway)** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | When calling Gemini thinking models via an OpenAI-compatible gateway, `thought_signature` is dropped by the default serializer → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`. The patch restores it from `additional_kwargs.tool_calls` |
 
 **Typical configuration examples**:
 
@@ -208,11 +208,11 @@ models:
 ##### 3. When to use a patch vs. the generic class?
 
 | Scenario | Recommendation |
-    |----------|----------------|
-    | Onboarding a new provider / OpenAI-compatible gateway | Start with `langchain_openai:ChatOpenAI`; only consider a patch once you hit a concrete error |
-    | You see `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` errors | Pick the corresponding provider-specific patch |
-    | The provider also offers a native SDK (e.g. Claude, Gemini native) | Prefer the native SDK class (`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`) |
-    | Self-hosted (vLLM / Ollama) | vLLM uses `kkoclaw.models.vllm_provider:VllmChatModel` (preserves the `reasoning` field); Ollama uses `langchain_ollama:ChatOllama` |
+|----------|----------------|
+| Onboarding a new provider / OpenAI-compatible gateway | Start with `langchain_openai:ChatOpenAI`; only consider a patch once you hit a concrete error |
+| You see `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` errors | Pick the corresponding provider-specific patch |
+| The provider also offers a native SDK (e.g. Claude, Gemini native) | Prefer the native SDK class (`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`) |
+| Self-hosted (vLLM / Ollama) | vLLM uses `kkoclaw.models.vllm_provider:VllmChatModel` (preserves the `reasoning` field); Ollama uses `langchain_ollama:ChatOllama` |
 
 > See the comments in [`config.example.yaml`](config.example.yaml) for more examples and field semantics.
 
