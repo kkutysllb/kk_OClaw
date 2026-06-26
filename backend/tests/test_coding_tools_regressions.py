@@ -17,7 +17,7 @@ class _FakeSandbox:
             return [candidate], False
         return [], False
 
-    def execute_command(self, command: str) -> str:
+    def execute_command(self, command: str, *, run_id: str | None = None) -> str:
         for needle, output in self.commands.items():
             if needle in command:
                 return output

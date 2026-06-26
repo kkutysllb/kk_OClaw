@@ -63,6 +63,10 @@ type DisplayThreadState = {
   error: unknown;
 };
 
+type StoppableThread<T> = T & {
+  stop?: (...args: never[]) => unknown;
+};
+
 function mergeMessages(
   historyMessages: Message[],
   threadMessages: Message[],
@@ -195,6 +199,10 @@ function clearStoredStreamReconnectKey(threadId: string | null | undefined) {
   } catch {
     // ignore storage failures
   }
+}
+
+function isActiveRun(run: Run): boolean {
+  return run.status === "running" || run.status === "pending";
 }
 
 export function useThreadStream({
@@ -489,6 +497,68 @@ export function useThreadStream({
   threadJoinStreamRef.current = thread.joinStream;
   const threadIsLoadingRef = useRef(thread.isLoading);
   threadIsLoadingRef.current = thread.isLoading;
+  const threadStopRef = useRef((thread as StoppableThread<typeof thread>).stop);
+  threadStopRef.current = (thread as StoppableThread<typeof thread>).stop;
+
+  const stopThread = useCallback(async () => {
+    const currentThreadId = threadIdRef.current ?? onStreamThreadId ?? undefined;
+    let localStopError: unknown;
+    try {
+      await threadStopRef.current?.();
+    } catch (error) {
+      localStopError = error;
+    } finally {
+      setOptimisticMessages([]);
+      setIsUploading(false);
+      sendInFlightRef.current = false;
+    }
+
+    if (!currentThreadId || isMock) {
+      if (localStopError) {
+        throw localStopError;
+      }
+      return;
+    }
+
+    try {
+      const apiClient = getAPIClient();
+      const runs = await apiClient.runs.list(currentThreadId);
+      const activeRun = runs.find(isActiveRun);
+      if (activeRun) {
+        await apiClient.runs.cancel(
+          currentThreadId,
+          activeRun.run_id,
+          false,
+          "interrupt",
+        );
+      }
+      clearStoredStreamReconnectKey(currentThreadId);
+      void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["thread", currentThreadId],
+      });
+    } catch (error) {
+      const status =
+        typeof error === "object" && error !== null
+          ? Reflect.get(error, "status")
+          : undefined;
+      if (status === 404 || status === 409 || status === "404" || status === "409") {
+        clearStoredStreamReconnectKey(currentThreadId);
+        if (localStopError) {
+          throw localStopError;
+        }
+        return;
+      }
+      if (localStopError) {
+        throw error;
+      }
+      throw error;
+    }
+
+    if (localStopError) {
+      return;
+    }
+  }, [isMock, onStreamThreadId, queryClient]);
 
   useEffect(() => {
     if (!threadId || isMock) return;
@@ -867,6 +937,7 @@ export function useThreadStream({
     ...thread,
     messages: displayMessages,
     isLoading: displayIsLoading,
+    stop: stopThread,
   } as typeof thread;
 
   return {

@@ -1118,6 +1118,35 @@ class TestCooperativeCancellation:
 
         assert result.cancel_event.is_set()
 
+    def test_request_cancel_cancels_tracked_execution_future(self, executor_module, classes):
+        """request_cancel_background_task should cancel the retained async future."""
+        SubagentResult = classes["SubagentResult"]
+        SubagentStatus = classes["SubagentStatus"]
+
+        class FakeFuture:
+            def __init__(self):
+                self.cancelled = False
+
+            def cancel(self):
+                self.cancelled = True
+                return True
+
+        task_id = "test-cancel-future"
+        result = SubagentResult(
+            task_id=task_id,
+            trace_id="test-trace",
+            status=SubagentStatus.RUNNING,
+            started_at=datetime.now(),
+        )
+        future = FakeFuture()
+        result._execution_future = future
+        executor_module._background_tasks[task_id] = result
+
+        executor_module.request_cancel_background_task(task_id)
+
+        assert result.cancel_event.is_set()
+        assert future.cancelled is True
+
     def test_request_cancel_nonexistent_task_is_noop(self, executor_module):
         """Test that requesting cancellation on a nonexistent task does not raise."""
         executor_module.request_cancel_background_task("nonexistent-task")

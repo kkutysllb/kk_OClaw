@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Message } from "@langchain/langgraph-sdk";
+import type { Message, Run } from "@langchain/langgraph-sdk";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const {
   streamState,
   submitMock,
+  stopMock,
+  runsListMock,
+  runsCancelMock,
   fetchMock,
   queryState,
   queryClient,
@@ -19,6 +22,9 @@ const {
     isLoading: false,
   },
   submitMock: vi.fn(),
+  stopMock: vi.fn(async () => undefined),
+  runsListMock: vi.fn(async (): Promise<Run[]> => []),
+  runsCancelMock: vi.fn(async () => undefined),
   fetchMock: vi.fn(),
   queryState: {
     data: [] as unknown,
@@ -43,6 +49,7 @@ vi.mock("@langchain/langgraph-sdk/react", () => ({
       values: {},
       error: null,
       submit: submitMock,
+      stop: stopMock,
       joinStream: vi.fn(),
     };
   }),
@@ -76,7 +83,8 @@ vi.mock("@/core/i18n/hooks", () => ({
 vi.mock("@/core/api", () => ({
   getAPIClient: () => ({
     runs: {
-      list: vi.fn(async () => []),
+      list: runsListMock,
+      cancel: runsCancelMock,
     },
   }),
 }));
@@ -137,6 +145,20 @@ function visibleText(message: Message): string {
   return "";
 }
 
+function makeRun(runId: string, status: Run["status"]): Run {
+  return {
+    run_id: runId,
+    thread_id: "thread-a",
+    assistant_id: "lead_agent",
+    status,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    metadata: {},
+    kwargs: {},
+    multitask_strategy: "reject",
+  } as Run;
+}
+
 function Harness({ threadId }: { threadId: string }) {
   const { thread } = useThreadStream({
     threadId,
@@ -165,6 +187,24 @@ function SubmitHarness({ threadId }: { threadId: string }) {
       },
     },
     "submit",
+  );
+}
+
+function StopHarness({ threadId }: { threadId: string }) {
+  const { thread } = useThreadStream({
+    threadId,
+    context: { mode: undefined },
+    isMock: false,
+  });
+  return React.createElement(
+    "button",
+    {
+      type: "button",
+      onClick: () => {
+        void thread.stop();
+      },
+    },
+    "stop",
   );
 }
 
@@ -227,6 +267,11 @@ describe("useThreadStream cache bridge", () => {
     queryState.data = [];
     fetchMock.mockReset();
     submitMock.mockReset();
+    stopMock.mockReset();
+    runsListMock.mockReset();
+    runsListMock.mockResolvedValue([]);
+    runsCancelMock.mockReset();
+    runsCancelMock.mockResolvedValue(undefined);
     toastError.mockReset();
     streamOptions.current = undefined;
     window.localStorage.clear();
@@ -313,6 +358,69 @@ describe("useThreadStream cache bridge", () => {
       | { onDisconnect?: string }
       | undefined;
     expect(submitOptions?.onDisconnect).toBe("continue");
+  });
+
+  test("stop cancels the active backend run even when the SDK stream key is missing", async () => {
+    runsListMock.mockResolvedValue([
+      makeRun("old-success", "success"),
+      makeRun("run-active", "running"),
+    ]);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root!.render(React.createElement(StopHarness, { threadId: "thread-a" }));
+    });
+
+    const button = container.querySelector("button");
+    expect(button).not.toBeNull();
+
+    await act(async () => {
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(stopMock).toHaveBeenCalled();
+    expect(runsListMock).toHaveBeenCalledWith("thread-a");
+    expect(runsCancelMock).toHaveBeenCalledWith(
+      "thread-a",
+      "run-active",
+      false,
+      "interrupt",
+    );
+  });
+
+  test("stop still cancels the backend run if the SDK local stop fails", async () => {
+    stopMock.mockRejectedValueOnce(new Error("local stream already closed"));
+    runsListMock.mockResolvedValue([makeRun("run-active", "running")]);
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root!.render(React.createElement(StopHarness, { threadId: "thread-a" }));
+    });
+
+    const button = container.querySelector("button");
+    expect(button).not.toBeNull();
+
+    await act(async () => {
+      button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(stopMock).toHaveBeenCalled();
+    expect(runsCancelMock).toHaveBeenCalledWith(
+      "thread-a",
+      "run-active",
+      false,
+      "interrupt",
+    );
   });
 
   test("clears stale stream reconnect keys without showing an error toast", () => {

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from kkoclaw.utils.time import now_iso as _now_iso
 
+from .cancellation import cancel_registered_run_work, clear_run_cancellation
 from .schemas import DisconnectMode, RunStatus
 
 if TYPE_CHECKING:
@@ -486,6 +487,7 @@ class RunManager:
                 return False
             record.abort_action = action
             record.abort_event.set()
+            cancel_registered_run_work(run_id)
             if record.task is not None and not record.task.done():
                 record.task.cancel()
             record.status = RunStatus.interrupted
@@ -643,6 +645,7 @@ class RunManager:
             await asyncio.sleep(delay)
         async with self._lock:
             self._runs.pop(run_id, None)
+        clear_run_cancellation(run_id)
         logger.debug("Run record %s cleaned up", run_id)
 
 

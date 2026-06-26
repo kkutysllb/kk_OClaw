@@ -3,11 +3,14 @@ import logging
 import ntpath
 import os
 import shutil
+import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from kkoclaw.runtime.runs.cancellation import run_cancellable
 from kkoclaw.sandbox.local.list_dir import list_dir
 from kkoclaw.sandbox.sandbox import Sandbox
 from kkoclaw.sandbox.search import GrepMatch, find_glob_matches, find_grep_matches
@@ -311,7 +314,54 @@ class LocalSandbox(Sandbox):
 
         raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, and `sh` on PATH.")
 
-    def execute_command(self, command: str) -> str:
+    @staticmethod
+    def _terminate_process(process: subprocess.Popen) -> None:
+        """Best-effort terminate a subprocess and any process group it owns."""
+        if process.poll() is not None:
+            return
+        try:
+            if os.name != "nt":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+        except ProcessLookupError:
+            return
+        except Exception:
+            logger.debug("Failed to terminate subprocess cleanly", exc_info=True)
+            try:
+                process.terminate()
+            except Exception:
+                logger.debug("Fallback terminate failed", exc_info=True)
+
+    @staticmethod
+    def _kill_process(process: subprocess.Popen) -> None:
+        """Best-effort force-kill a subprocess and any process group it owns."""
+        if process.poll() is not None:
+            return
+        try:
+            if os.name != "nt":
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except ProcessLookupError:
+            return
+        except Exception:
+            logger.debug("Failed to kill subprocess process group", exc_info=True)
+            try:
+                process.kill()
+            except Exception:
+                logger.debug("Fallback kill failed", exc_info=True)
+
+    @staticmethod
+    def _cancel_process(process: subprocess.Popen) -> None:
+        LocalSandbox._terminate_process(process)
+        deadline = time.monotonic() + 1.0
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if process.poll() is None:
+            LocalSandbox._kill_process(process)
+
+    def execute_command(self, command: str, *, run_id: str | None = None) -> str:
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
         shell = self._get_shell()
@@ -331,22 +381,33 @@ class LocalSandbox(Sandbox):
                         "MSYS2_ARG_CONV_EXCL": "*",
                     }
 
-            result = subprocess.run(
-                args,
+            popen_kwargs = dict(
                 shell=False,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=600,
                 env=env,
+            )
+            result = self._run_command_process(
+                args,
+                timeout=600,
+                run_id=run_id,
+                popen_kwargs=popen_kwargs,
             )
         else:
             args = [shell, "-c", resolved_command]
-            result = subprocess.run(
-                args,
+            popen_kwargs = dict(
                 shell=False,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,
+            )
+            result = self._run_command_process(
+                args,
                 timeout=600,
+                run_id=run_id,
+                popen_kwargs=popen_kwargs,
             )
         output = result.stdout
         if result.stderr:
@@ -357,6 +418,42 @@ class LocalSandbox(Sandbox):
         final_output = output if output else "(no output)"
         # Reverse resolve local paths back to container paths in output
         return self._reverse_resolve_paths_in_output(final_output)
+
+    def _run_command_process(
+        self,
+        args: list[str],
+        *,
+        timeout: int,
+        run_id: str | None,
+        popen_kwargs: dict,
+    ) -> subprocess.CompletedProcess:
+        process = subprocess.Popen(args, **popen_kwargs)
+        with run_cancellable(run_id, lambda: self._cancel_process(process)):
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                self._cancel_process(process)
+                try:
+                    stdout, stderr = process.communicate(timeout=1)
+                except Exception:
+                    stdout = exc.output or ""
+                    stderr = exc.stderr or ""
+                if stderr:
+                    stderr = f"{stderr}\nCommand timed out after {timeout} seconds"
+                else:
+                    stderr = f"Command timed out after {timeout} seconds"
+                return subprocess.CompletedProcess(
+                    args,
+                    process.returncode if process.returncode is not None else -9,
+                    stdout or "",
+                    stderr,
+                )
+        return subprocess.CompletedProcess(
+            args,
+            process.returncode if process.returncode is not None else 0,
+            stdout or "",
+            stderr or "",
+        )
 
     def list_dir(self, path: str, max_depth=2) -> list[str]:
         resolved_path = self._resolve_path(path)

@@ -93,6 +93,7 @@ class SubagentResult:
     token_usage_records: list[dict[str, int | str]] = field(default_factory=list)
     usage_reported: bool = False
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    execution_future: Future | None = field(default=None, repr=False)
     _state_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self):
@@ -813,6 +814,7 @@ class SubagentExecutor:
                     parent_context,
                     lambda: self._aexecute(task, result_holder),
                 )
+                result_holder.execution_future = execution_future
                 try:
                     # Wait for execution with timeout
                     execution_future.result(timeout=self.config.timeout_seconds)
@@ -851,6 +853,9 @@ def request_cancel_background_task(task_id: str) -> None:
         result = _background_tasks.get(task_id)
         if result is not None:
             result.cancel_event.set()
+            execution_future = result.execution_future or getattr(result, "_execution_future", None)
+            if execution_future is not None:
+                execution_future.cancel()
             logger.info("Requested cancellation for background task %s", task_id)
 
 

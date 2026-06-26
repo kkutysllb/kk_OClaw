@@ -20,6 +20,7 @@ from langgraph.types import Command
 
 from kkoclaw.sandbox.tools import (
     _sanitize_error,
+    execute_sandbox_command,
     ensure_sandbox_initialized,
     ensure_thread_directories_exist,
     get_thread_data,
@@ -145,7 +146,7 @@ def _detect_linter(runtime: Runtime) -> str | None:
 
     def _binary_available(name: str) -> bool:
         try:
-            result = sandbox.execute_command(f"which {name} 2>/dev/null")
+            result = execute_sandbox_command(runtime, sandbox, f"which {name} 2>/dev/null")
             return bool(result.strip()) and "not found" not in result.lower()
         except Exception:
             return False
@@ -205,7 +206,7 @@ def _run_pytest_structured(runtime: Runtime, target: str | None, extra_args: str
         cmd_parts.append(target)
     cmd = " ".join(p for p in cmd_parts if p)
 
-    output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
+    output = execute_sandbox_command(runtime, sandbox, _command_with_project_root(runtime, cmd))
 
     # Read the JSON report if it was produced
     report = _read_pytest_json_report(report_path)
@@ -433,7 +434,7 @@ def run_tests_tool(
                 cmd += f" {target}"
             sandbox = ensure_sandbox_initialized(runtime)
             ensure_thread_directories_exist(runtime)
-            output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
+            output = execute_sandbox_command(runtime, sandbox, _command_with_project_root(runtime, cmd))
             result = _parse_jest_text(output, cmd)
             return _build_test_result_command(runtime, result)
 
@@ -443,7 +444,7 @@ def run_tests_tool(
         cmd = f"{fw} {extra_args}"
         if target:
             cmd += f" {target}"
-        output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
+        output = execute_sandbox_command(runtime, sandbox, _command_with_project_root(runtime, cmd))
         result = _parse_generic_text(output, cmd, fw)
         return _build_test_result_command(runtime, result)
     except Exception as e:
@@ -505,7 +506,7 @@ def run_linter_tool(
 
         sandbox = ensure_sandbox_initialized(runtime)
         ensure_thread_directories_exist(runtime)
-        output = sandbox.execute_command(_command_with_project_root(runtime, cmd))
+        output = execute_sandbox_command(runtime, sandbox, _command_with_project_root(runtime, cmd))
 
         issues = _parse_linter_issues(output, ln)
         has_issues = bool(issues) and "no issues" not in output.lower() and "all checks passed" not in output.lower() and "no problems" not in output.lower()

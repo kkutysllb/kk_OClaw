@@ -1225,6 +1225,30 @@ def get_thread_data(runtime: Runtime | None) -> ThreadDataState | None:
     return runtime.state.get("thread_data")
 
 
+def get_runtime_run_id(runtime: Runtime | None) -> str | None:
+    """Extract the current run id from runtime context/config."""
+    if runtime is None:
+        return None
+    context = getattr(runtime, "context", None)
+    if isinstance(context, dict):
+        run_id = context.get("run_id")
+        if isinstance(run_id, str) and run_id:
+            return run_id
+    config = getattr(runtime, "config", None)
+    if isinstance(config, dict):
+        configurable = config.get("configurable")
+        if isinstance(configurable, dict):
+            run_id = configurable.get("run_id")
+            if isinstance(run_id, str) and run_id:
+                return run_id
+    return None
+
+
+def execute_sandbox_command(runtime: Runtime | None, sandbox: Sandbox, command: str) -> str:
+    """Execute a sandbox command with run cancellation metadata when available."""
+    return sandbox.execute_command(command, run_id=get_runtime_run_id(runtime))
+
+
 def is_local_sandbox(runtime: Runtime | None) -> bool:
     """Check if the current sandbox is a local sandbox.
 
@@ -1531,7 +1555,7 @@ def bash_tool(runtime: Runtime, description: str, command: str) -> str:
             validate_local_bash_command_paths(command, thread_data)
             command = replace_virtual_paths_in_command(command, thread_data)
             command = _apply_cwd_prefix(command, thread_data)
-            output = sandbox.execute_command(command)
+            output = execute_sandbox_command(runtime, sandbox, command)
             try:
                 from kkoclaw.config.app_config import get_app_config
 
@@ -1548,7 +1572,7 @@ def bash_tool(runtime: Runtime, description: str, command: str) -> str:
             max_chars = sandbox_cfg.bash_output_max_chars if sandbox_cfg else 20000
         except Exception:
             max_chars = 20000
-        return _truncate_bash_output(sandbox.execute_command(command), max_chars)
+        return _truncate_bash_output(execute_sandbox_command(runtime, sandbox, command), max_chars)
     except SandboxError as e:
         return f"Error: {e}"
     except PermissionError as e:

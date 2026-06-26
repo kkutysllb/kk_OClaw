@@ -14,6 +14,7 @@ from langchain.tools import tool
 
 from kkoclaw.sandbox.tools import (
     _sanitize_error,
+    execute_sandbox_command,
     ensure_sandbox_initialized,
     ensure_thread_directories_exist,
 )
@@ -23,7 +24,7 @@ def _run_git(runtime: Runtime, args: str) -> str:
     """Run a git subcommand in the sandbox and return stdout."""
     sandbox = ensure_sandbox_initialized(runtime)
     ensure_thread_directories_exist(runtime)
-    return sandbox.execute_command(f"git {args}")
+    return execute_sandbox_command(runtime, sandbox, f"git {args}")
 
 
 def _get_repo_root(runtime: Runtime) -> str:

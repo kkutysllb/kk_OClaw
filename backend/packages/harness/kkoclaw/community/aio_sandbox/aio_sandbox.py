@@ -54,7 +54,7 @@ class AioSandbox(Sandbox):
     # default.
     _DEFAULT_NO_CHANGE_TIMEOUT = 600
 
-    def execute_command(self, command: str) -> str:
+    def execute_command(self, command: str, *, run_id: str | None = None) -> str:
         """Execute a shell command in the sandbox.
 
         Uses a lock to serialize concurrent requests. The AIO sandbox
@@ -66,6 +66,7 @@ class AioSandbox(Sandbox):
 
         Args:
             command: The command to execute.
+            run_id: Optional run id for cancellation propagation.
 
         Returns:
             The output of the command.

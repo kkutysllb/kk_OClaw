@@ -1,4 +1,5 @@
 import errno
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -7,6 +8,7 @@ import pytest
 
 from kkoclaw.sandbox.local.local_sandbox import LocalSandbox, PathMapping
 from kkoclaw.sandbox.local.local_sandbox_provider import LocalSandboxProvider
+from kkoclaw.runtime.runs.cancellation import cancel_registered_run_work
 
 
 def _symlink_to(target, link, *, target_is_directory=False):
@@ -402,14 +404,20 @@ class TestMultipleMounts:
 
         # Mock subprocess to capture the resolved command
         captured = {}
-        original_run = __import__("subprocess").run
 
-        def mock_run(*args, **kwargs):
-            if len(args) > 0:
+        class FakeProcess:
+            returncode = 0
+
+            def __init__(self, *args, **kwargs):
                 captured["command"] = args[0]
-            return original_run(*args, **kwargs)
 
-        monkeypatch.setattr("kkoclaw.sandbox.local.local_sandbox.subprocess.run", mock_run)
+            def communicate(self, timeout=None):
+                return "hello", ""
+
+            def poll(self):
+                return self.returncode
+
+        monkeypatch.setattr("kkoclaw.sandbox.local.local_sandbox.subprocess.Popen", FakeProcess)
         monkeypatch.setattr("kkoclaw.sandbox.local.local_sandbox.LocalSandbox._get_shell", lambda self: "/bin/sh")
 
         sandbox.execute_command("cat /mnt/data/test.txt")
@@ -417,6 +425,50 @@ class TestMultipleMounts:
         command = captured.get("command", [])
         assert isinstance(command, list) and len(command) >= 3
         assert str(data_dir) in command[2]
+
+    def test_execute_command_registers_process_for_run_cancellation(self, monkeypatch):
+        sandbox = LocalSandbox("test")
+
+        class FakeProcess:
+            def __init__(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+                self.returncode = None
+                self.stdout = ""
+                self.stderr = ""
+                self.terminated = False
+                self.killed = False
+
+            def communicate(self, timeout=None):
+                cancel_registered_run_work("run-cancel")
+                raise subprocess.TimeoutExpired(cmd=self.args[0], timeout=timeout or 600)
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+                self.returncode = -15
+
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+
+        created: list[FakeProcess] = []
+
+        def fake_popen(*args, **kwargs):
+            process = FakeProcess(*args, **kwargs)
+            created.append(process)
+            return process
+
+        monkeypatch.setattr("kkoclaw.sandbox.local.local_sandbox.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("kkoclaw.sandbox.local.local_sandbox.LocalSandbox._get_shell", lambda self: "/bin/sh")
+
+        output = sandbox.execute_command("sleep 600", run_id="run-cancel")
+
+        assert created
+        assert created[0].terminated is True
+        assert "timed out" in output.lower() or "cancel" in output.lower()
 
     def test_reverse_resolve_path_does_not_match_partial_prefix(self, tmp_path):
         foo_dir = tmp_path / "foo"

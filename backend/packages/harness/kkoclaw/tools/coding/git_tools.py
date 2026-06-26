@@ -14,6 +14,7 @@ from langchain.tools import tool
 
 from kkoclaw.sandbox.tools import (
     _sanitize_error,
+    execute_sandbox_command,
     ensure_sandbox_initialized,
     ensure_thread_directories_exist,
     get_thread_data,
@@ -32,7 +33,7 @@ def _run_git(runtime: Runtime, args: str) -> str:
         cmd = f'cd "{project_root}" && git {args}'
     else:
         cmd = f"git {args}"
-    return sandbox.execute_command(cmd)
+    return execute_sandbox_command(runtime, sandbox, cmd)
 
 
 @tool("git_status", parse_docstring=True)

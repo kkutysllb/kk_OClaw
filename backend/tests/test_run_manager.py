@@ -5,6 +5,7 @@ import re
 import pytest
 
 from kkoclaw.runtime import RunManager, RunStatus
+from kkoclaw.runtime.runs.cancellation import register_run_cancellable
 
 ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
@@ -61,6 +62,42 @@ async def test_cancel(manager: RunManager):
     assert cancelled is True
     assert record.abort_event.is_set()
     assert record.status == RunStatus.interrupted
+
+
+@pytest.mark.anyio
+async def test_cancel_notifies_run_cancellation_registry(manager: RunManager, monkeypatch: pytest.MonkeyPatch):
+    """Cancel should notify run-scoped cancellables before returning."""
+    called: list[str] = []
+    record = await manager.create("thread-1")
+    await manager.set_status(record.run_id, RunStatus.running)
+
+    def fake_cancel_registered_run_work(run_id: str) -> None:
+        called.append(run_id)
+
+    monkeypatch.setattr(
+        "kkoclaw.runtime.runs.manager.cancel_registered_run_work",
+        fake_cancel_registered_run_work,
+    )
+
+    cancelled = await manager.cancel(record.run_id)
+
+    assert cancelled is True
+    assert called == [record.run_id]
+
+
+@pytest.mark.anyio
+async def test_cancellable_registered_after_run_cancel_is_cancelled_immediately(manager: RunManager):
+    """Late cancellable registration should not miss an already-cancelled run."""
+    called: list[str] = []
+    record = await manager.create("thread-1")
+    await manager.set_status(record.run_id, RunStatus.running)
+
+    cancelled = await manager.cancel(record.run_id)
+    unregister = register_run_cancellable(record.run_id, lambda: called.append(record.run_id))
+
+    assert cancelled is True
+    assert called == [record.run_id]
+    unregister()
 
 
 @pytest.mark.anyio

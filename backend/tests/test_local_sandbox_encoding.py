@@ -1,5 +1,4 @@
 import builtins
-from types import SimpleNamespace
 
 import kkoclaw.sandbox.local.local_sandbox as local_sandbox
 from kkoclaw.sandbox.local.local_sandbox import LocalSandbox
@@ -9,6 +8,31 @@ def _open(base, file, mode="r", *args, **kwargs):
     if "b" in mode:
         return base(file, mode, *args, **kwargs)
     return base(file, mode, *args, encoding=kwargs.pop("encoding", "gbk"), **kwargs)
+
+
+class _FakePopen:
+    stdout = "ok"
+    stderr = ""
+    returncode = 0
+
+    def __init__(self, calls, *args, **kwargs):
+        calls.append((args[0], kwargs))
+
+    def communicate(self, timeout=None):
+        return self.stdout, self.stderr
+
+    def poll(self):
+        return self.returncode
+
+
+def _mock_popen(monkeypatch):
+    calls: list[tuple[object, dict]] = []
+
+    def fake_popen(*args, **kwargs):
+        return _FakePopen(calls, *args, **kwargs)
+
+    monkeypatch.setattr(local_sandbox.subprocess, "Popen", fake_popen)
+    return calls
 
 
 def test_read_file_uses_utf8_on_windows_locale(tmp_path, monkeypatch):
@@ -79,15 +103,9 @@ def test_get_shell_uses_cmd_as_last_windows_fallback(monkeypatch):
 
 
 def test_execute_command_uses_powershell_command_mode_on_windows(monkeypatch):
-    calls: list[tuple[object, dict]] = []
-
-    def fake_run(*args, **kwargs):
-        calls.append((args[0], kwargs))
-        return SimpleNamespace(stdout="ok", stderr="", returncode=0)
-
+    calls = _mock_popen(monkeypatch)
     monkeypatch.setattr(local_sandbox.os, "name", "nt")
     monkeypatch.setattr(LocalSandbox, "_get_shell", staticmethod(lambda: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"))
-    monkeypatch.setattr(local_sandbox.subprocess, "run", fake_run)
 
     output = LocalSandbox("t").execute_command("Write-Output hello")
 
@@ -102,9 +120,9 @@ def test_execute_command_uses_powershell_command_mode_on_windows(monkeypatch):
             ],
             {
                 "shell": False,
-                "capture_output": True,
+                "stdout": local_sandbox.subprocess.PIPE,
+                "stderr": local_sandbox.subprocess.PIPE,
                 "text": True,
-                "timeout": 600,
                 "env": None,
             },
         )
@@ -112,16 +130,10 @@ def test_execute_command_uses_powershell_command_mode_on_windows(monkeypatch):
 
 
 def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
-    calls: list[tuple[object, dict]] = []
-
-    def fake_run(*args, **kwargs):
-        calls.append((args[0], kwargs))
-        return SimpleNamespace(stdout="ok", stderr="", returncode=0)
-
+    calls = _mock_popen(monkeypatch)
     monkeypatch.setattr(local_sandbox.os, "name", "nt")
     monkeypatch.setattr(local_sandbox.os, "environ", {})
     monkeypatch.setattr(LocalSandbox, "_get_shell", staticmethod(lambda: r"C:\Program Files\Git\bin\sh.exe"))
-    monkeypatch.setattr(local_sandbox.subprocess, "run", fake_run)
 
     output = LocalSandbox("t").execute_command("echo hello")
 
@@ -131,9 +143,9 @@ def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
             [r"C:\Program Files\Git\bin\sh.exe", "-c", "echo hello"],
             {
                 "shell": False,
-                "capture_output": True,
+                "stdout": local_sandbox.subprocess.PIPE,
+                "stderr": local_sandbox.subprocess.PIPE,
                 "text": True,
-                "timeout": 600,
                 "env": {
                     **{},
                     "MSYS_NO_PATHCONV": "1",
@@ -145,15 +157,9 @@ def test_execute_command_uses_posix_shell_command_mode_on_windows(monkeypatch):
 
 
 def test_execute_command_uses_cmd_command_mode_on_windows(monkeypatch):
-    calls: list[tuple[object, dict]] = []
-
-    def fake_run(*args, **kwargs):
-        calls.append((args[0], kwargs))
-        return SimpleNamespace(stdout="ok", stderr="", returncode=0)
-
+    calls = _mock_popen(monkeypatch)
     monkeypatch.setattr(local_sandbox.os, "name", "nt")
     monkeypatch.setattr(LocalSandbox, "_get_shell", staticmethod(lambda: r"C:\Windows\System32\cmd.exe"))
-    monkeypatch.setattr(local_sandbox.subprocess, "run", fake_run)
 
     output = LocalSandbox("t").execute_command("echo hello")
 
@@ -163,9 +169,9 @@ def test_execute_command_uses_cmd_command_mode_on_windows(monkeypatch):
             [r"C:\Windows\System32\cmd.exe", "/c", "echo hello"],
             {
                 "shell": False,
-                "capture_output": True,
+                "stdout": local_sandbox.subprocess.PIPE,
+                "stderr": local_sandbox.subprocess.PIPE,
                 "text": True,
-                "timeout": 600,
                 "env": None,
             },
         )
