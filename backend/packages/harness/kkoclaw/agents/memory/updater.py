@@ -13,8 +13,10 @@ from typing import Any
 
 from kkoclaw.agents.memory.prompt import (
     MEMORY_UPDATE_PROMPT,
+    build_memory_injection_view,
     format_conversation_for_update,
 )
+from kkoclaw.agents.memory.scope import same_memory_scope
 from kkoclaw.agents.memory.storage import (
     create_empty_memory,
     get_memory_storage,
@@ -256,6 +258,19 @@ def _strip_upload_mentions_from_memory(memory_data: dict[str, Any]) -> dict[str,
                 cleaned = re.sub(r"  +", " ", cleaned)
                 val["summary"] = cleaned
 
+    for scoped_entry in memory_data.get("scoped", []) or []:
+        if not isinstance(scoped_entry, dict):
+            continue
+        for section in ("user", "history"):
+            section_data = scoped_entry.get(section, {})
+            if not isinstance(section_data, dict):
+                continue
+            for _key, val in section_data.items():
+                if isinstance(val, dict) and "summary" in val:
+                    cleaned = _UPLOAD_SENTENCE_RE.sub("", val["summary"]).strip()
+                    cleaned = re.sub(r"  +", " ", cleaned)
+                    val["summary"] = cleaned
+
     # Also remove any facts that describe upload events
     facts = memory_data.get("facts", [])
     if facts:
@@ -271,6 +286,36 @@ def _fact_content_key(content: Any) -> str | None:
     if not stripped:
         return None
     return stripped.casefold()
+
+
+def _get_or_create_scoped_memory_bucket(memory_data: dict[str, Any], active_scope: dict[str, Any]) -> dict[str, Any]:
+    scoped_entries = memory_data.get("scoped")
+    if not isinstance(scoped_entries, list):
+        scoped_entries = []
+        memory_data["scoped"] = scoped_entries
+
+    for entry in scoped_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_scope = entry.get("scope")
+        if isinstance(entry_scope, dict) and same_memory_scope(entry_scope, active_scope):
+            entry.setdefault("user", {})
+            entry.setdefault("history", {})
+            return entry
+
+    entry = {
+        "scope": dict(active_scope),
+        "user": {},
+        "history": {},
+    }
+    scoped_entries.append(entry)
+    return entry
+
+
+def _summary_update_target(memory_data: dict[str, Any], active_scope: dict[str, Any] | None) -> dict[str, Any]:
+    if active_scope:
+        return _get_or_create_scoped_memory_bucket(memory_data, active_scope)
+    return memory_data
 
 
 class MemoryUpdater:
@@ -322,6 +367,7 @@ class MemoryUpdater:
         correction_detected: bool,
         reinforcement_detected: bool,
         user_id: str | None = None,
+        active_scope: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], str] | None:
         """Load memory and build the update prompt for a conversation."""
         config = get_memory_config()
@@ -329,6 +375,11 @@ class MemoryUpdater:
             return None
 
         current_memory = get_memory_data(agent_name, user_id=user_id)
+        prompt_memory = build_memory_injection_view(
+            current_memory,
+            active_scope=active_scope,
+            include_legacy_unscoped_facts=active_scope is None,
+        )
         conversation_text = format_conversation_for_update(messages)
         if not conversation_text.strip():
             return None
@@ -338,7 +389,7 @@ class MemoryUpdater:
             reinforcement_detected=reinforcement_detected,
         )
         prompt = MEMORY_UPDATE_PROMPT.format(
-            current_memory=json.dumps(current_memory, indent=2),
+            current_memory=json.dumps(prompt_memory, indent=2),
             conversation=conversation_text,
             correction_hint=correction_hint,
         )
@@ -421,6 +472,7 @@ class MemoryUpdater:
                 correction_detected=correction_detected,
                 reinforcement_detected=reinforcement_detected,
                 user_id=user_id,
+                active_scope=active_scope,
             )
             if prepared is None:
                 return False
@@ -527,12 +579,16 @@ class MemoryUpdater:
         config = get_memory_config()
         now = utc_now_iso_z()
 
+        summary_target = _summary_update_target(current_memory, active_scope)
+        summary_target.setdefault("user", {})
+        summary_target.setdefault("history", {})
+
         # Update user sections
         user_updates = update_data.get("user", {})
         for section in ["workContext", "personalContext", "topOfMind"]:
             section_data = user_updates.get(section, {})
             if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["user"][section] = {
+                summary_target["user"][section] = {
                     "summary": section_data["summary"],
                     "updatedAt": now,
                 }
@@ -542,7 +598,7 @@ class MemoryUpdater:
         for section in ["recentMonths", "earlierContext", "longTermBackground"]:
             section_data = history_updates.get(section, {})
             if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["history"][section] = {
+                summary_target["history"][section] = {
                     "summary": section_data["summary"],
                     "updatedAt": now,
                 }

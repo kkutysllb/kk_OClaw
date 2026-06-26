@@ -2,6 +2,7 @@
 
 import math
 
+from kkoclaw.agents.memory import prompt as memory_prompt_module
 from kkoclaw.agents.memory.prompt import _coerce_confidence, format_memory_for_injection
 
 
@@ -190,3 +191,101 @@ def test_format_memory_includes_long_term_background() -> None:
     assert "Background: Core expertise in distributed systems" in result
     assert "Recent: Recent activity summary" in result
     assert "Earlier: Earlier context summary" in result
+
+
+def test_build_memory_injection_view_uses_scoped_summary_for_active_project() -> None:
+    memory_data = {
+        "user": {
+            "workContext": {"summary": "Global work summary"},
+            "topOfMind": {"summary": "Global current focus"},
+        },
+        "history": {
+            "recentMonths": {"summary": "Global recent work"},
+        },
+        "facts": [
+            {"content": "Global preference", "scope": {"type": "global"}},
+            {
+                "content": "OClaw project fact",
+                "scope": {"type": "coding_project", "id": "kk_OClaw"},
+            },
+            {
+                "content": "Other project fact",
+                "scope": {"type": "coding_project", "id": "other"},
+            },
+        ],
+        "scoped": [
+            {
+                "scope": {"type": "coding_project", "id": "kk_OClaw"},
+                "user": {
+                    "topOfMind": {"summary": "OClaw scoped focus"},
+                },
+                "history": {
+                    "recentMonths": {"summary": "OClaw scoped recent work"},
+                },
+            },
+            {
+                "scope": {"type": "coding_project", "id": "other"},
+                "user": {
+                    "topOfMind": {"summary": "Other scoped focus"},
+                },
+            },
+        ],
+    }
+
+    scoped_view = memory_prompt_module.build_memory_injection_view(
+        memory_data,
+        active_scope={"type": "coding_project", "id": "kk_OClaw"},
+    )
+    rendered = format_memory_for_injection(scoped_view, max_tokens=2000)
+
+    assert "Work: Global work summary" in rendered
+    assert "Current Focus: OClaw scoped focus" in rendered
+    assert "Recent: OClaw scoped recent work" in rendered
+    assert "OClaw project fact" in rendered
+    assert "Global preference" in rendered
+    assert "Other project fact" not in rendered
+    assert "Other scoped focus" not in rendered
+    assert "Global current focus" not in rendered
+
+
+def test_build_memory_injection_view_excludes_legacy_facts_for_scoped_project() -> None:
+    memory_data = {
+        "facts": [
+            {"content": "Legacy task-specific fact without scope"},
+            {"content": "Global preference", "scope": {"type": "global"}},
+            {
+                "content": "Matching project fact",
+                "scope": {"type": "coding_project", "id": "kk_OClaw"},
+            },
+        ],
+    }
+
+    scoped_view = memory_prompt_module.build_memory_injection_view(
+        memory_data,
+        active_scope={"type": "coding_project", "id": "kk_OClaw"},
+        include_legacy_unscoped_facts=False,
+    )
+
+    assert [fact["content"] for fact in scoped_view["facts"]] == [
+        "Global preference",
+        "Matching project fact",
+    ]
+
+
+def test_build_memory_injection_view_preserves_legacy_facts_without_scope() -> None:
+    memory_data = {
+        "facts": [
+            {"content": "Legacy general fact without scope"},
+            {
+                "content": "Project fact",
+                "scope": {"type": "coding_project", "id": "kk_OClaw"},
+            },
+        ],
+    }
+
+    unscoped_view = memory_prompt_module.build_memory_injection_view(memory_data, active_scope=None)
+
+    assert [fact["content"] for fact in unscoped_view["facts"]] == [
+        "Legacy general fact without scope",
+        "Project fact",
+    ]

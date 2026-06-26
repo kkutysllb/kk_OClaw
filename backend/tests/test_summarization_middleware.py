@@ -20,12 +20,18 @@ def _messages() -> list:
     ]
 
 
-def _runtime(thread_id: str | None = "thread-1", agent_name: str | None = None) -> SimpleNamespace:
+def _runtime(
+    thread_id: str | None = "thread-1",
+    agent_name: str | None = None,
+    memory_scope: dict | None = None,
+) -> SimpleNamespace:
     context = {}
     if thread_id is not None:
         context["thread_id"] = thread_id
     if agent_name is not None:
         context["agent_name"] = agent_name
+    if memory_scope is not None:
+        context["memory_scope"] = memory_scope
     return SimpleNamespace(context=context)
 
 
@@ -199,6 +205,51 @@ def test_memory_flush_hook_enqueues_filtered_messages_and_flushes(monkeypatch: p
     assert [message.content for message in add_kwargs["messages"]] == ["Question", "Final answer"]
     assert add_kwargs["correction_detected"] is False
     assert add_kwargs["reinforcement_detected"] is False
+
+
+def test_memory_flush_hook_preserves_active_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = MagicMock()
+    active_scope = {"type": "coding_project", "id": "kk_OClaw"}
+    monkeypatch.setattr("kkoclaw.agents.memory.summarization_hook.get_memory_config", lambda: MemoryConfig(enabled=True))
+    monkeypatch.setattr("kkoclaw.agents.memory.summarization_hook.get_memory_queue", lambda: queue)
+
+    memory_flush_hook(
+        SummarizationEvent(
+            messages_to_summarize=tuple(_messages()[:2]),
+            preserved_messages=(),
+            thread_id="thread-1",
+            agent_name="coding_agent",
+            runtime=_runtime(agent_name="coding_agent", memory_scope=active_scope),
+        )
+    )
+
+    queue.add_nowait.assert_called_once()
+    assert queue.add_nowait.call_args.kwargs["active_scope"] == active_scope
+
+
+def test_memory_flush_hook_uses_runtime_user_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = MagicMock()
+    monkeypatch.setattr("kkoclaw.agents.memory.summarization_hook.get_memory_config", lambda: MemoryConfig(enabled=True))
+    monkeypatch.setattr("kkoclaw.agents.memory.summarization_hook.get_memory_queue", lambda: queue)
+    monkeypatch.setattr(
+        "kkoclaw.agents.memory.summarization_hook.resolve_runtime_user_id",
+        lambda runtime: runtime.context.get("user_id", "ambient-user"),
+    )
+
+    runtime = _runtime()
+    runtime.context["user_id"] = "runtime-user"
+    memory_flush_hook(
+        SummarizationEvent(
+            messages_to_summarize=tuple(_messages()[:2]),
+            preserved_messages=(),
+            thread_id="thread-1",
+            agent_name="coding_agent",
+            runtime=runtime,
+        )
+    )
+
+    queue.add_nowait.assert_called_once()
+    assert queue.add_nowait.call_args.kwargs["user_id"] == "runtime-user"
 
 
 def test_skill_rescue_keeps_recent_skill_reads_out_of_summary() -> None:

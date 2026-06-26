@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from kkoclaw.agents.memory.message_processing import detect_correction, detect_reinforcement, filter_messages_for_memory
 from kkoclaw.agents.memory.queue import get_memory_queue
+from kkoclaw.agents.memory.scope import resolve_active_scope
 from kkoclaw.agents.middlewares.summarization_middleware import SummarizationEvent
 from kkoclaw.config.memory_config import get_memory_config
-from kkoclaw.runtime.user_context import get_effective_user_id
+from kkoclaw.runtime.user_context import resolve_runtime_user_id
 
 
 def memory_flush_hook(event: SummarizationEvent) -> None:
@@ -22,13 +23,15 @@ def memory_flush_hook(event: SummarizationEvent) -> None:
 
     correction_detected = detect_correction(filtered_messages)
     reinforcement_detected = not correction_detected and detect_reinforcement(filtered_messages)
-    user_id = get_effective_user_id()
+    user_id = resolve_runtime_user_id(event.runtime)
+    active_scope = resolve_active_scope(event.runtime.context if event.runtime.context else None)
     queue = get_memory_queue()
     queue.add_nowait(
         thread_id=event.thread_id,
         messages=filtered_messages,
         agent_name=event.agent_name,
         user_id=user_id,
+        active_scope=active_scope,
         correction_detected=correction_detected,
         reinforcement_detected=reinforcement_detected,
     )

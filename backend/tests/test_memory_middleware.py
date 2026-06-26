@@ -2,7 +2,7 @@ import asyncio
 import logging
 from unittest.mock import MagicMock
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from kkoclaw.agents.memory.retrieval import get_retrieval_stats, reset_retrieval_stats
 from kkoclaw.agents.middlewares import memory_middleware as memory_middleware_module
@@ -12,6 +12,10 @@ from kkoclaw.config.memory_config import MemoryConfig, MemoryRetrievalConfig
 
 def _runtime() -> MagicMock:
     return MagicMock(context={"thread_id": "thread-1"})
+
+
+def _runtime_with_user_context() -> MagicMock:
+    return MagicMock(context={"thread_id": "thread-1", "user_id": "runtime-user"})
 
 
 def _runtime_with_scope() -> MagicMock:
@@ -32,7 +36,7 @@ def test_before_agent_injects_ranked_memory_when_retrieval_enabled(monkeypatch) 
     middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: "user-1")
     monkeypatch.setattr(
         memory_middleware_module,
         "get_memory_data",
@@ -70,6 +74,37 @@ def test_before_agent_injects_ranked_memory_when_retrieval_enabled(monkeypatch) 
     assert captured["ranked_facts"] == [{"content": "ranked fact", "category": "goal", "confidence": 0.9}]
 
 
+def test_before_agent_uses_runtime_user_id_for_memory_lookup(monkeypatch) -> None:
+    config = MemoryConfig(
+        enabled=True,
+        injection_enabled=True,
+        retrieval=MemoryRetrievalConfig(enabled=True),
+    )
+    middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: runtime.context.get("user_id", "ambient-user"))
+
+    def fake_get_memory_data(agent_name=None, *, user_id=None):
+        captured["agent_name"] = agent_name
+        captured["user_id"] = user_id
+        return {"facts": [{"content": "runtime user fact", "category": "goal", "confidence": 0.9}]}
+
+    monkeypatch.setattr(memory_middleware_module, "get_memory_data", fake_get_memory_data)
+    monkeypatch.setattr(memory_middleware_module, "extract_current_context", lambda messages, *, max_turns, max_chars: "current context")
+    monkeypatch.setattr(memory_middleware_module, "rank_memory_facts", lambda facts, **kwargs: facts)
+    monkeypatch.setattr(
+        memory_middleware_module,
+        "format_memory_for_injection",
+        lambda memory_data, *, max_tokens, ranked_facts=None: "Facts:\n- runtime user fact",
+    )
+
+    result = middleware.before_agent({"messages": [HumanMessage(content="hi")]}, _runtime_with_user_context())
+
+    assert result is not None
+    assert captured == {"agent_name": "agent-a", "user_id": "runtime-user"}
+
+
 def test_before_agent_returns_none_when_retrieval_disabled() -> None:
     config = MemoryConfig(enabled=True, injection_enabled=True, retrieval=MemoryRetrievalConfig(enabled=False))
     middleware = MemoryMiddleware(memory_config=config)
@@ -77,6 +112,24 @@ def test_before_agent_returns_none_when_retrieval_disabled() -> None:
     result = middleware.before_agent({"messages": [HumanMessage(content="hi")]}, _runtime())
 
     assert result is None
+
+
+def test_after_agent_uses_runtime_user_id_for_memory_queue(monkeypatch) -> None:
+    config = MemoryConfig(enabled=True)
+    middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
+    queue = MagicMock()
+
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: runtime.context.get("user_id", "ambient-user"))
+    monkeypatch.setattr(memory_middleware_module, "get_memory_queue", lambda: queue)
+
+    result = middleware.after_agent(
+        {"messages": [HumanMessage(content="Question"), AIMessage(content="Answer")]},
+        _runtime_with_user_context(),
+    )
+
+    assert result is None
+    queue.add.assert_called_once()
+    assert queue.add.call_args.kwargs["user_id"] == "runtime-user"
 
 
 def test_before_agent_records_injection_stats(monkeypatch) -> None:
@@ -89,7 +142,7 @@ def test_before_agent_records_injection_stats(monkeypatch) -> None:
     )
     middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
 
-    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: "user-1")
     monkeypatch.setattr(
         memory_middleware_module,
         "get_memory_data",
@@ -141,7 +194,7 @@ def test_before_agent_filters_facts_by_runtime_coding_scope(monkeypatch) -> None
         {"content": "Aoshu project fact", "category": "context", "confidence": 0.8, "scope": {"type": "coding_project", "id": "kk_aoshu"}},
     ]
 
-    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: "user-1")
     monkeypatch.setattr(memory_middleware_module, "get_memory_data", lambda agent_name=None, *, user_id=None: {"facts": facts})
     monkeypatch.setattr(memory_middleware_module, "extract_current_context", lambda messages, *, max_turns, max_chars: "current context")
 
@@ -173,7 +226,7 @@ def test_before_agent_emits_debug_log_for_retrieval_injection(monkeypatch, caplo
     )
     middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
 
-    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: "user-1")
     monkeypatch.setattr(
         memory_middleware_module,
         "get_memory_data",
@@ -212,7 +265,7 @@ def test_abefore_agent_accepts_runtime_keyword_and_reuses_sync_logic(monkeypatch
     )
     middleware = MemoryMiddleware(agent_name="agent-a", memory_config=config)
 
-    monkeypatch.setattr(memory_middleware_module, "get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr(memory_middleware_module, "resolve_runtime_user_id", lambda runtime: "user-1")
     monkeypatch.setattr(
         memory_middleware_module,
         "get_memory_data",

@@ -2,7 +2,10 @@
 
 import math
 import re
+import copy
 from typing import Any
+
+from kkoclaw.agents.memory.scope import is_global_scope, same_memory_scope, scope_value
 
 try:
     import tiktoken
@@ -196,6 +199,100 @@ def _coerce_confidence(value: Any, default: float = 0.0) -> float:
     if not math.isfinite(confidence):
         return max(0.0, min(1.0, default))
     return max(0.0, min(1.0, confidence))
+
+
+def _copy_section_with_summaries(section_data: Any) -> dict[str, Any]:
+    if not isinstance(section_data, dict):
+        return {}
+    copied: dict[str, Any] = {}
+    for key, value in section_data.items():
+        if isinstance(value, dict) and isinstance(value.get("summary"), str):
+            copied[key] = copy.deepcopy(value)
+    return copied
+
+
+def _matching_scoped_memory_entries(memory_data: dict[str, Any], active_scope: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not active_scope or not scope_value(active_scope, "type"):
+        return []
+
+    entries = memory_data.get("scoped", [])
+    if not isinstance(entries, list):
+        return []
+
+    matches: list[dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        entry_scope = entry.get("scope")
+        if isinstance(entry_scope, dict) and same_memory_scope(entry_scope, active_scope):
+            matches.append(entry)
+    return matches
+
+
+def _merge_summary_sections(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(value.get("summary"), str):
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def _filter_facts_for_injection_scope(
+    facts: list[dict[str, Any]],
+    *,
+    active_scope: dict[str, Any] | None,
+    include_legacy_unscoped_facts: bool,
+) -> list[dict[str, Any]]:
+    if not active_scope or not scope_value(active_scope, "type"):
+        return list(facts)
+
+    filtered: list[dict[str, Any]] = []
+    for fact in facts:
+        fact_scope = fact.get("scope")
+        if not isinstance(fact_scope, dict):
+            if include_legacy_unscoped_facts:
+                filtered.append(fact)
+            continue
+        if is_global_scope(fact_scope) or same_memory_scope(fact_scope, active_scope):
+            filtered.append(fact)
+    return filtered
+
+
+def build_memory_injection_view(
+    memory_data: dict[str, Any],
+    *,
+    active_scope: dict[str, Any] | None = None,
+    include_legacy_unscoped_facts: bool = True,
+) -> dict[str, Any]:
+    """Build the memory subset visible to the current task scope.
+
+    Top-level user/history summaries represent global durable context. Scoped
+    summary buckets override matching sections for project/task runs so
+    project-specific focus does not contaminate unrelated tasks.
+    """
+    if not isinstance(memory_data, dict):
+        return {}
+
+    user_view = _copy_section_with_summaries(memory_data.get("user"))
+    history_view = _copy_section_with_summaries(memory_data.get("history"))
+
+    for entry in _matching_scoped_memory_entries(memory_data, active_scope):
+        user_view = _merge_summary_sections(user_view, _copy_section_with_summaries(entry.get("user")))
+        history_view = _merge_summary_sections(history_view, _copy_section_with_summaries(entry.get("history")))
+
+    raw_facts = memory_data.get("facts", [])
+    facts = [copy.deepcopy(fact) for fact in raw_facts if isinstance(fact, dict)]
+    facts_view = _filter_facts_for_injection_scope(
+        facts,
+        active_scope=active_scope,
+        include_legacy_unscoped_facts=include_legacy_unscoped_facts,
+    )
+
+    return {
+        "user": user_view,
+        "history": history_view,
+        "facts": facts_view,
+    }
 
 
 def format_memory_for_injection(

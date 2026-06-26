@@ -304,17 +304,25 @@ function AgentPanelInner({ projectId, onThreadIdChange, onFocusFile }: AgentPane
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {
-      // Scope the coding agent to this project's root directory. Read by
-      // make_coding_agent (cfg["project_root"]) to inject the
-      // "## Current Project" section into the system prompt.
+      // Scope the coding agent to this project for file access and memory.
       const project_root = project?.path;
       void sendMessage(
         threadId,
         message,
-        project_root ? { project_root } : undefined,
+        project_root
+          ? {
+              project_root,
+              project_id: projectId,
+              memory_scope: {
+                type: "coding_project",
+                id: projectId,
+                workspaceRoot: project_root,
+              },
+            }
+          : undefined,
       );
     },
-    [sendMessage, threadId, project?.path],
+    [sendMessage, threadId, project?.path, projectId],
   );
 
   const handleStop = useCallback(async () => {

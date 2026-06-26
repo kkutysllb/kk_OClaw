@@ -558,6 +558,8 @@ def _get_memory_context(
     *,
     app_config: AppConfig | None = None,
     messages: list[Any] | None = None,
+    active_scope: dict[str, Any] | None = None,
+    user_id: str | None = None,
 ) -> str:
     """Get memory context for injection into system prompt.
 
@@ -571,6 +573,7 @@ def _get_memory_context(
     """
     try:
         from kkoclaw.agents.memory import (
+            build_memory_injection_view,
             extract_current_context,
             format_memory_for_injection,
             get_memory_data,
@@ -588,7 +591,12 @@ def _get_memory_context(
         if not config.enabled or not config.injection_enabled:
             return ""
 
-        memory_data = get_memory_data(agent_name, user_id=get_effective_user_id())
+        memory_data = get_memory_data(agent_name, user_id=user_id or get_effective_user_id())
+        memory_view = build_memory_injection_view(
+            memory_data,
+            active_scope=active_scope,
+            include_legacy_unscoped_facts=active_scope is None,
+        )
         ranked_facts = None
         retrieval_config = getattr(config, "retrieval", None)
         if retrieval_config and retrieval_config.enabled:
@@ -600,7 +608,7 @@ def _get_memory_context(
                         max_chars=retrieval_config.context_max_chars,
                     )
                     ranked_facts = rank_memory_facts(
-                        memory_data.get("facts", []),
+                        memory_view.get("facts", []),
                         current_context=current_context,
                         similarity_weight=retrieval_config.similarity_weight,
                         confidence_weight=retrieval_config.confidence_weight,
@@ -614,7 +622,7 @@ def _get_memory_context(
                 ranked_facts = []
 
         memory_content = format_memory_for_injection(
-            memory_data,
+            memory_view,
             max_tokens=config.max_injection_tokens,
             ranked_facts=ranked_facts,
         )

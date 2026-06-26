@@ -39,6 +39,8 @@ from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
 from kkoclaw.agents.middlewares.internal_messages import internal_human_message
+from kkoclaw.agents.memory.scope import resolve_active_scope
+from kkoclaw.runtime.user_context import resolve_runtime_user_id
 
 if TYPE_CHECKING:
     from kkoclaw.config.app_config import AppConfig
@@ -90,12 +92,23 @@ class DynamicContextMiddleware(AgentMiddleware):
         self._agent_name = agent_name
         self._app_config = app_config
 
-    def _build_full_reminder(self) -> str:
+    def _build_full_reminder(self, runtime: Runtime | None = None) -> str:
         from kkoclaw.agents.lead_agent.prompt import _get_memory_context
 
         # Memory injection is gated by injection_enabled; date is always included.
         injection_enabled = self._app_config.memory.injection_enabled if self._app_config else True
-        memory_context = _get_memory_context(self._agent_name, app_config=self._app_config) if injection_enabled else ""
+        runtime_context = runtime.context if runtime is not None and runtime.context else None
+        active_scope = resolve_active_scope(runtime_context)
+        memory_context = (
+            _get_memory_context(
+                self._agent_name,
+                app_config=self._app_config,
+                active_scope=active_scope,
+                user_id=resolve_runtime_user_id(runtime),
+            )
+            if injection_enabled
+            else ""
+        )
         current_date = datetime.now().strftime("%Y-%m-%d, %A")
 
         lines: list[str] = ["<system-reminder>"]
@@ -135,7 +148,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         )
         return reminder_msg, user_msg
 
-    def _inject(self, state) -> dict | None:
+    def _inject(self, state, runtime: Runtime | None = None) -> dict | None:
         messages = list(state.get("messages", []))
         if not messages:
             return None
@@ -154,7 +167,7 @@ class DynamicContextMiddleware(AgentMiddleware):
             first_idx = next((i for i, m in enumerate(messages) if _is_user_injection_target(m)), None)
             if first_idx is None:
                 return None
-            full_reminder = self._build_full_reminder()
+            full_reminder = self._build_full_reminder(runtime)
             logger.info(
                 "DynamicContextMiddleware: injecting full reminder (len=%d, has_memory=%s) into first HumanMessage id=%r",
                 len(full_reminder),
@@ -179,8 +192,8 @@ class DynamicContextMiddleware(AgentMiddleware):
 
     @override
     def before_agent(self, state, runtime: Runtime) -> dict | None:
-        return self._inject(state)
+        return self._inject(state, runtime)
 
     @override
     async def abefore_agent(self, state, runtime: Runtime) -> dict | None:
-        return self._inject(state)
+        return self._inject(state, runtime)

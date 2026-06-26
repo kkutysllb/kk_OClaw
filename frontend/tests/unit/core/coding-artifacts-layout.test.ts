@@ -24,7 +24,7 @@ describe("coding artifacts layout", () => {
     expect(workbench).toContain("ArtifactsProvider");
     expect(workbench).toContain('aria-label="代码区视图"');
     expect(workbench).toContain('label="结果"');
-    expect(workbench).toContain('setActiveCodeTab("results")');
+    expect(workbench).toContain('handleSelectWorkbenchTab("results")');
     expect(workbench).toContain("<CodingResultsPanel");
   });
 

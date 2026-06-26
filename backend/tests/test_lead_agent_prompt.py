@@ -206,7 +206,7 @@ def test_get_memory_context_uses_explicit_app_config_without_global_config(monke
     assert captured == {
         "agent_name": "agent-a",
         "user_id": "user-1",
-        "memory_data": {"facts": []},
+        "memory_data": {"user": {}, "history": {}, "facts": []},
         "max_tokens": 1234,
         "ranked_facts": None,
     }
@@ -267,6 +267,70 @@ def test_get_memory_context_uses_ranked_facts_when_retrieval_enabled(monkeypatch
     assert "<memory>" in context
     assert "remember ranked" in context
     assert captured["ranked_facts"] == [{"content": "ranked", "category": "goal", "confidence": 0.3}]
+
+
+def test_get_memory_context_applies_active_scope_before_formatting(monkeypatch):
+    explicit_config = SimpleNamespace(
+        memory=SimpleNamespace(
+            enabled=True,
+            injection_enabled=True,
+            max_injection_tokens=1234,
+            retrieval=SimpleNamespace(enabled=False),
+        ),
+    )
+    active_scope = {"type": "coding_project", "id": "kk_OClaw"}
+    captured: dict[str, object] = {}
+    raw_memory = {
+        "facts": [
+            {"content": "Global preference", "scope": {"type": "global"}},
+            {"content": "OClaw project fact", "scope": active_scope},
+            {"content": "Other project fact", "scope": {"type": "coding_project", "id": "other"}},
+        ],
+        "scoped": [
+            {
+                "scope": active_scope,
+                "user": {"topOfMind": {"summary": "OClaw scoped focus"}},
+            }
+        ],
+    }
+
+    def fake_build_memory_injection_view(memory_data, *, active_scope=None, include_legacy_unscoped_facts=True):
+        captured["raw_memory_data"] = memory_data
+        captured["active_scope"] = active_scope
+        captured["include_legacy_unscoped_facts"] = include_legacy_unscoped_facts
+        return {
+            "user": {"topOfMind": {"summary": "OClaw scoped focus"}},
+            "history": {},
+            "facts": [
+                {"content": "Global preference", "scope": {"type": "global"}},
+                {"content": "OClaw project fact", "scope": active_scope},
+            ],
+        }
+
+    def fake_format_memory_for_injection(memory_data, *, max_tokens, ranked_facts=None):
+        captured["formatted_memory_data"] = memory_data
+        return "scoped memory"
+
+    monkeypatch.setattr("kkoclaw.runtime.user_context.get_effective_user_id", lambda: "user-1")
+    monkeypatch.setattr("kkoclaw.agents.memory.get_memory_data", lambda agent_name=None, *, user_id=None: raw_memory)
+    monkeypatch.setattr("kkoclaw.agents.memory.build_memory_injection_view", fake_build_memory_injection_view)
+    monkeypatch.setattr("kkoclaw.agents.memory.format_memory_for_injection", fake_format_memory_for_injection)
+
+    context = prompt_module._get_memory_context(
+        "coding_agent",
+        app_config=explicit_config,
+        active_scope=active_scope,
+    )
+
+    assert "<memory>" in context
+    assert captured["raw_memory_data"] is raw_memory
+    assert captured["active_scope"] == active_scope
+    assert captured["include_legacy_unscoped_facts"] is False
+    assert captured["formatted_memory_data"]["user"]["topOfMind"]["summary"] == "OClaw scoped focus"
+    assert [fact["content"] for fact in captured["formatted_memory_data"]["facts"]] == [
+        "Global preference",
+        "OClaw project fact",
+    ]
 
 
 def test_refresh_skills_system_prompt_cache_async_reloads_immediately(monkeypatch, tmp_path):

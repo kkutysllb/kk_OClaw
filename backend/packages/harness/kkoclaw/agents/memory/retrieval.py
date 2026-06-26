@@ -11,6 +11,7 @@ from typing import Any
 
 from kkoclaw.agents.memory.message_processing import extract_message_text, filter_messages_for_memory
 from kkoclaw.agents.memory.prompt import _coerce_confidence
+from kkoclaw.agents.memory.scope import is_global_scope, same_memory_scope, scope_value
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]*|[\u4e00-\u9fff]+")
 _TECH_SPLIT_RE = re.compile(r"[-_./:+]+")
@@ -172,25 +173,6 @@ def _sort_facts_by_confidence(facts: list[dict[str, Any]]) -> list[dict[str, Any
     )
 
 
-def _scope_value(scope: MemoryScope | None, key: str) -> str:
-    if not isinstance(scope, dict):
-        return ""
-    value = scope.get(key)
-    return str(value).strip() if value is not None else ""
-
-
-def _same_memory_scope(fact_scope: MemoryScope, active_scope: MemoryScope) -> bool:
-    if _scope_value(fact_scope, "type") != _scope_value(active_scope, "type"):
-        return False
-
-    for key in ("id", "workspaceRoot"):
-        active_value = _scope_value(active_scope, key)
-        if active_value and _scope_value(fact_scope, key) == active_value:
-            return True
-
-    return False
-
-
 def filter_memory_facts_for_scope(
     facts: list[dict[str, Any]],
     *,
@@ -207,7 +189,7 @@ def filter_memory_facts_for_scope(
     if not active_scope:
         return facts
 
-    active_type = _scope_value(active_scope, "type")
+    active_type = scope_value(active_scope, "type")
     if not active_type:
         return facts
 
@@ -218,12 +200,11 @@ def filter_memory_facts_for_scope(
             filtered.append(fact)
             continue
 
-        fact_scope_type = _scope_value(fact_scope, "type")
-        if fact_scope_type in {"", "global"}:
+        if is_global_scope(fact_scope):
             filtered.append(fact)
             continue
 
-        if _same_memory_scope(fact_scope, active_scope):
+        if same_memory_scope(fact_scope, active_scope):
             filtered.append(fact)
 
     return filtered

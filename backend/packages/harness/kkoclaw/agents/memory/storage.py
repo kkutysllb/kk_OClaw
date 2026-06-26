@@ -36,6 +36,7 @@ def create_empty_memory() -> dict[str, Any]:
             "earlierContext": {"summary": "", "updatedAt": ""},
             "longTermBackground": {"summary": "", "updatedAt": ""},
         },
+        "scoped": [],
         "facts": [],
     }
 

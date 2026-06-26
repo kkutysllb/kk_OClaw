@@ -196,6 +196,141 @@ def test_apply_updates_attaches_scope_to_new_facts_when_provided() -> None:
     assert result["facts"][0]["scope"] == {"type": "coding_project", "id": "kk_OClaw"}
 
 
+def test_apply_updates_writes_user_and_history_summaries_to_active_scope() -> None:
+    updater = MemoryUpdater()
+    current_memory = _make_memory()
+    update_data = {
+        "user": {
+            "workContext": {"summary": "Global-ish role update should stay scoped here", "shouldUpdate": True},
+            "topOfMind": {"summary": "OClaw memory isolation work", "shouldUpdate": True},
+        },
+        "history": {
+            "recentMonths": {"summary": "Recently fixed Coding Agent scoped memory.", "shouldUpdate": True},
+        },
+        "newFacts": [],
+        "factsToRemove": [],
+    }
+    active_scope = {"type": "coding_project", "id": "kk_OClaw"}
+
+    result = updater._apply_updates(
+        current_memory,
+        update_data,
+        thread_id="thread-oclaw",
+        active_scope=active_scope,
+    )
+
+    assert result["user"]["workContext"]["summary"] == ""
+    assert result["user"]["topOfMind"]["summary"] == ""
+    assert result["history"]["recentMonths"]["summary"] == ""
+    assert result["scoped"] == [
+        {
+            "scope": active_scope,
+            "user": {
+                "workContext": {
+                    "summary": "Global-ish role update should stay scoped here",
+                    "updatedAt": result["scoped"][0]["user"]["workContext"]["updatedAt"],
+                },
+                "topOfMind": {
+                    "summary": "OClaw memory isolation work",
+                    "updatedAt": result["scoped"][0]["user"]["topOfMind"]["updatedAt"],
+                },
+            },
+            "history": {
+                "recentMonths": {
+                    "summary": "Recently fixed Coding Agent scoped memory.",
+                    "updatedAt": result["scoped"][0]["history"]["recentMonths"]["updatedAt"],
+                },
+            },
+        }
+    ]
+
+
+def test_apply_updates_merges_existing_scoped_summary_bucket() -> None:
+    updater = MemoryUpdater()
+    current_memory = _make_memory()
+    active_scope = {"type": "coding_project", "id": "kk_OClaw"}
+    current_memory["scoped"] = [
+        {
+            "scope": active_scope,
+            "user": {
+                "workContext": {"summary": "Existing scoped work", "updatedAt": "old"},
+            },
+            "history": {},
+        }
+    ]
+    update_data = {
+        "user": {
+            "topOfMind": {"summary": "Updated scoped focus", "shouldUpdate": True},
+        },
+        "history": {
+            "recentMonths": {"summary": "Updated scoped history", "shouldUpdate": True},
+        },
+        "newFacts": [],
+        "factsToRemove": [],
+    }
+
+    result = updater._apply_updates(
+        current_memory,
+        update_data,
+        thread_id="thread-oclaw",
+        active_scope=active_scope,
+    )
+
+    assert len(result["scoped"]) == 1
+    scoped = result["scoped"][0]
+    assert scoped["user"]["workContext"]["summary"] == "Existing scoped work"
+    assert scoped["user"]["topOfMind"]["summary"] == "Updated scoped focus"
+    assert scoped["history"]["recentMonths"]["summary"] == "Updated scoped history"
+
+
+def test_prepare_update_prompt_uses_scoped_memory_view_for_active_scope(monkeypatch) -> None:
+    updater = MemoryUpdater()
+    active_scope = {"type": "coding_project", "id": "kk_OClaw"}
+    full_memory = _make_memory()
+    full_memory["facts"] = [
+        {"content": "Other project fact", "scope": {"type": "coding_project", "id": "other"}},
+        {"content": "OClaw fact", "scope": active_scope},
+    ]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr("kkoclaw.agents.memory.updater.get_memory_config", lambda: _memory_config(enabled=True))
+    monkeypatch.setattr("kkoclaw.agents.memory.updater.get_memory_data", lambda agent_name=None, *, user_id=None: full_memory)
+
+    def fake_build_memory_injection_view(memory_data, *, active_scope=None, include_legacy_unscoped_facts=True):
+        captured["memory_data"] = memory_data
+        captured["active_scope"] = active_scope
+        captured["include_legacy_unscoped_facts"] = include_legacy_unscoped_facts
+        return {
+            "user": {"topOfMind": {"summary": "OClaw scoped focus"}},
+            "history": {},
+            "facts": [{"content": "OClaw fact", "scope": active_scope}],
+        }
+
+    monkeypatch.setattr(
+        "kkoclaw.agents.memory.updater.build_memory_injection_view",
+        fake_build_memory_injection_view,
+    )
+
+    prepared = updater._prepare_update_prompt(
+        messages=[MagicMock(type="human", content="Continue OClaw work"), MagicMock(type="ai", content="Done")],
+        agent_name="coding_agent",
+        correction_detected=False,
+        reinforcement_detected=False,
+        user_id="user-1",
+        active_scope=active_scope,
+    )
+
+    assert prepared is not None
+    current_memory, prompt = prepared
+    assert current_memory is full_memory
+    assert captured["memory_data"] is full_memory
+    assert captured["active_scope"] == active_scope
+    assert captured["include_legacy_unscoped_facts"] is False
+    assert "OClaw scoped focus" in prompt
+    assert "OClaw fact" in prompt
+    assert "Other project fact" not in prompt
+
+
 def test_apply_updates_omits_scope_for_unspecified_conversation_scope() -> None:
     updater = MemoryUpdater()
     current_memory = _make_memory()

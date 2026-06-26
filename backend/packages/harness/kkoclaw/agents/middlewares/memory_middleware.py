@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, override
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage
-from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
 from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.agents.memory.message_processing import detect_correction, detect_reinforcement, filter_messages_for_memory
-from kkoclaw.agents.memory.prompt import format_memory_for_injection
+from kkoclaw.agents.memory.prompt import build_memory_injection_view, format_memory_for_injection
 from kkoclaw.agents.memory.queue import get_memory_queue
 from kkoclaw.agents.memory.retrieval import (
     extract_current_context,
@@ -21,9 +20,10 @@ from kkoclaw.agents.memory.retrieval import (
     rank_memory_facts,
     record_retrieval_injection_stats,
 )
+from kkoclaw.agents.memory.scope import resolve_active_scope
 from kkoclaw.agents.memory.updater import get_memory_data
 from kkoclaw.config.memory_config import get_memory_config
-from kkoclaw.runtime.user_context import get_effective_user_id
+from kkoclaw.runtime.user_context import resolve_runtime_user_id
 
 if TYPE_CHECKING:
     from kkoclaw.config.memory_config import MemoryConfig
@@ -84,7 +84,13 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
                 count += 1
         return count
 
-    def _build_retrieval_injection(self, messages: list, config: "MemoryConfig", runtime_context: dict | None = None) -> dict | None:
+    def _build_retrieval_injection(
+        self,
+        messages: list,
+        config: "MemoryConfig",
+        runtime_context: dict | None = None,
+        user_id: str | None = None,
+    ) -> dict | None:
         retrieval_config = getattr(config, "retrieval", None)
         if not (config.enabled and config.injection_enabled and retrieval_config and retrieval_config.enabled):
             return None
@@ -95,12 +101,14 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             max_turns=retrieval_config.context_max_turns,
             max_chars=retrieval_config.context_max_chars,
         )
-        memory_data = get_memory_data(self._agent_name, user_id=get_effective_user_id())
+        memory_data = get_memory_data(self._agent_name, user_id=user_id)
         active_scope = self._resolve_active_scope(runtime_context)
-        scoped_facts = filter_memory_facts_for_scope(
-            memory_data.get("facts", []),
+        scoped_memory = build_memory_injection_view(
+            memory_data,
             active_scope=active_scope,
+            include_legacy_unscoped_facts=active_scope is None,
         )
+        scoped_facts = scoped_memory.get("facts", [])
         ranked_facts = rank_memory_facts(
             scoped_facts,
             current_context=current_context,
@@ -148,37 +156,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
 
     @staticmethod
     def _resolve_active_scope(runtime_context: dict | None = None) -> dict | None:
-        try:
-            config_data = get_config()
-        except RuntimeError:
-            config_data = {}
-        config_context = config_data.get("context") or {}
-        configurable = config_data.get("configurable") or {}
-
-        for container in (runtime_context, config_context, configurable):
-            if not isinstance(container, dict):
-                continue
-            memory_scope = container.get("memory_scope")
-            if isinstance(memory_scope, dict):
-                return memory_scope
-
-            project_id = container.get("project_id")
-            project_root = container.get("project_root")
-            if isinstance(project_id, str) and project_id.strip():
-                scope = {
-                    "type": "coding_project",
-                    "id": project_id.strip(),
-                }
-                if isinstance(project_root, str) and project_root.strip():
-                    scope["workspaceRoot"] = project_root.strip()
-                return scope
-            if isinstance(project_root, str) and project_root.strip():
-                return {
-                    "type": "coding_project",
-                    "workspaceRoot": project_root.strip(),
-                }
-
-        return None
+        return resolve_active_scope(runtime_context)
 
     @override
     def before_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
@@ -189,7 +167,12 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             return None
 
         try:
-            return self._build_retrieval_injection(messages, config, runtime.context if runtime.context else None)
+            return self._build_retrieval_injection(
+                messages,
+                config,
+                runtime.context if runtime.context else None,
+                user_id=resolve_runtime_user_id(runtime),
+            )
         except Exception:
             logger.exception("Failed to inject context-aware memory facts")
             return None
@@ -246,7 +229,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # Capture user_id at enqueue time while the request context is still alive.
         # threading.Timer fires on a different thread where ContextVar values are not
         # propagated, so we must store user_id explicitly in ConversationContext.
-        user_id = get_effective_user_id()
+        user_id = resolve_runtime_user_id(runtime)
         active_scope = self._resolve_active_scope(runtime.context if runtime.context else None)
         queue = get_memory_queue()
         queue.add(
