@@ -120,16 +120,16 @@ models:
 ```
 
 | 字段 | 说明 |
-    |------|------|
-    | `use` | LangChain 类路径，通用场景一律使用 `langchain_openai:ChatOpenAI` |
-    | `model` | 供应商文档中给出的模型标识（大小写敏感） |
-    | `api_key` | 推荐 `$ENV_VAR` 占位符，从 `.env` 或进程环境读取，避免硬编码 |
-    | `base_url` | OpenAI 兼容接口的根路径，结尾必须为 `/v1`（或供应商指定） |
-    | `max_tokens` | 单次响应上限，影响成本 |
-    | `temperature` | 0~1，越高越发散 |
-    | `supports_thinking` | 是否支持推理模式（决定是否在 UI 上显示推理深度切换器） |
-    | `supports_vision` | 是否支持图像输入（决定 `view_image` 工具是否可用） |
-    | `supports_reasoning_effort` | 是否支持 `reasoning_effort` 参数。不支持时设为 `false`（如 GLM-5） |
+|------|------|
+| `use` | LangChain 类路径，通用场景一律使用 `langchain_openai:ChatOpenAI` |
+| `model` | 供应商文档中给出的模型标识（大小写敏感） |
+| `api_key` | 推荐 `$ENV_VAR` 占位符，从 `.env` 或进程环境读取，避免硬编码 |
+| `base_url` | OpenAI 兼容接口的根路径，结尾必须为 `/v1`（或供应商指定） |
+| `max_tokens` | 单次响应上限，影响成本 |
+| `temperature` | 0~1，越高越发散 |
+| `supports_thinking` | 是否支持推理模式（决定是否在 UI 上显示推理深度切换器） |
+| `supports_vision` | 是否支持图像输入（决定 `view_image` 工具是否可用） |
+| `supports_reasoning_effort` | 是否支持 `reasoning_effort` 参数。不支持时设为 `false`（如 GLM-5） |
     | `when_thinking_enabled` / `when_thinking_disabled` | 推理模式开关时合并进请求的附加参数，通常用 `extra_body.thinking.type` 控制 |
 
 ##### 二、国内模型专用适配（必须使用补丁类）
@@ -137,11 +137,11 @@ models:
 国内主流模型 API 虽然声明 OpenAI 兼容，但与 LangChain 默认序列化逻辑存在若干不一致。KKOCLAW 为这些供应商提供了专用补丁类，**使用时必须将 `use` 字段指向补丁类路径**，否则会遇到各种 400 错误、reasoning_content 丢失、多 system 消息报错等问题。
 
 | 供应商 | 补丁类 | 解决的问题 |
-    |--------|--------|------------|
-    | **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | thinking mode 下多轮对话 `reasoning_content` 缺失 → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.`；同时处理模型名别名（`deepseek_v4` → `deepseek-v4-flash`）、剥离不支持的 `image_url`、重映射 `base_url` → `api_base` |
-    | **智谱 GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | LangChain 默认注入的 `stream_options` 参数被 GLM 拒绝 → 错误码 1210 `API 调用参数有误`；同时剥离非 `text` 类型的 content block（GLM 只接受 `messages.content.type = 'text'`） |
-    | **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. 多轮对话中 `reasoning_content` 丢失 → 需 `extra_body.reasoning_split=true` 才能返回；2. MiniMax 只接受单条 `role: system` 消息，但技能加载会注入多条 system → 错误码 2013 `invalid chat setting`；3. 同角色消息 `name` 不一致被拒绝，补丁自动清理合成消息的 `name` 字段 |
-    | **Gemini（OpenAI 网关）** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | 通过 OpenAI 兼容网关调用 Gemini thinking 模型时，`thought_signature` 被默认序列化逻辑丢弃 → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`。补丁从 `additional_kwargs.tool_calls` 还原 |
+|--------|--------|------------|
+| **DeepSeek** | `kkoclaw.models.patched_deepseek:PatchedChatDeepSeek` | thinking mode 下多轮对话 `reasoning_content` 缺失 → HTTP 400 `The reasoning_content in the thinking mode must be passed back to the API.`；同时处理模型名别名（`deepseek_v4` → `deepseek-v4-flash`）、剥离不支持的 `image_url`、重映射 `base_url` → `api_base` |
+| **智谱 GLM** | `kkoclaw.models.patched_zhipu:PatchedChatZhipu` | LangChain 默认注入的 `stream_options` 参数被 GLM 拒绝 → 错误码 1210 `API 调用参数有误`；同时剥离非 `text` 类型的 content block（GLM 只接受 `messages.content.type = 'text'`） |
+| **MiniMax** | `kkoclaw.models.patched_minimax:PatchedChatMiniMax` | 1. 多轮对话中 `reasoning_content` 丢失 → 需 `extra_body.reasoning_split=true` 才能返回；2. MiniMax 只接受单条 `role: system` 消息，但技能加载会注入多条 system → 错误码 2013 `invalid chat setting`；3. 同角色消息 `name` 不一致被拒绝，补丁自动清理合成消息的 `name` 字段 |
+| **Gemini（OpenAI 网关）** | `kkoclaw.models.patched_openai:PatchedChatOpenAI` | 通过 OpenAI 兼容网关调用 Gemini thinking 模型时，`thought_signature` 被默认序列化逻辑丢弃 → HTTP 400 `INVALID_ARGUMENT: missing a 'thought_signature'`。补丁从 `additional_kwargs.tool_calls` 还原 |
 
 **典型配置示例**：
 
@@ -208,11 +208,11 @@ models:
 ##### 三、何时该用补丁、何时用通用类？
 
 | 场景 | 推荐做法 |
-    |------|----------|
-    | 接入全新供应商 / OpenAI 兼容中转 | 先用 `langchain_openai:ChatOpenAI`，遇到具体错误后再考虑补丁 |
-    | 出现 `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` 错误 | 选择对应供应商的专用补丁 |
-    | 供应商同时提供原生 SDK（如 Claude、Gemini 原生） | 优先用原生 SDK 类（`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`） |
-    | 本地部署（vLLM / Ollama） | vLLM 使用 `kkoclaw.models.vllm_provider:VllmChatModel`（保留 `reasoning` 字段）；Ollama 使用 `langchain_ollama:ChatOllama` |
+|------|----------|
+| 接入全新供应商 / OpenAI 兼容中转 | 先用 `langchain_openai:ChatOpenAI`，遇到具体错误后再考虑补丁 |
+| 出现 `reasoning_content` / `thought_signature` / `stream_options` / `system message count` / `1210` / `2013` 错误 | 选择对应供应商的专用补丁 |
+| 供应商同时提供原生 SDK（如 Claude、Gemini 原生） | 优先用原生 SDK 类（`langchain_anthropic:ChatAnthropic` / `langchain_google_genai:ChatGoogleGenerativeAI`） |
+| 本地部署（vLLM / Ollama） | vLLM 使用 `kkoclaw.models.vllm_provider:VllmChatModel`（保留 `reasoning` 字段）；Ollama 使用 `langchain_ollama:ChatOllama` |
 
 > 更多示例与字段含义见 [`config.example.yaml`](config.example.yaml) 中的注释。
 
