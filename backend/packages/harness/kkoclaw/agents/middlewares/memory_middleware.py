@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.agents.memory.message_processing import detect_correction, detect_reinforcement, filter_messages_for_memory
 from kkoclaw.agents.memory.prompt import format_memory_for_injection
 from kkoclaw.agents.memory.queue import get_memory_queue
@@ -138,10 +139,10 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         if not memory_content.strip():
             return None
 
-        reminder = HumanMessage(
+        reminder = internal_human_message(
             name="memory_context",
+            marker="memory_context",
             content=f"<memory>\n{memory_content}\n</memory>",
-            additional_kwargs={"hide_from_ui": True},
         )
         return {"messages": [reminder]}
 

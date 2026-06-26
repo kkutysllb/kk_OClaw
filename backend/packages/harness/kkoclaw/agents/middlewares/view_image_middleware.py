@@ -7,6 +7,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.agents.thread_state import ThreadState
 
 logger = logging.getLogger(__name__)
@@ -180,7 +181,11 @@ class ViewImageMiddleware(AgentMiddleware[ViewImageMiddlewareState]):
         image_content = self._create_image_details_message(state)
 
         # Create a new human message with mixed content (text + images)
-        human_msg = HumanMessage(content=image_content)
+        human_msg = internal_human_message(
+            content=image_content,
+            marker="view_image_details",
+            name="view_image_details",
+        )
 
         logger.debug("Injecting image details message with images before LLM call")
 

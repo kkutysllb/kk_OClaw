@@ -38,6 +38,8 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
+
 if TYPE_CHECKING:
     from kkoclaw.config.app_config import AppConfig
 
@@ -119,10 +121,11 @@ class DynamicContextMiddleware(AgentMiddleware):
     def _make_reminder_and_user_messages(original: HumanMessage, reminder_content: str) -> tuple[HumanMessage, HumanMessage]:
         """Return (reminder_msg, user_msg) using the ID-swap technique."""
         stable_id = original.id or str(uuid.uuid4())
-        reminder_msg = HumanMessage(
+        reminder_msg = internal_human_message(
             content=reminder_content,
             id=stable_id,
-            additional_kwargs={"hide_from_ui": True, _DYNAMIC_CONTEXT_REMINDER_KEY: True},
+            marker="dynamic_context_reminder",
+            additional_kwargs={_DYNAMIC_CONTEXT_REMINDER_KEY: True},
         )
         user_msg = HumanMessage(
             content=original.content,

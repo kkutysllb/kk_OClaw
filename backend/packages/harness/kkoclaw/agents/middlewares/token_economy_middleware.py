@@ -27,6 +27,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelCallResult, ModelRequest
 from langchain_core.messages import HumanMessage, ToolMessage
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.config.token_economy_config import TokenEconomyConfig
 
 logger = logging.getLogger(__name__)
@@ -282,8 +283,10 @@ class TokenEconomyMiddleware(AgentMiddleware[AgentState]):
         # 2. Inject concise response instruction at the beginning
         if self._config.concise_responses:
             if not self._already_has_instruction(updated):
-                instruction_msg = HumanMessage(
-                    content=f"<system-reminder>\n{TOKEN_ECONOMY_INSTRUCTION}\n</system-reminder>"
+                instruction_msg = internal_human_message(
+                    marker="token_economy_instruction",
+                    name="token_economy_instruction",
+                    content=f"<system-reminder>\n{TOKEN_ECONOMY_INSTRUCTION}\n</system-reminder>",
                 )
                 updated.insert(0, instruction_msg)
                 changed = True

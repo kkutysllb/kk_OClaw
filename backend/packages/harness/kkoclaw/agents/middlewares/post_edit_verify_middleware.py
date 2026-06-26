@@ -30,6 +30,8 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
+
 logger = logging.getLogger(__name__)
 
 # Tools that mutate project files. Seeing a *successful* ToolMessage from
@@ -181,10 +183,10 @@ class PostEditVerifyMiddleware(AgentMiddleware[AgentState]):
             "</post_edit_verify>\n"
             "</system-reminder>"
         )
-        return HumanMessage(
+        return internal_human_message(
             content=body,
+            marker=_REMINDER_MARKER,
             additional_kwargs={
-                "hide_from_ui": True,
                 _REMINDER_MARKER: True,
             },
         )
@@ -205,10 +207,10 @@ class PostEditVerifyMiddleware(AgentMiddleware[AgentState]):
             "</tdd_first_guard>\n"
             "</system-reminder>"
         )
-        return HumanMessage(
+        return internal_human_message(
             content=body,
+            marker=_TDD_FIRST_REMINDER_MARKER,
             additional_kwargs={
-                "hide_from_ui": True,
                 _TDD_FIRST_REMINDER_MARKER: True,
             },
         )

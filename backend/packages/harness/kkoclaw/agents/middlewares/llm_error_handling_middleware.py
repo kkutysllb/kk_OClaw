@@ -20,6 +20,7 @@ from langchain.agents.middleware.types import (
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.errors import GraphBubbleUp
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.config.app_config import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -139,8 +140,9 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         trimmed = messages[-self._OVERFLOW_TRIM_KEEP:]
 
         # Prepend a note so the model knows context was lost
-        truncation_notice = HumanMessage(
+        truncation_notice = internal_human_message(
             name="system",
+            marker="context_recovery_notice",
             content=(
                 "[Context Recovery] The earlier conversation history was too long and has been "
                 "automatically trimmed. Please continue the current task based on the recent "

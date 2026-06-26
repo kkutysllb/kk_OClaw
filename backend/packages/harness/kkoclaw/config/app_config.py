@@ -121,7 +121,7 @@ class AppConfig(BaseModel):
         ),
     )
     todo_max_completion_reminders: int = Field(
-        default=10,
+        default=2,
         ge=0,
         description=(
             "Maximum number of completion reminders TodoMiddleware injects "

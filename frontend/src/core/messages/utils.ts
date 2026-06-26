@@ -61,10 +61,6 @@ export function groupMessages<T>(
       continue;
     }
 
-    if (message.name === "todo_reminder") {
-      continue;
-    }
-
     if (message.type === "human") {
       groups.push({ id: nextGroupId(message.id), type: "human", messages: [message] });
       continue;
@@ -345,12 +341,26 @@ export function findToolCallResult(toolCallId: string, messages: Message[]) {
 
 const AGENT_ARTIFACT_HEADER_RE =
   /^(?:#\s*)?(?:SESSION\s+INTENT|SUMMARY|ARTIFACTS?)(?:[\s\n]|$)/i;
+const INTERNAL_MESSAGE_NAMES = new Set([
+  "summary",
+  "loop_warning",
+  "todo_reminder",
+  "todo_completion_reminder",
+  "memory_context",
+  "token_economy_instruction",
+  "view_image_details",
+]);
+const KNOWN_INTERNAL_REMINDER_NAMES = new Set([
+  "todo_reminder",
+  "todo_completion_reminder",
+]);
+const SYSTEM_REMINDER_RE = /^\s*<system[-_]reminder>[\s\S]*<\/system[-_]reminder>\s*$/i;
 
 export function isHiddenFromUIMessage(message: Message) {
   if (
     message.additional_kwargs?.hide_from_ui === true ||
-    message.name === "summary" ||
-    message.name === "loop_warning"
+    typeof message.additional_kwargs?.internal_middleware_message === "string" ||
+    (typeof message.name === "string" && INTERNAL_MESSAGE_NAMES.has(message.name))
   ) {
     return true;
   }
@@ -379,6 +389,16 @@ export function isHiddenFromUIMessage(message: Message) {
           return true;
         }
       }
+    }
+  }
+  if (
+    message.type === "human" &&
+    typeof message.name === "string" &&
+    KNOWN_INTERNAL_REMINDER_NAMES.has(message.name)
+  ) {
+    const content = extractTextFromMessage(message);
+    if (SYSTEM_REMINDER_RE.test(content)) {
+      return true;
     }
   }
   return false;

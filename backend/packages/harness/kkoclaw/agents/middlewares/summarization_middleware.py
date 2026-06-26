@@ -14,6 +14,7 @@ from langgraph.config import get_config
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.agents.middlewares.tool_call_metadata import clone_ai_message_with_tool_calls
 
 logger = logging.getLogger(__name__)
@@ -177,7 +178,13 @@ class KKOCLAWSummarizationMiddleware(SummarizationMiddleware):
         """Override the base implementation to let the human message with the special name 'summary'.
         And this message will be ignored to display in the frontend, but still can be used as context for the model.
         """
-        return [HumanMessage(content=f"Here is a summary of the conversation to date:\n\n{summary}", name="summary")]
+        return [
+            internal_human_message(
+                name="summary",
+                marker="summary",
+                content=f"Here is a summary of the conversation to date:\n\n{summary}",
+            )
+        ]
 
     def _partition_with_skill_rescue(
         self,

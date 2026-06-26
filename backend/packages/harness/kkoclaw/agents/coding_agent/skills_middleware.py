@@ -9,6 +9,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
 from kkoclaw.agents.coding_agent.runtime import (
     CodingAgentRuntime,
     _CODING_ACTIVE_SKILLS_STATE_KEY,
@@ -43,12 +44,10 @@ class CodingSkillsMiddleware(AgentMiddleware):
         logger.info("CodingSkillsMiddleware: injecting %d active Coding skill(s)", len(active_skills))
         return {
             "messages": [
-                HumanMessage(
+                internal_human_message(
                     content=content,
-                    additional_kwargs={
-                        "hide_from_ui": True,
-                        _CODING_SKILLS_REMINDER_KEY: True,
-                    },
+                    marker="coding_skills_reminder",
+                    additional_kwargs={_CODING_SKILLS_REMINDER_KEY: True},
                 )
             ],
             _CODING_ACTIVE_SKILLS_STATE_KEY: active_skills_to_state(active_skills),

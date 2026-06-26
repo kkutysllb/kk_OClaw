@@ -21,6 +21,8 @@ from langchain.agents.middleware.types import hook_config
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.runtime import Runtime
 
+from kkoclaw.agents.middlewares.internal_messages import internal_human_message
+
 
 def _todos_in_messages(messages: list[Any]) -> bool:
     """Return True if any AIMessage in *messages* contains a write_todos tool call."""
@@ -53,6 +55,11 @@ def _format_todos(todos: list[Todo]) -> str:
         content = todo.get("content", "")
         lines.append(f"- [{status}] {content}")
     return "\n".join(lines)
+
+
+def _todo_progress_snapshot(todos: list[Todo]) -> tuple[tuple[str, str], ...]:
+    """Return a compact comparable snapshot of current todo progress."""
+    return tuple((str(todo.get("content", "")), str(todo.get("status", "pending"))) for todo in todos)
 
 
 # Phrases that strongly indicate the agent is explicitly asking the user
@@ -154,8 +161,9 @@ class TodoMiddleware(TodoListMiddleware):
         # The todo list exists in state but the original write_todos call is gone.
         # Inject a reminder as a HumanMessage so the model stays aware.
         formatted = _format_todos(todos)
-        reminder = HumanMessage(
+        reminder = internal_human_message(
             name="todo_reminder",
+            marker="todo_reminder",
             content=(
                 "<system_reminder>\n"
                 "Your todo list from earlier is no longer visible in the current context window, "
@@ -179,8 +187,12 @@ class TodoMiddleware(TodoListMiddleware):
 
     # Fallback cap used when AppConfig cannot be read (e.g. during early
     # import or in unit tests that bypass config loading). The real value
-    # comes from ``AppConfig.todo_max_completion_reminders`` (default 10).
-    _MAX_COMPLETION_REMINDERS = 10
+    # comes from ``AppConfig.todo_max_completion_reminders``.
+    _MAX_COMPLETION_REMINDERS = 2
+
+    @staticmethod
+    def _todo_progress_snapshot(todos: list[Todo]) -> tuple[tuple[str, str], ...]:
+        return _todo_progress_snapshot(todos)
 
     def _effective_max_reminders(self) -> int:
         """Return the configured completion-reminder cap.
@@ -260,15 +272,27 @@ class TodoMiddleware(TodoListMiddleware):
         if not todos or all(t.get("status") == "completed" for t in todos):
             return None
 
-        # 6. Enforce a reminder cap to prevent infinite re-engagement loops.
-        if _completion_reminder_count(messages) >= self._effective_max_reminders():
+        # 6. Enforce a progress-aware reminder cap. If the todo snapshot has
+        # changed since the previous reminder, reset the count; otherwise,
+        # stop force-continuing after the configured cap.
+        snapshot = _todo_progress_snapshot(todos)
+        control = state.get("todo_completion_control") or {}
+        previous_snapshot = control.get("snapshot") if isinstance(control, dict) else None
+        previous_count = control.get("reminder_count", 0) if isinstance(control, dict) else 0
+        if previous_snapshot != snapshot:
+            reminder_count = 0
+        else:
+            reminder_count = previous_count if isinstance(previous_count, int) else 0
+        reminder_count = max(reminder_count, _completion_reminder_count(messages))
+        if reminder_count >= self._effective_max_reminders():
             return None
 
         # 7. Inject a reminder and force the agent back to the model.
         incomplete = [t for t in todos if t.get("status") != "completed"]
         incomplete_text = "\n".join(f"- [{t.get('status', 'pending')}] {t.get('content', '')}" for t in incomplete)
-        reminder = HumanMessage(
+        reminder = internal_human_message(
             name="todo_completion_reminder",
+            marker="todo_completion_reminder",
             content=(
                 "<system_reminder>\n"
                 "You have incomplete todo items that must be finished before giving your final response:\n\n"
@@ -278,7 +302,14 @@ class TodoMiddleware(TodoListMiddleware):
                 "</system_reminder>"
             ),
         )
-        return {"jump_to": "model", "messages": [reminder]}
+        return {
+            "jump_to": "model",
+            "messages": [reminder],
+            "todo_completion_control": {
+                "snapshot": snapshot,
+                "reminder_count": reminder_count + 1,
+            },
+        }
 
     @override
     @hook_config(can_jump_to=["model"])

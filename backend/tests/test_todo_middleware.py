@@ -131,6 +131,8 @@ class TestBeforeModel:
         assert len(msgs) == 1
         assert isinstance(msgs[0], HumanMessage)
         assert msgs[0].name == "todo_reminder"
+        assert msgs[0].additional_kwargs["hide_from_ui"] is True
+        assert msgs[0].additional_kwargs["internal_middleware_message"] == "todo_reminder"
 
     def test_reminder_contains_formatted_todos(self):
         mw = TodoMiddleware()
@@ -249,6 +251,8 @@ class TestAfterModel:
         reminder = result["messages"][0]
         assert isinstance(reminder, HumanMessage)
         assert reminder.name == "todo_completion_reminder"
+        assert reminder.additional_kwargs["hide_from_ui"] is True
+        assert reminder.additional_kwargs["internal_middleware_message"] == "todo_completion_reminder"
         assert "Step 2" in reminder.content
         assert "Step 3" in reminder.content
 
@@ -280,8 +284,8 @@ class TestAfterModel:
         assert mw.after_model(state, _make_runtime()) is None
 
     def test_allows_exit_after_default_max_reminders(self):
-        # Sanity check: with the production default (10), 2 reminders is
-        # NOT enough to exit — the middleware should keep pushing the agent.
+        # Production default is intentionally low so repeated reminders do not
+        # dominate long tasks when the model cannot make more progress.
         mw = TodoMiddleware()
         state = {
             "messages": [
@@ -291,9 +295,7 @@ class TestAfterModel:
             ],
             "todos": _incomplete_todos(),
         }
-        result = mw.after_model(state, _make_runtime())
-        assert result is not None
-        assert result["jump_to"] == "model"
+        assert mw.after_model(state, _make_runtime()) is None
 
     def test_still_sends_reminder_before_cap(self):
         mw = TodoMiddleware()
@@ -307,6 +309,39 @@ class TestAfterModel:
         result = mw.after_model(state, _make_runtime())
         assert result is not None
         assert result["jump_to"] == "model"
+
+    def test_records_completion_reminder_state_for_progress_aware_cap(self):
+        mw = TodoMiddleware()
+        state = {
+            "messages": [HumanMessage(content="hi"), _ai_no_tool_calls()],
+            "todos": _incomplete_todos(),
+        }
+        result = mw.after_model(state, _make_runtime())
+        assert result is not None
+        assert result["todo_completion_control"]["reminder_count"] == 1
+        assert result["todo_completion_control"]["snapshot"]
+
+    def test_resets_completion_reminder_cap_when_todos_progress(self):
+        mw = TodoMiddleware()
+        mw._effective_max_reminders = lambda: 2
+        previous_snapshot = mw._todo_progress_snapshot(_incomplete_todos())
+        progressed_todos = [
+            {"status": "completed", "content": "Step 1"},
+            {"status": "completed", "content": "Step 2"},
+            {"status": "in_progress", "content": "Step 3"},
+        ]
+        state = {
+            "messages": [_ai_no_tool_calls()],
+            "todos": progressed_todos,
+            "todo_completion_control": {
+                "snapshot": previous_snapshot,
+                "reminder_count": 2,
+            },
+        }
+        result = mw.after_model(state, _make_runtime())
+        assert result is not None
+        assert result["jump_to"] == "model"
+        assert result["todo_completion_control"]["reminder_count"] == 1
 
 
 class TestAafterModel:

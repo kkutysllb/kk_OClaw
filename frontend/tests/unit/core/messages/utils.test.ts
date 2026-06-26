@@ -60,6 +60,30 @@ test("isHiddenFromUIMessage hides internal header messages even without metadata
   expect(isHiddenFromUIMessage(message as never)).toBe(true);
 });
 
+test("isHiddenFromUIMessage hides todo middleware reminders by protocol name", () => {
+  const reminder = {
+    type: "human",
+    name: "todo_completion_reminder",
+    content:
+      "<system_reminder>\nYou have incomplete todo items.\n</system_reminder>",
+    additional_kwargs: {},
+  };
+
+  expect(isHiddenFromUIMessage(reminder as never)).toBe(true);
+});
+
+test("isHiddenFromUIMessage hides known internal system reminders without metadata", () => {
+  const reminder = {
+    type: "human",
+    name: "todo_reminder",
+    content:
+      "<system_reminder>\nYour todo list from earlier is no longer visible.\n</system_reminder>",
+    additional_kwargs: {},
+  };
+
+  expect(isHiddenFromUIMessage(reminder as never)).toBe(true);
+});
+
 test("extractContentFromMessage strips internal planning blocks from tool messages", () => {
   const message = {
     type: "tool",
