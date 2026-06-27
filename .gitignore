@@ -181,3 +181,9 @@ progress.md
 task_plan.md
 desktop-tauri/
 docs/superpowers/
+
+# ═══════════════════════════════════════
+# Third-party vendored engines (moved to dedicated repo)
+# qiongqi engine now lives at https://github.com/kkutysllb/OClaw
+# ═══════════════════════════════════════
+third_party/

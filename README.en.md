@@ -1,3 +1,12 @@
+> ## 🚀 Important: The QiongQi-engine-based OClaw has moved
+>
+> This repository (KKOCLAW) continues to maintain the Python + LangGraph version.
+> **For the QiongQi-engine-based OClaw, please visit 👉 [https://github.com/kkutysllb/OClaw](https://github.com/kkutysllb/OClaw)**
+>
+> The new repo uses a Node.js native runtime, removing the Python/LangGraph process boundary with thread-as-source-of-truth + direct streaming events.
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/cover.png">

@@ -1,3 +1,12 @@
+> ## 🚀 重要提示：基于穷奇（QiongQi）引擎的新版 OClaw 已迁移
+>
+> 本仓库（KKOCLAW）将继续维护基于 Python + LangGraph 的版本。
+> **基于穷奇引擎的新版 OClaw 请前往 👉 [https://github.com/kkutysllb/OClaw](https://github.com/kkutysllb/OClaw)**
+>
+> 新仓库采用 Node.js 原生运行时，去除了 Python/LangGraph 进程边界，线程事实源 + 流式事件直连。
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/cover.png">
